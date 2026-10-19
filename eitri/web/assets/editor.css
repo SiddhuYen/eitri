@@ -313,3 +313,41 @@ body.readonly #sharebar { display: block; }
 body.readonly #tools, body.readonly #chathead, body.readonly #chat, body.readonly #timeline, body.readonly #selpanel,
 body.readonly .sec[data-sec=edits], body.readonly .sec[data-sec=params], body.readonly .sec[data-sec=revisions],
 body.readonly .sec[data-sec=manufacture], body.readonly .sec[data-sec=drawing], body.readonly #exportmenu { display: none !important; }
+
+/* ---------------------------------------------------------------- notices, toasts, pending edits */
+#notice { position: absolute; left: 50%; bottom: 56px; transform: translate(-50%, 8px); max-width: min(620px, calc(100% - 32px));
+  display: none; align-items: center; gap: 10px; padding: 9px 10px 9px 12px; border-radius: var(--r2); z-index: 9;
+  background: var(--raised); color: var(--fg); border: 1px solid var(--line-2); box-shadow: var(--shadow-2); font-size: var(--t-md);
+  opacity: 0; transition: opacity var(--med) var(--ease), transform var(--med) var(--ease); }
+#notice.show { display: flex; opacity: 1; transform: translate(-50%, 0); }
+#notice .ic { color: var(--warn); display: flex; }
+#notice.info .ic { color: var(--info); }
+#notice .txt { flex: 1; line-height: 1.4; }
+#notice button { flex: none; white-space: nowrap; }
+#notice button.x { border: none; background: transparent; color: var(--muted); padding: 0 4px; }
+#toast { position: absolute; left: 50%; top: 104px; transform: translate(-50%, -6px); z-index: 9; pointer-events: none;
+  padding: 6px 12px; border-radius: 999px; background: rgba(10, 12, 16, .92); color: var(--fg); border: 1px solid var(--line-2);
+  font-size: var(--t-sm); opacity: 0; transition: opacity var(--med) var(--ease), transform var(--med) var(--ease); white-space: nowrap; }
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+:root[data-theme="light"] #toast { background: rgba(255, 255, 255, .95); }
+/* an edit applied on screen while the model rebuilds: the revision chip breathes */
+#hud.pending { color: var(--fg); border-color: var(--accent); animation: pending-pulse 1.3s var(--ease) infinite; }
+#hud.pending::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 7px; vertical-align: 1px; }
+@keyframes pending-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 138, 61, 0); } 50% { box-shadow: 0 0 0 4px rgba(255, 138, 61, .18); } }
+@media (prefers-reduced-motion: reduce) { #hud.pending { animation: none; } #notice, #toast { transition: none; } }
+
+/* ---------------------------------------------------------------- visual pickers (shapes drawn, labelled on hover) */
+.vpick { display: inline-flex; flex-wrap: wrap; gap: 3px; padding: 3px; border-radius: var(--r1); background: var(--bg-2); border: 1px solid var(--line); max-width: 100%; }
+.vpick .vp { position: relative; width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--fg-2); cursor: pointer; }
+.vpick .vp:hover { background: var(--raised-2); color: var(--fg); }
+.vpick .vp.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.vpick .vp:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.vpick .vp-ic { width: 22px; height: 22px; }
+.vpick .vp-l { display: none; position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); white-space: nowrap; z-index: 12;
+  background: rgba(10, 12, 16, .95); color: var(--fg); border: 1px solid var(--line-2); border-radius: 5px; padding: 3px 7px; font-size: var(--t-xs); pointer-events: none; }
+.vpick .vp:hover .vp-l, .vpick .vp:focus-visible .vp-l { display: block; }
+:root[data-theme="light"] .vpick .vp-l { background: #fff; }
+.vpick.compact { gap: 1px; padding: 2px; }
+.vpick.compact .vp { width: 26px; height: 26px; }
+.vpick.compact .vp-ic { width: 18px; height: 18px; }

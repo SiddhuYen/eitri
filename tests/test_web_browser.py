@@ -155,7 +155,8 @@ def test_live_building_in_the_browser(tmp_path):
             # the build step: the code stays up with a timer; the step row spins
             page.wait_for_function("() => { const s = window.__eitri_live.state(); return s.code && s.code.title === 'Building'; }", timeout=15000)
             page.wait_for_function("() => [...document.querySelectorAll('#messages .msg.tool')].some(m => m.querySelector('.spin') && /building/.test(m.textContent) && /\\d+\\.\\d s/.test(m.textContent))", timeout=10000)
-            assert page.evaluate("() => window.__eitri_live.state().code.text").rstrip().endswith("return {'plate': cut_holes(plate, [(-20, 0), (20, 0)], d=5)}")
+            # the code finishes typing out (the animation may still be catching up when the build step starts)
+            page.wait_for_function("() => window.__eitri_live.state().code.text.trimEnd().endsWith(\"return {'plate': cut_holes(plate, [(-20, 0), (20, 0)], d=5)}\")", timeout=10000)
             # the build says what it is doing, on its step and on the panel
             (tmp_path / "ws" / pid / "out" / "progress.json").write_text(json.dumps({"stage": "measuring plate: walls, holes", "ts": _time.time(), "done": False}))
             page.wait_for_function("() => [...document.querySelectorAll('#messages .msg.tool')].some(m => /measuring plate: walls, holes · \\d+\\.\\d s/.test(m.textContent))", timeout=10000)

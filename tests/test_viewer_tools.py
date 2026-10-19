@@ -90,7 +90,7 @@ def test_direct_modeling_tools(tmp_path):
 
         # 3. hole tool: an M3 counterbore at (-20, 10) on the plate's top face (the pad sits in the middle)
         page.evaluate("() => window.__eitri_tool('hole')")
-        page.select_option("#selactions select[data-field=head]", "counterbore")
+        page.click("#selactions .vpick[data-field=head] .vp[data-value=counterbore]")
         x, y = _proj(page, [-20, -12, top_z])           # on the plate top, on the camera side of the pad (not occluded)
         page.mouse.move(x, y)
         page.mouse.click(x, y)

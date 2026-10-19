@@ -233,6 +233,9 @@ class AgentHub:
             self.turn_tools += 1
             with self._live_lock:
                 self.running = {"name": data.get("name"), "id": data.get("id"), "since": time.time()}
+                inp = data.get("input") if isinstance(data.get("input"), dict) else {}
+                if isinstance(inp.get("code"), str):       # the whole model being built: the page shows it complete
+                    self.running["code"] = inp["code"][:60000]
                 self._set_phase("running")
         elif kind == "tool_result":
             with self._live_lock:

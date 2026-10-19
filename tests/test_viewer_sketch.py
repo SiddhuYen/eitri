@@ -82,7 +82,7 @@ def test_sketch_editor(tmp_path):
         _click(page, [20, 15, TOP])
         page.wait_for_function("() => window.__eitri_debug().sketch", timeout=10000)
         page.wait_for_timeout(300)
-        assert page.locator("#selactions select[data-field=sktool]").count() == 1
+        assert page.locator("#selactions .vpick[data-field=sktool]").count() == 1
         page.keyboard.press("l")
         assert page.evaluate("() => window.__eitri_debug().sketch.sub") == "line"
         for pt in ([-10, -5, TOP], [10, -5, TOP], [10, 5, TOP], [-10, 5, TOP], [-10, -5, TOP]):

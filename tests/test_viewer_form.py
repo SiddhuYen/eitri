@@ -45,7 +45,7 @@ def test_form_tool_and_cage_editing(tmp_path):
         # 1. a 30 mm box cage, 2 x 2 x 2 quads, two subdivision levels, from the Form tool panel
         page.evaluate("() => { window.__eitri_tool('form'); const s = window.__eitri_spec.form; s.kind = 'box'; Object.assign(s.size, { w: 30, d: 30, h: 30, nx: 2, ny: 2, nz: 2 }); s.levels = 2; s.name = 'blob'; window.__eitri_tool('form'); }")
         page.wait_for_selector("#selpanel button:text-is('Create form (Enter)')")
-        assert page.evaluate("() => document.querySelector('select[data-field=formkind]').value") == "box"
+        assert page.evaluate("() => document.querySelector('.vpick[data-field=formkind] .vp.on').dataset.value") == "box"
         page.click("#selpanel button:text-is('Create form (Enter)')")
         rev = _ready(page, 1, rev)
         st = _state(page)

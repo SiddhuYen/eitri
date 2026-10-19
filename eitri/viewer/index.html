@@ -12,7 +12,7 @@
 <div id="app">
   <div id="canvas">
     <div id="tools">
-      <button data-tool="select" class="on" title="Select (V)"><svg class="i"><use href="assets/icons.svg#i-mouse-pointer-2"/></svg><span class="t-label">Select</span></button>
+      <button data-tool="select" class="on" title="Select (V, Esc): click a part, face or edge to select it · shift-click adds · click empty space to clear · drag to orbit"><svg class="i"><use href="assets/icons.svg#i-mouse-pointer-2"/></svg><span class="t-label">Select</span></button>
       <span class="sep"></span><span class="grp">Create</span>
       <button data-tool="sketch" title="Sketch on a flat face (S): a constrained sketcher (lines, arcs, circles, polygons, slots, splines, text, constraints, dimensions) · extrude (to next / to face / symmetric / taper / thin), cut, revolve, loft, sweep, rib"><svg class="i"><use href="assets/icons.svg#i-pencil-ruler"/></svg><span class="t-label">Sketch</span></button>
       <button data-tool="hole" title="Hole (H): fastener sizes, counterbore / countersink / tapped, on flat or round faces"><svg class="i"><use href="assets/icons.svg#i-circle-dot"/></svg><span class="t-label">Hole</span></button>
@@ -63,6 +63,8 @@
     <div id="timeline" title="Timeline: every direct edit in order · click: select · double-click: edit · drag chips in the panel to reorder"></div>
     <div id="loading"><div class="card"><span class="spinner" style="color:var(--accent)"></span><div id="loadingtext">Loading the model…</div><div class="progress indeterminate"><i id="loadingbar"></i></div></div></div>
     <div id="hud">loading…</div>
+    <div id="notice" role="status" aria-live="polite"></div>
+    <div id="toast" role="status" aria-live="polite"></div>
     <div id="resizer" title="Drag to resize the panel"></div>
     <div id="livecode"><div class="lchead"><span class="lcdot"></span><span id="lctitle">Claude is writing the model</span><span id="lcmeta" style="color:#8b95a1"></span><span style="flex:1"></span><button id="lcclose" title="Hide until your next message">×</button></div><pre id="lccode"></pre></div>
   </div>
@@ -219,6 +221,8 @@ const overlay = new THREE.Group(); scene.add(overlay);         // ghosts, sketch
 let grid = null, model = null, bbox = null, centre = new THREE.Vector3(), radius = 50, clipPlane = null;
 let faceObjs = [], edgeObjs = [], partOf = new Map(), partMeshes = {}, partNodes = {}, hidden = new Set();
 let topo = null, state = {}, currentRev = -1, loadedRev = -1, lastEvent = 0, shownPreview = 0;
+let editsInFlight = 0, buildStage = '', deferredLoad = null, lastHint = '', previewBusy = false;   // one preview load at a time: newer ones wait, never cancel it
+const pendingGroup = new THREE.Group(); scene.add(pendingGroup);   // ghosts of edits applied on screen, rebuilding
 const selected = new Set();
 let hovered = null, tool = 'select', drag = null, sketch = null, measurePts = [], labelsOn = false;
 let vertexObjs = []; const handleGroup = new THREE.Group(); scene.add(handleGroup);   // corner handles of the Edit tool
@@ -369,11 +373,24 @@ const sketchMat = new THREE.LineBasicMaterial({ color: 0xff6a00 });
 const sketchGridMat = new THREE.LineBasicMaterial({ color: 0x9aa3ad, transparent: true, opacity: 0.35 });
 const measureMat = new THREE.LineBasicMaterial({ color: 0x1565c0 });
 const vertMat = new THREE.MeshBasicMaterial({ color: 0x3b4650 }), hovVertMat = new THREE.MeshBasicMaterial({ color: 0x2f8fff }), selVertMat = new THREE.MeshBasicMaterial({ color: 0xff8c00 });
+const rerouteVertMat = new THREE.MeshBasicMaterial({ color: 0x7d93a8 });   // a corner whose drag moves something else (a hole, a face)
 
 function loadModel(url, rev, newTopo, opts) {
-  hud.textContent = 'loading model…';
+  if (!editsInFlight && !faceObjs.length) hud.textContent = 'loading model…';
+  const isPreview = typeof rev === 'string';
   loader.load(url, gltf => {
+    if (isPreview) previewBusy = false;
     if (rev !== currentRev) return;                 // a newer build superseded this load
+    if (interacting()) { deferredLoad = () => { if (rev === currentRev) placeModel(gltf, url, rev, newTopo, opts); }; return; }
+    placeModel(gltf, url, rev, newTopo, opts);
+  }, undefined, err => {
+    if (isPreview) { previewBusy = false; if (rev === currentRev) { currentRev = loadedRev; } return; }   // a preview gone stale: the next one, or the build, follows
+    hud.textContent = 'failed to load model';
+    window.__eitriProblem('could not load ' + url + ': ' + (err && err.message || err) + ' (retrying on the next build)');
+    if (rev === currentRev) { loadedRev = -1; currentRev = -1; }
+  });
+}
+function placeModel(gltf, url, rev, newTopo, opts) {
     $('problem').style.display = 'none';
     cancelTool(true);
     const hadFaces = faceObjs.length > 0;
@@ -418,8 +435,9 @@ function loadModel(url, rev, newTopo, opts) {
     selected.clear(); for (const id of keep) selected.add(id); applyAppearance(); refreshMaterials(); renderSelection(); renderParts(); renderHoleLabels();
     if (tool === 'edit') showVertexHandles();
     if (interfOn) showInterference();
-    if (sketchReopen != null) { const i = sketchReopen; sketchReopen = null; setTimeout(() => { if ((state.edits || []).length > i) openFeatureSketch(i); }, 80); }
-    hud.textContent = faceObjs.length ? `${state.title || state.name || 'model'} — ${typeof currentRev === 'string' ? 'new build, being checked' : 'revision ' + currentRev}` : 'blank design — press S and click the grid to sketch a first part, B for a primitive, or describe a part in the chat';
+    // a sketch being edited reopens on the finished build (a preview is not the final geometry)
+    if (sketchReopen != null && typeof rev === 'number') { const i = sketchReopen; sketchReopen = null; setTimeout(() => { if ((state.edits || []).length > i) openFeatureSketch(i); }, 80); }
+    hud.textContent = modelHudText(); landPending(rev); renderPending();
     if (opts && opts.animate && faceObjs.length) {
       if (!hadFaces) revealSweep();
       else {
@@ -427,11 +445,6 @@ function loadModel(url, rev, newTopo, opts) {
         if (changed.length) flashParts(changed);
       }
     }
-  }, undefined, err => {
-    hud.textContent = 'failed to load model';
-    window.__eitriProblem('could not load ' + url + ': ' + (err && err.message || err) + ' (retrying on the next build)');
-    if (rev === currentRev) { loadedRev = -1; currentRev = -1; }
-  });
 }
 
 // ---------------------------------------------------------------- picking
@@ -460,8 +473,9 @@ function pickAt(ev, what) {
 function idOf(o) { if (!o) return null; return (tool === 'move' || PART_TOOLS.includes(tool)) ? partOf.get(o) : ((o.userData && o.userData.id) || o.name); }
 function setHover(o) {
   if (hovered === o) return;
-  if (hovered) restoreMat(hovered);
+  if (hovered) { restoreMat(hovered); if (hovered.userData.kind === 'vertex') hovered.scale.setScalar(1); }
   hovered = o;
+  if (o && o.userData.kind === 'vertex') o.scale.setScalar(1.7);
   if (o && !isSelected(o)) o.material = o.userData.kind === 'edge' ? hovEdgeMat : o.userData.kind === 'vertex' ? hovVertMat : hovFaceMat;
 }
 function isSelected(o) { return selected.has(o.userData.id) || selected.has(partOf.get(o)); }
@@ -488,8 +502,8 @@ const HINTS = {
   scale: 'click a part, type the factor',
   thread: 'click a round face (a hole or a shaft), pick the size',
   align: 'click a face on the part to move, then the face on the part it should mate with',
-  primitive: 'set the size, then click a flat face to place it there (or place it at coordinates)',
-  edit: 'click corners, edges or faces (shift adds; shift-drag windows), then drag the gizmo or type a move · R: tilt · Delete: remove faces',
+  primitive: 'press on the grid or a flat face and drag to size it, release, move to set the height, click · type a number for an exact size · Esc cancels',
+  edit: 'drag a corner handle to move it (◆ handles move the hole or push/pull the face they sit on) · or click corners, edges or faces (shift adds), then drag the gizmo · R: tilt · Delete: remove faces',
   insert: 'pick the part and size, then click a hole (or a flat face for a nut/washer) to place it',
   boss: 'click a flat face where the boss should stand (its kind and size are in the panel)',
   form: 'form: pick a primitive cage and its size in the panel, then Create; select a form part and press Edit cage to sculpt it',
@@ -498,7 +512,59 @@ const HINTS = {
 };
 const PART_TOOLS = ['combine', 'split', 'mirror', 'pattern', 'scale'];
 let toolData = {};                 // per-tool state: picked parts/faces, pending values
-function hint(t) { hud.textContent = t; }
+function hint(t) { lastHint = t; if (!editsInFlight) hud.textContent = t; }
+function modelHudText() { return faceObjs.length ? `${state.title || state.name || 'model'} — ${typeof currentRev === 'string' ? (state.preview && state.preview.parts_total ? `building: ${state.preview.parts_done} of ${state.preview.parts_total} parts` : 'new build, being checked') : 'revision ' + currentRev}` : 'blank design — press S and click the grid to sketch a first part, B to draw a primitive on the grid, or describe a part in the chat'; }
+// while edits are rebuilding, the revision chip breathes and says what the kernel is doing
+function renderPending() {
+  if (editsInFlight > 0) { hud.classList.add('pending'); hud.textContent = 'rebuilding' + (editsInFlight > 1 ? ` (${editsInFlight - 1} more queued)` : '') + (buildStage ? ' · ' + buildStage : ''); }
+  else if (hud.classList.contains('pending')) { hud.classList.remove('pending'); hud.textContent = modelHudText(); }
+}
+// the user is in the middle of a drag: a new model waits until they let go (a rebuild never cancels a drag;
+// an open sketch is reopened on the new model by the sketch code itself)
+function interacting() { return !!(drag || band || primDraw || (gizmo && gizmo.dragging) || (egizmo && egizmo.dragging) || (cgizmo && cgizmo.dragging)); }
+
+// ---------------------------------------------------------------- plain-language errors: notices and toasts
+// Nothing technical reaches the page: every error from the server goes through plainError(), and a failed
+// action is shown by showNotice() (one plain sentence, and "Ask Claude" to hand the job to the agent).
+const TECHNICAL = /Traceback|File "|line \d+, in|\b[A-Z][A-Za-z0-9]*_[A-Za-z0-9_]+\b|\bOCP\b|BRep[A-Z]|TopoDS|\bgp_[A-Z]|0x[0-9a-f]{6,}|<[\w.]+ object at|NoneType|\b__\w+__\b/;   // kernel class names (BRep_API, Standard_Failure, ...) included
+function plainError(raw, fallback) {
+  const lines = String(raw == null ? '' : raw).split('\n').map(l => l.trim()).filter(Boolean);
+  const fb = fallback || 'The model could not be rebuilt with that change';
+  if (!lines.length) return fb + '.';
+  const hintLine = lines.find(l => /^Hint:/i.test(l));          // the runner's hints are written for people
+  let msg = (hintLine || lines[lines.length - 1]).replace(/^Hint:\s*/i, '');
+  for (let i = 0; i < 3; i++) msg = msg.replace(/^(?:edit failed|failed|error|direct edit failed|\[FAILED\][^:]*)\s*:\s*/i, '').replace(/^[\w.]*(?:Error|Exception|Warning|Failure|Interrupt)\s*:\s*/, '');
+  if (!msg || TECHNICAL.test(msg) || /^[\w.]*(?:Error|Exception)$/.test(msg) || /^'[^']*'$/.test(msg) || msg.length > 260) msg = fb;
+  msg = msg.charAt(0).toUpperCase() + msg.slice(1);
+  return /[.!?…)]$/.test(msg) ? msg : msg + '.';
+}
+let noticeTimer = null;
+function showNotice(text, opts) {
+  const o = opts || {}; const el = $('notice');
+  el.innerHTML = ''; el.className = 'show' + (o.kind ? ' ' + o.kind : '');
+  const ic = document.createElement('span'); ic.className = 'ic'; ic.innerHTML = icon(o.kind === 'info' ? 'info' : 'triangle-alert', 'sm'); el.appendChild(ic);
+  const t = document.createElement('span'); t.className = 'txt'; t.textContent = text; el.appendChild(t);
+  if (o.ask && state.has_agent) {
+    const b = document.createElement('button'); b.className = 'small'; b.innerHTML = icon('sparkles', 'sm') + ' Ask Claude';
+    b.onclick = () => { const ci = $('chatinput'); ci.value = o.ask; ci.focus(); ci.setSelectionRange(ci.value.length, ci.value.length); hideNotice(); };
+    el.appendChild(b);
+  }
+  const x = document.createElement('button'); x.className = 'small ghost x'; x.title = 'Dismiss'; x.textContent = '✕'; x.onclick = hideNotice; el.appendChild(x);
+  clearTimeout(noticeTimer); noticeTimer = setTimeout(() => { if (!el.matches(':hover')) hideNotice(); }, o.ms || 14000);
+}
+function hideNotice() { clearTimeout(noticeTimer); $('notice').className = ''; }
+let toastTimer = null;
+function toast(text) { const el = $('toast'); el.textContent = text; el.className = 'show'; clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.className = ''; }, 2600); }
+// what is selected, in words Claude can act on ("valve_cover_L:v12 (corner at 12, 4, 30)")
+function selectionWords(ids) {
+  return [...(ids || selected)].map(id => { const e = entry(id); if (!e) return String(id); if (e.pos) return `${e.id} (corner at ${e.pos.map(v => +v.toFixed(2)).join(', ')})`; return `${e.id}${e.type ? ' (' + e.type + (e.id.includes(':f') ? ' face' : e.id.includes(':e') ? ' edge' : '') + ')' : ''}`; }).join(', ');
+}
+// a failed action: say why in a sentence, offer Claude the job with the selection and what was meant
+function failNotice(raw, intent, ids) {
+  const why = plainError(raw);
+  const sel = selectionWords(ids);
+  showNotice(why, { ask: `${intent}${sel ? ' — ' + sel : ''}. The editor could not do it directly: ${why}` });
+}
 function setTool(name) {
   cancelTool(false);
   tool = name; toolData = {};
@@ -515,7 +581,7 @@ function setTool(name) {
 }
 document.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => setTool(b.dataset.tool));
 function cancelTool(keepTool) {
-  drag = null; controls.enabled = true;
+  drag = null; if (primDraw) endPrimDraw(); controls.enabled = true;
   endSketch(); endGizmo(); endEditGizmo(); hideVertexHandles(); measurePts = []; clearLabels('measure'); clearLabels('readout'); clearOverlay();
   formOpen = null;
   if (!keepTool) { /* keep selection */ }
@@ -537,7 +603,7 @@ function dragAxisFor(hit) {
 }
 function startPushPull(ev, hit) {
   const e = entry(hit.object.userData.id); const ax = dragAxisFor(hit);
-  if (!e || !ax) { hint('push/pull works on flat faces, round holes/bosses and spheres; use the chat for this face'); return; }
+  if (!e || !ax) { if (e) showNotice(`Push/pull works on flat faces, round holes and bosses, and spheres; this is a ${e.type} face.`, { ask: `Please change the ${e.type} face ${e.id} as I describe:` }); return; }
   const dirPx = pxPerMmAlong(hit.point, ax.axis);
   const len = dirPx.length();
   drag = { kind: 'pushpull', face: e, hit: hit.point.clone(), axis: ax.axis, start: new THREE.Vector2(ev.clientX, ev.clientY), dirPx: len > 0.05 ? dirPx.clone().divideScalar(len) : null, pxPerMm: len > 0.05 ? len : null, value: 0, obj: hit.object };
@@ -558,12 +624,13 @@ function updatePushPull(ev) {
   d.readout.pos.copy(d.hit.clone().addScaledVector(d.axis, mm)); d.readout.el.textContent = `${mm >= 0 ? '+' : ''}${mm.toFixed(1)} mm`;
 }
 function finishPushPull() {
-  const d = drag; drag = null; controls.enabled = true; clearOverlay('ghost'); clearLabels('readout');
-  if (Math.abs(d.value) < 0.05) { selected.clear(); selected.add(d.face.id); refreshMaterials(); renderSelection(); return; }
+  const d = drag; drag = null; controls.enabled = true; clearLabels('readout');
+  if (Math.abs(d.value) < 0.05) { clearOverlay('ghost'); selected.clear(); selected.add(d.face.id); refreshMaterials(); renderSelection(); return; }
+  const ghosts = [d.ghost]; clearOverlay('ghost');
   // several selected flat faces of the same part move together (the dragged one included)
   const others = [...selected].map(entry).filter(e => e && e.id && e.id.includes(':f') && e.part === d.face.part && e.id !== d.face.id && e.type === 'plane');
-  if (others.length && d.face.type === 'plane') sendEdit({ op: 'push_pull', part: d.face.part, faces: [d.face, ...others].map(selFace), distance: d.value });
-  else sendEdit({ op: 'push_pull', part: d.face.part, face: selFace(d.face), distance: d.value });
+  if (others.length && d.face.type === 'plane') sendEdit({ op: 'push_pull', part: d.face.part, faces: [d.face, ...others].map(selFace), distance: d.value }, ghosts);
+  else sendEdit({ op: 'push_pull', part: d.face.part, face: selFace(d.face), distance: d.value }, ghosts);
 }
 
 // ---- fillet / chamfer drag ---------------------------------------------------------------
@@ -745,7 +812,7 @@ async function skSend(path, build, opts) {
         if (opts.simple !== undefined) sketch.simple = opts.simple;
         if (r.status && !r.status.ok) hint('the sketch has conflicting constraints: ' + (r.status.conflicts || []).slice(0, 4).join(', '));
       }
-    } else if (!r.ok) hint('sketch: ' + (r.error || 'failed'));
+    } else if (!r.ok) hint(plainError(r.error, 'That sketch operation did not work'));
     sketch.profile = sketch.preview.profiles > 0 ? sketch.model : null;
     redrawSketch();
     if (!opts.light) renderSelection();
@@ -1361,7 +1428,9 @@ function renderSketchPanel({ panel, items, actions }) {
   const SEL = (parent, opts, value, onchange, field) => { const s = document.createElement('select'); if (field) s.dataset.field = field; for (const [v, t] of opts) { const o = document.createElement('option'); o.value = v; o.textContent = t; if (String(v) === String(value)) o.selected = true; s.appendChild(o); } s.onchange = () => onchange(s.value); parent.appendChild(s); return s; };
   if (!sk.holeEdit) {
     // draw
-    const r1 = row(); L(r1, 'draw'); SEL(r1, SK_TOOLS, sk.sub, v => skSetTool(v), 'sktool');
+    // the drawing tools as a compact icon grid (the modify tools have their own buttons below)
+    const SK_MODIFY = ['trim', 'extend', 'split', 'fillet', 'chamfer', 'mirror', 'project'];
+    const r1 = row(); const pick = visualPicker(SK_TOOLS.filter(([v]) => !SK_MODIFY.includes(v)).map(([v, t]) => [v, t, 'sk_' + v]), sk.sub, v => skSetTool(v), 'sktool'); pick.classList.add('compact'); r1.appendChild(pick);
     if (sk.sub === 'polygon') { L(r1, 'sides'); N(r1, sk.polyN || 6, 'number of sides', v => sk.polyN = Math.max(3, parseInt(v) || 6), '1'); SEL(r1, [['inscribed', 'inscribed'], ['circumscribed', 'circumscribed']], sk.polyMode, v => sk.polyMode = v); }
     else if (sk.sub === 'slot') { L(r1, 'width'); N(r1, sk.slotW || 4, 'slot width (mm)', v => sk.slotW = parseFloat(v) || 4); }
     else if (sk.sub === 'text') { L(r1, 'text'); const t = document.createElement('input'); t.type = 'text'; t.style.width = '90px'; t.value = sk.text || ''; t.placeholder = 'ABC'; t.oninput = () => sk.text = t.value; r1.appendChild(t); L(r1, 'height'); N(r1, sk.textSize || 8, 'letter height (mm)', v => sk.textSize = parseFloat(v) || 8); }
@@ -1484,7 +1553,85 @@ function holeHover(ev, hit) {
 }
 
 // ---- primitives -----------------------------------------------------------------------
+
+// ---------------------------------------------------------------- visual pickers: shapes drawn, not named
+// 24x24 line drawings (currentColor); a picker is a grid of them, labelled on hover, the chosen one lit
+const SV = (body) => `<svg viewBox="0 0 24 24" class="vp-ic" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+const SHAPE_ICONS = {
+  // primitives (isometric)
+  box: SV('<path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/>'),
+  cylinder: SV('<ellipse cx="12" cy="6" rx="7" ry="2.6"/><path d="M5 6v12M19 6v12"/><path d="M5 18a7 2.6 0 0 0 14 0"/>'),
+  sphere: SV('<circle cx="12" cy="12" r="8"/><path d="M4 12a8 3 0 0 0 16 0"/><path d="M4 12a8 3 0 0 1 16 0" stroke-dasharray="1.5 2"/>'),
+  torus: SV('<ellipse cx="12" cy="12" rx="9" ry="5"/><path d="M8 11.5a4 1.6 0 0 0 8 0"/><path d="M9 11a3 1.2 0 0 1 6 0"/>'),
+  cone: SV('<path d="M12 3L5 18M12 3l7 15"/><path d="M5 18a7 2.6 0 0 0 14 0"/><path d="M5 18a7 2.6 0 0 1 14 0" stroke-dasharray="1.5 2"/>'),
+  hexagon: SV('<path d="M7 5h10l3 3-3 3H7L4 8z"/><path d="M4 8v8l3 3h10l3-3V8M7 11v8M17 11v8"/>'),
+  wedge: SV('<path d="M4 18h12l4-3H8z"/><path d="M4 18V9l12 9M4 9l4-2v8"/><path d="M8 7l12 8"/>'),
+  coil: SV('<path d="M6 5c4-1.5 12-1.5 12 1s-12 1-12 3.5 12 1 12 3.5-12 1-12 3.5 12 1 12 3.5"/>'),
+  // fasteners
+  screw: SV('<path d="M8 3h8v4H8z"/><path d="M10 7v12l2 2 2-2V7"/><path d="M10 10l4 1M10 13l4 1M10 16l4 1"/>'),
+  nut: SV('<path d="M8 4h8l4 8-4 8H8l-4-8z"/><circle cx="12" cy="12" r="3.5"/>'),
+  washer: SV('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/>'),
+  bearing: SV('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/><circle cx="12" cy="5.8" r="1.3"/><circle cx="17.4" cy="9" r="1.3"/><circle cx="17.4" cy="15" r="1.3"/><circle cx="12" cy="18.2" r="1.3"/><circle cx="6.6" cy="15" r="1.3"/><circle cx="6.6" cy="9" r="1.3"/>'),
+  step: SV('<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><text x="12" y="17" font-size="5.5" text-anchor="middle" fill="currentColor" stroke="none" font-family="sans-serif">STEP</text>'),
+  iges: SV('<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><text x="12" y="17" font-size="5.5" text-anchor="middle" fill="currentColor" stroke="none" font-family="sans-serif">IGES</text>'),
+  mesh: SV('<path d="M4 18L12 4l8 14z"/><path d="M8 11h8M12 4v14M8 11l4 7 4-7"/>'),
+  model: SV('<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9.5 12l-2 2 2 2M14.5 12l2 2-2 2"/>'),
+  // screw heads (side view)
+  socket_head: SV('<path d="M7 4h10v6H7z"/><path d="M10 4v3h4V4"/><path d="M10 10v10h4V10"/>'),
+  button: SV('<path d="M5 10c0-4 3-6 7-6s7 2 7 6z"/><path d="M10 10v10h4V10"/>'),
+  countersunk: SV('<path d="M4 5h16l-6 6h-4z"/><path d="M10 11v9h4v-9"/>'),
+  pan: SV('<path d="M5 10V7c0-2 2-3 7-3s7 1 7 3v3z"/><path d="M10 10v10h4V10"/>'),
+  hex: SV('<path d="M6 4h12v6H6z"/><path d="M10 4v6M14 4v6"/><path d="M10 10v10h4V10"/>'),
+  // hole heads (section)
+  hole_none: SV('<path d="M3 6h6v14M21 6h-6v14"/><path d="M9 6h6" stroke-dasharray="1.5 2"/>'),
+  hole_counterbore: SV('<path d="M3 6h4v5h3v9M21 6h-4v5h-3v9"/>'),
+  hole_countersink: SV('<path d="M3 6h3l4 5v9M21 6h-3l-4 5v9"/>'),
+  // patterns
+  pat_rect: SV('<rect x="4" y="4" width="4" height="4"/><rect x="10" y="4" width="4" height="4"/><rect x="16" y="4" width="4" height="4"/><rect x="4" y="10" width="4" height="4"/><rect x="10" y="10" width="4" height="4"/><rect x="16" y="10" width="4" height="4"/><rect x="4" y="16" width="4" height="4"/><rect x="10" y="16" width="4" height="4"/><rect x="16" y="16" width="4" height="4"/>'),
+  pat_circular: SV('<circle cx="12" cy="12" r="1" /><circle cx="12" cy="4.5" r="2"/><circle cx="18.5" cy="8.3" r="2"/><circle cx="18.5" cy="15.7" r="2"/><circle cx="12" cy="19.5" r="2"/><circle cx="5.5" cy="15.7" r="2"/><circle cx="5.5" cy="8.3" r="2"/>'),
+  pat_path: SV('<path d="M3 19c4-12 14 2 18-12" stroke-dasharray="1.5 2"/><circle cx="4.5" cy="16" r="2"/><circle cx="10" cy="10.5" r="2"/><circle cx="15.5" cy="12" r="2"/><circle cx="20" cy="7" r="2"/>'),
+  // sketch tools
+  sk_select: SV('<path d="M5 3l12 8-6 1-3 6z"/>'),
+  sk_line: SV('<path d="M5 19L19 5"/><circle cx="5" cy="19" r="1.6"/><circle cx="19" cy="5" r="1.6"/>'),
+  sk_rect: SV('<rect x="4" y="6" width="16" height="12"/><circle cx="4" cy="18" r="1.6"/><circle cx="20" cy="6" r="1.6"/>'),
+  sk_rectc: SV('<rect x="4" y="6" width="16" height="12"/><path d="M11 12h2M12 11v2"/><circle cx="20" cy="6" r="1.6"/>'),
+  sk_rect3: SV('<path d="M3 14l9-9 9 9-9 9z" transform="translate(0 -2)"/><circle cx="3" cy="12" r="1.6"/><circle cx="12" cy="3" r="1.6"/><circle cx="21" cy="12" r="1.6"/>'),
+  sk_circle: SV('<circle cx="12" cy="12" r="8"/><path d="M12 12h8"/><circle cx="12" cy="12" r="1.2"/>'),
+  sk_circle2: SV('<circle cx="12" cy="12" r="8"/><circle cx="4" cy="12" r="1.6"/><circle cx="20" cy="12" r="1.6"/>'),
+  sk_circle3: SV('<circle cx="12" cy="12" r="8"/><circle cx="4.5" cy="9" r="1.6"/><circle cx="17" cy="5.8" r="1.6"/><circle cx="15" cy="19.4" r="1.6"/>'),
+  sk_arc3: SV('<path d="M4 17a9 9 0 0 1 16 0"/><circle cx="4" cy="17" r="1.6"/><circle cx="12" cy="8.5" r="1.6"/><circle cx="20" cy="17" r="1.6"/>'),
+  sk_arcc: SV('<path d="M4 17a8 8 0 0 1 16 0"/><circle cx="12" cy="17" r="1.2"/><path d="M12 17L4 17M12 17l8 0" stroke-dasharray="1.5 2"/>'),
+  sk_ellipse: SV('<ellipse cx="12" cy="12" rx="9" ry="5.5"/><circle cx="12" cy="12" r="1.2"/>'),
+  sk_polygon: SV('<path d="M12 3l8.5 6.2-3.2 10H6.7L3.5 9.2z"/>'),
+  sk_slot: SV('<path d="M8 7h8a5 5 0 0 1 0 10H8A5 5 0 0 1 8 7z"/><circle cx="8" cy="12" r="1.2"/><circle cx="16" cy="12" r="1.2"/>'),
+  sk_spline: SV('<path d="M3 17c4-10 7 2 10-4s5-7 8-6"/><circle cx="3" cy="17" r="1.5"/><circle cx="13" cy="13" r="1.5"/><circle cx="21" cy="7" r="1.5"/>'),
+  sk_point: SV('<circle cx="12" cy="12" r="2.5"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3"/>'),
+  sk_text: SV('<path d="M5 6h14M12 6v13M9 19h6"/>'),
+  sk_dim: SV('<path d="M4 8v8M20 8v8M4 12h16"/><path d="M7 10l-3 2 3 2M17 10l3 2-3 2"/>'),
+  sk_trim: SV('<path d="M4 20L20 4"/><path d="M4 12h6" /><path d="M14 12h6" stroke-dasharray="1.5 2"/><path d="M15 8l3 3M18 8l-3 3"/>'),
+  sk_extend: SV('<path d="M20 4v16"/><path d="M4 12h9"/><path d="M13 12h7" stroke-dasharray="1.5 2"/><path d="M16 9l3 3-3 3"/>'),
+  sk_split: SV('<path d="M3 12h7M14 12h7"/><circle cx="12" cy="12" r="2"/><path d="M12 5v3M12 16v3"/>'),
+  sk_fillet: SV('<path d="M5 20V11a6 6 0 0 1 6-6h9"/><path d="M5 5h0" /><path d="M5 11V5h6" stroke-dasharray="1.5 2"/>'),
+  sk_chamfer: SV('<path d="M5 20V11l6-6h9"/><path d="M5 11V5h6" stroke-dasharray="1.5 2"/>'),
+  sk_mirror: SV('<path d="M12 3v18" stroke-dasharray="2 2"/><path d="M9 7L4 17h5zM15 7l5 10h-5z"/>'),
+  sk_project: SV('<path d="M4 9l8-4 8 4-8 4z"/><path d="M12 13v7" stroke-dasharray="1.5 2"/><path d="M5 20h14"/>'),
+};
+// a grid of icon buttons standing in for a dropdown: options [[value, label, iconKey]]; data-field names it
+function visualPicker(opts, value, onchange, field) {
+  const box = document.createElement('div'); box.className = 'vpick'; if (field) box.dataset.field = field;
+  box.setAttribute('role', 'radiogroup');
+  for (const [v, label, ic] of opts) {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'vp' + (String(v) === String(value) ? ' on' : '');
+    b.dataset.value = v; b.title = label; b.setAttribute('aria-label', label); b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(String(v) === String(value)));
+    b.innerHTML = (SHAPE_ICONS[ic || v] || SV('<circle cx="12" cy="12" r="7"/>')) + `<span class="vp-l">${label.replace(/\s*\(.*$/, '')}</span>`;
+    b.onclick = () => { for (const x of box.children) { x.classList.toggle('on', x === b); x.setAttribute('aria-checked', String(x === b)); } onchange(v); };
+    box.appendChild(b);
+  }
+  return box;
+}
+const PRIM_LABELS = { box: 'Box', cylinder: 'Cylinder', sphere: 'Sphere', torus: 'Torus', cone: 'Cone', hexagon: 'Hexagonal prism', wedge: 'Wedge', coil: 'Coil (spring)' };
 const PRIM_FIELDS = { box: ['w', 'd', 'h'], cylinder: ['r', 'h'], sphere: ['r'], torus: ['R', 'r'], cone: ['r1', 'r2', 'h'], hexagon: ['af', 'h'], wedge: ['w', 'd', 'h', 'top_w', 'top_h'], coil: ['R', 'r', 'pitch', 'h'] };
+let primDraw = null;            // the draw-to-size gesture of the primitive tool, while it runs
 let primSpec = { kind: 'box', size: { w: 20, d: 20, h: 10, r: 5, R: 10, r1: 5, r2: 0, af: 10, h2: 10, top_w: 20, top_h: 0, pitch: 4 }, mode: 'new', name: '', at: [0, 0, 0] };
 let bossSpec = { kind: 'plain', size: 'M3', d: 8, height: 6, hole_d: 3, hole_depth: '' };
 let formSpec = { kind: 'box', size: { w: 30, d: 30, h: 30, nx: 2, ny: 2, nz: 2, r: 15, n: 2, nz2: 1, R: 20, m: 6 }, levels: 2, symmetry: null, name: 'form', at: '0,0,0' };
@@ -1581,11 +1728,163 @@ function primitiveClick(ev, hit) {
 }
 function primitiveHover(ev, hit) {
   clearOverlay('ghost');
-  const site = hit ? holeSite(ev, hit) : null; if (!site || site.radial) return;
-  const fp = primFootprint();
-  if (fp.r != null) ghostCircle(site.fr, site.u, site.v, fp.r);
-  else { const pts = profileOutline({ type: 'rect', center: [site.u, site.v], w: fp.w, h: fp.d }, site.fr); const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), sketchMat); l.userData.kind = 'ghost'; overlay.add(l); }
-  hud.textContent = `${primSpec.kind} ${primSpec.mode === 'new' ? 'as new part' : primSpec.mode === 'cut' ? 'cut from ' + site.e.part : 'joined to ' + site.e.part} at u ${site.u} v ${site.v} · click to place`;
+  const site = primSite(ev, hit);
+  if (!site || site.blocked) { hint(site && site.blocked ? 'primitives go on a flat face or on the grid' : HINTS.primitive); return; }
+  const uv = [snapMm(site.uv[0], ev.altKey), snapMm(site.uv[1], ev.altKey)];
+  const s = primSpec.size, g = primGeometry(primSpec.kind, primSizeOf({ w: +s.w, d: +s.d, h: +s.h, r: primSpec.kind === 'torus' || primSpec.kind === 'coil' ? +s.R : primSpec.kind === 'cone' ? +s.r1 : primSpec.kind === 'hexagon' ? +s.af / Math.sqrt(3) : +s.r }));
+  const m = new THREE.Mesh(g, ghostMat); m.userData.kind = 'ghost'; placeGhost(m, site.fr, uv, false); overlay.add(m);
+  hint(`${PRIM_LABELS[primSpec.kind]} ${!site.e ? 'on the grid, as a new part' : primSpec.mode === 'new' ? 'on this face, as a new part' : primSpec.mode === 'cut' ? 'cut from ' + site.e.part : 'joined to ' + site.e.part} · press and drag to size it, or click to place it at this size`);
+}
+
+
+// ---- primitives: draw to size ------------------------------------------------------------
+// Press on the grid or a flat face (the ground grid is a placement surface like any face), drag to size the
+// footprint (live ghost and dimensions), release, move to set the height, click or Enter to place; Esc cancels.
+// Typing a number at any point gives that exact size ("30", "30x20"; a round shape takes its diameter).
+// A plain click places the primitive at the size in the panel. Sphere and torus need no height step.
+const PRIM_ROUND = ['cylinder', 'sphere', 'torus', 'cone', 'hexagon', 'coil'];
+const PRIM_NO_HEIGHT = ['sphere', 'torus'];
+const snapMm = (v, alt) => alt ? +v.toFixed(2) : Math.round(v * 2) / 2;
+function groundZ() { return grid ? grid.position.z : 0; }
+function groundFrame() { return { o: new THREE.Vector3(0, 0, groundZ()), x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 1, 0), n: new THREE.Vector3(0, 0, 1) }; }
+function primSite(ev, hit) {        // where a primitive would go: a flat face under the pointer, or the ground grid
+  if (hit) { const e = entry(hit.object.userData.id); if (e && e.type === 'plane') { const fr = frameOf(e); return { fr, e, uv: toUV(fr, hit.point) }; } return { blocked: e || true }; }
+  setPointer(ev); const fr = groundFrame(), q = new THREE.Vector3();
+  if (!raycaster.ray.intersectPlane(new THREE.Plane().setFromNormalAndCoplanarPoint(fr.n, fr.o), q)) return null;
+  if (q.distanceTo(centre) > Math.max(radius * 20, 2000)) return null;      // nearly edge-on to the ground: too far to mean it
+  return { fr, e: null, uv: toUV(fr, q) };
+}
+function uvOnFrame(ev, fr) { setPointer(ev); const q = new THREE.Vector3(); return raycaster.ray.intersectPlane(new THREE.Plane().setFromNormalAndCoplanarPoint(fr.n, fr.o), q) ? toUV(fr, q) : null; }
+function primSizeOf(d) {            // the primitive's size fields from the gesture (others keep the panel's values)
+  const k = primSpec.kind, base = primSpec.size, s = {};
+  const r = Math.max(d.r || 0.5, 0.5), h = Math.max(Math.abs(d.h != null ? d.h : +base.h || 10), 0.5);
+  if (k === 'box') Object.assign(s, { w: Math.max(d.w, 0.5), d: Math.max(d.d, 0.5), h });
+  else if (k === 'wedge') Object.assign(s, { w: Math.max(d.w, 0.5), d: Math.max(d.d, 0.5), h, top_w: +base.top_w > 0 ? Math.min(+base.top_w, d.w) : '', top_h: Math.min(+base.top_h || 0, h) });
+  else if (k === 'cylinder') Object.assign(s, { r, h });
+  else if (k === 'sphere') Object.assign(s, { r });
+  else if (k === 'torus') Object.assign(s, { R: r, r: +Math.min(+base.r || r / 4, r * 0.4).toFixed(2) });
+  else if (k === 'cone') { const ratio = +base.r1 > 0 ? (+base.r2 || 0) / +base.r1 : 0; Object.assign(s, { r1: r, r2: +(r * ratio).toFixed(2), h }); }
+  else if (k === 'hexagon') Object.assign(s, { af: +(r * Math.sqrt(3)).toFixed(2), h });
+  else if (k === 'coil') { const pitch = +base.pitch || 4; Object.assign(s, { R: r, r: +Math.min(+base.r || 1, r * 0.25, pitch * 0.45).toFixed(2), pitch, h }); }
+  return s;
+}
+function primGeometry(kind, s) {    // the same solid eitri.edits.primitive_solid makes: on z=0, centred on the z axis
+  let g;
+  if (kind === 'box') { g = new THREE.BoxGeometry(s.w, s.d, s.h); g.translate(0, 0, s.h / 2); }
+  else if (kind === 'cylinder') { g = new THREE.CylinderGeometry(s.r, s.r, s.h, 48); g.rotateX(Math.PI / 2); g.translate(0, 0, s.h / 2); }
+  else if (kind === 'cone') { g = new THREE.CylinderGeometry(Math.max(+s.r2 || 0, 0.001), s.r1, s.h, 48); g.rotateX(Math.PI / 2); g.translate(0, 0, s.h / 2); }
+  else if (kind === 'hexagon') { const R = s.af / Math.sqrt(3); g = new THREE.CylinderGeometry(R, R, s.h, 6); g.rotateX(Math.PI / 2); g.rotateZ(Math.PI / 2); g.translate(0, 0, s.h / 2); }
+  else if (kind === 'sphere') { g = new THREE.SphereGeometry(s.r, 32, 16); g.translate(0, 0, s.r); }
+  else if (kind === 'torus') { g = new THREE.TorusGeometry(s.R, s.r, 16, 64); g.translate(0, 0, s.r); }
+  else if (kind === 'wedge') {
+    const sh = new THREE.Shape(); sh.moveTo(-s.d / 2, 0); sh.lineTo(s.d / 2, 0); sh.lineTo(s.d / 2, Math.max(+s.top_h || 0, 0)); sh.lineTo(-s.d / 2, s.h); sh.closePath();
+    g = new THREE.ExtrudeGeometry(sh, { depth: s.w, bevelEnabled: false }); g.translate(0, 0, -s.w / 2);
+    g.applyMatrix4(new THREE.Matrix4().set(0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1));    // shape x -> y, shape y -> z, depth -> x
+  } else if (kind === 'coil') {
+    const turns = s.h / Math.max(s.pitch, 0.5), c = new THREE.Curve();
+    c.getPoint = (t, out = new THREE.Vector3()) => out.set(s.R * Math.cos(2 * Math.PI * turns * t), s.R * Math.sin(2 * Math.PI * turns * t), s.r + t * Math.max(s.h - 2 * s.r, 0.1));
+    g = new THREE.TubeGeometry(c, Math.max(48, Math.round(turns * 32)), s.r, 8, false);
+  }
+  return g;
+}
+function placeGhost(mesh, fr, uv, flip) {
+  const m = new THREE.Matrix4().makeBasis(fr.x, fr.y, fr.n).setPosition(fromUV(fr, uv[0], uv[1]));
+  if (flip) m.multiply(new THREE.Matrix4().makeRotationX(Math.PI));
+  mesh.matrixAutoUpdate = false; mesh.matrix.copy(m); mesh.matrixWorldNeedsUpdate = true;
+}
+function primCenter(d) {            // the footprint's centre in (u, v): a box spans the two corners, a round shape sits on the press
+  if (PRIM_ROUND.includes(primSpec.kind)) return d.uv0;
+  if (d.typedBase) return [d.uv0[0] + Math.sign(d.du || 1) * d.w / 2, d.uv0[1] + Math.sign(d.dv || 1) * d.d / 2];
+  return [(d.uv0[0] + d.uv1[0]) / 2, (d.uv0[1] + d.uv1[1]) / 2];
+}
+function primReadout(d, s) {
+  const k = primSpec.kind, dim = k === 'box' || k === 'wedge' ? `${s.w} × ${s.d}` : k === 'hexagon' ? `across flats ${s.af}` : k === 'torus' ? `Ø ${2 * s.R}` : `Ø ${2 * (s.r1 || s.r || s.R)}`;
+  const typed = d.typed ? `  ⌨ ${d.typed}_` : '';
+  return d.phase === 'height' ? `${dim} · h ${d.h < 0 ? '−' : ''}${s.h} mm${typed}` : `${dim} mm${typed}`;
+}
+function drawPrimGhost(d) {
+  const s = primSizeOf(d), g = primGeometry(primSpec.kind, s);
+  if (!d.ghost) { d.ghost = new THREE.Mesh(g, ghostMat); d.ghost.userData.kind = 'primghost'; overlay.add(d.ghost); }
+  else { d.ghost.geometry.dispose(); d.ghost.geometry = g; }
+  const c = primCenter(d); placeGhost(d.ghost, d.fr, c, d.h != null && d.h < 0);
+  const top = fromUV(d.fr, c[0], c[1]).addScaledVector(d.fr.n, (d.h != null && d.h < 0 ? -1 : 1) * (PRIM_NO_HEIGHT.includes(primSpec.kind) ? 2 * (s.r || 0) : s.h || 0));
+  if (!d.readout) d.readout = addLabel(top, '', 'readout');
+  d.readout.pos.copy(top); d.readout.el.textContent = primReadout(d, s);
+  hint(d.phase === 'height' ? 'move to set the height (below the face cuts into it) · click or Enter to place · type a height · Esc cancels'
+                             : 'drag to size the footprint · release for the height · type a size (30, or 30x20) · Esc cancels');
+}
+function startPrimDraw(ev, site) {
+  const alt = ev.altKey, uv = [snapMm(site.uv[0], alt), snapMm(site.uv[1], alt)];
+  clearOverlay('ghost');
+  primDraw = { phase: 'base', fr: site.fr, e: site.e, uv0: uv, uv1: uv.slice(), w: 0, d: 0, r: 0, h: null, du: 0, dv: 0, typed: '', start: [ev.clientX, ev.clientY], moved: false };
+  controls.enabled = false; try { renderer.domElement.setPointerCapture(ev.pointerId); } catch (e) { /* synthetic */ }
+}
+function sizeFromUV(d, alt) {
+  d.du = d.uv1[0] - d.uv0[0]; d.dv = d.uv1[1] - d.uv0[1];
+  d.w = snapMm(Math.abs(d.du), alt); d.d = snapMm(Math.abs(d.dv), alt); d.r = snapMm(Math.hypot(d.du, d.dv), alt);
+}
+function movePrimDraw(ev) {
+  const d = primDraw;
+  if (d.phase === 'base') {
+    if (!d.moved && Math.hypot(ev.clientX - d.start[0], ev.clientY - d.start[1]) < 4) return;
+    d.moved = true;
+    if (!d.typedBase) { const uv = uvOnFrame(ev, d.fr); if (!uv) return; d.uv1 = uv; sizeFromUV(d, ev.altKey); }
+  } else if (!d.typedH) {
+    const c = primCenter(d), c3 = fromUV(d.fr, c[0], c[1]), sv = pxPerMmAlong(c3, d.fr.n), len = sv.length();
+    const dx = ev.clientX - d.hs[0], dy = ev.clientY - d.hs[1];
+    const mm = len > 0.05 ? (dx * sv.x + dy * sv.y) / (len * len) : -dy * radius / 300;
+    let h = d.h0 + mm; if (Math.abs(h) < 0.5) h = h < 0 ? -0.5 : 0.5;
+    d.h = snapMm(h, ev.altKey);
+  }
+  drawPrimGhost(d);
+}
+function advancePrim(d) {           // release (or Enter): the footprint is set; next the height, or place
+  if (d.phase === 'base' && !PRIM_NO_HEIGHT.includes(primSpec.kind)) {
+    d.phase = 'height'; d.typed = ''; d.hs = d.last || d.start; d.h0 = d.h != null ? d.h : (+primSpec.size.h || 10); d.h = d.h0;
+    drawPrimGhost(d); return;
+  }
+  commitPrimDraw(d);
+}
+function upPrimDraw(ev) {
+  const d = primDraw; d.last = [ev.clientX, ev.clientY];
+  if (d.phase === 'height') { if (d.clickCommit) commitPrimDraw(d); return; }
+  if (!d.moved && !d.typedBase) {   // a plain click: the panel's size, centred where clicked
+    const s = primSpec.size, k = primSpec.kind;
+    Object.assign(d, { w: +s.w, d: +s.d, h: +s.h, r: k === 'torus' || k === 'coil' ? +s.R : k === 'cone' ? +s.r1 : k === 'hexagon' ? +s.af / Math.sqrt(3) : +s.r, typedBase: true, du: 1, dv: 1 });
+    d.uv0 = [d.uv0[0] - (PRIM_ROUND.includes(k) ? 0 : d.w / 2), d.uv0[1] - (PRIM_ROUND.includes(k) ? 0 : d.d / 2)];
+    commitPrimDraw(d); return;
+  }
+  advancePrim(d);
+}
+function typedPrim(d) {             // a typed size overrides the pointer
+  const nums = d.typed.split(/[x×*,\s]+/).map(parseFloat).filter(n => isFinite(n) && n > 0);
+  if (!nums.length) { d.typedBase = d.phase === 'base' ? false : d.typedBase; d.typedH = d.phase === 'height' ? false : d.typedH; drawPrimGhost(d); return; }
+  if (d.phase === 'base') {
+    const k = primSpec.kind;
+    if (k === 'box' || k === 'wedge') { d.w = nums[0]; d.d = nums[1] != null ? nums[1] : nums[0]; }
+    else d.r = k === 'hexagon' ? nums[0] / Math.sqrt(3) : nums[0] / 2;           // round: the diameter (hexagon: across flats)
+    d.typedBase = true;
+  } else { d.h = (d.h != null && d.h < 0 ? -1 : 1) * nums[0]; d.typedH = true; }
+  drawPrimGhost(d);
+}
+function endPrimDraw() {
+  if (!primDraw) return;
+  if (primDraw.ghost) { overlay.remove(primDraw.ghost); primDraw.ghost.geometry.dispose(); }
+  clearLabels('readout'); primDraw = null; controls.enabled = true;
+}
+function commitPrimDraw(d) {
+  const k = primSpec.kind, size = primSizeOf(d), c = primCenter(d), flip = d.h != null && d.h < 0;
+  const fields = {}; for (const f of PRIM_FIELDS[k]) if (size[f] !== undefined && size[f] !== '') fields[f] = +size[f];
+  let edit;
+  if (d.e) edit = primitiveEdit({ part: d.e.part, face: selFace(d.e), origin: d.e.center, normal: d.e.normal, at: [r2(c[0]), r2(c[1])] });
+  else { const w = fromUV(d.fr, c[0], c[1]); edit = primitiveEdit({ at: [r2(w.x), r2(w.y), r2(w.z)] }); edit.mode = 'new'; edit.new_part = primSpec.name || k; }
+  edit.size = fields; if (flip) edit.rotation = [180, 0, 0];
+  const ghost = d.ghost; d.ghost = null;
+  if (ghost) { ghost.updateMatrixWorld(true); }
+  endPrimDraw();
+  sendEdit(edit, ghost ? [ghost] : []);
+  Object.assign(primSpec.size, fields); renderSelection();     // the panel follows the last drawn size
+  hint(HINTS.primitive);
 }
 
 // ---- insert fasteners ---------------------------------------------------------------------
@@ -1651,13 +1950,14 @@ function renderToolPanel(ctx) {
   const sel = (opts, value, onchange) => { const s = document.createElement('select'); for (const [v, t] of opts) { const o = document.createElement('option'); o.value = v; o.textContent = t; if (v === value) o.selected = true; s.appendChild(o); } s.onchange = () => onchange(s.value); actions.appendChild(s); return s; };
   const chk = (label, value, onchange) => { const l = document.createElement('label'); l.className = 'chk'; const c = document.createElement('input'); c.type = 'checkbox'; c.checked = !!value; c.onchange = () => onchange(c.checked); l.appendChild(c); l.appendChild(document.createTextNode(label)); actions.appendChild(l); return c; };
   const txt = (value, placeholder, onchange, width) => { const i = document.createElement('input'); i.type = 'text'; i.style.width = width || '90px'; i.placeholder = placeholder || ''; i.value = value || ''; i.oninput = () => onchange(i.value); i.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); const b = actions.querySelector('button.primary'); if (b) b.click(); } }); actions.appendChild(i); return i; };
+  const vis = (opts, value, onchange, field) => { const v = visualPicker(opts, value, onchange, field); actions.appendChild(v); return v; };
   const faceEnts = [...selected].map(entry).filter(e => e && e.id && e.id.includes(':f'));
   const partName = td.part || ([...selected].map(entry).find(e => e && e.name) || {}).name;
   const show = html => { panel.style.display = 'block'; items.innerHTML = html; };
   if (tool === 'insert') {
     const s = insertSpec;
     show(`<div class="item"><b>Insert</b> · click a hole to place the ${s.kind} in it${s.kind === 'nut' || s.kind === 'washer' ? ' (or a flat face)' : ''}</div>`);
-    lab('part'); sel([['screw', 'screw'], ['nut', 'hex nut'], ['washer', 'washer'], ['bearing', 'ball bearing'], ['step', 'STEP file…'], ['iges', 'IGES file…'], ['mesh', 'mesh file (STL/OBJ/3MF)…'], ['model', 'eitri model file…']], s.kind, v => { s.kind = v; renderSelection(); });
+    vis([['screw', 'Screw'], ['nut', 'Hex nut'], ['washer', 'Washer'], ['bearing', 'Ball bearing'], ['step', 'STEP file…'], ['iges', 'IGES file…'], ['mesh', 'Mesh file (STL/OBJ/3MF)…'], ['model', 'eitri model file…']], s.kind, v => { s.kind = v; renderSelection(); }, 'insertkind');
     if (s.kind === 'step' || s.kind === 'model' || s.kind === 'iges' || s.kind === 'mesh') {
       show(`<div class="item"><b>Insert a component</b> · a ${({ step: 'STEP', iges: 'IGES', mesh: 'mesh (repaired, converted to a faceted solid)', model: 'eitri model' })[s.kind]} file placed at a point (its bodies become parts, grouped)</div>`);
       lab('file'); txt(s.path, '/path/to/part.' + ({ step: 'step', iges: 'iges', mesh: 'stl', model: 'py' })[s.kind], v => s.path = v, '220px'); lab('name'); txt(s.name, 'component', v => s.name = v, '80px');
@@ -1667,13 +1967,13 @@ function renderToolPanel(ctx) {
     }
     if (s.kind === 'bearing') { lab('bearing'); sel((state.bearings || ['608']).map(b => [b, b]), s.bearing, v => s.bearing = v); }
     else { lab('size'); sel(SIZES.map(x => [x, x]), s.size, v => s.size = v); }
-    if (s.kind === 'screw') { lab('length'); const L = num(s.length, 'mm'); L.oninput = () => s.length = parseFloat(L.value) || 10; lab('head'); sel([['socket_head', 'socket head'], ['button', 'button'], ['countersunk', 'countersunk'], ['pan', 'pan'], ['hex', 'hex']], s.head, v => s.head = v); }
+    if (s.kind === 'screw') { lab('length'); const L = num(s.length, 'mm'); L.oninput = () => s.length = parseFloat(L.value) || 10; lab('head'); vis([['socket_head', 'Socket head'], ['button', 'Button head'], ['countersunk', 'Countersunk'], ['pan', 'Pan head'], ['hex', 'Hex head']], s.head, v => s.head = v, 'screwhead'); }
     chk('from the other end', s.flip, v => s.flip = v);
     return true;
   }
   if (tool === 'primitive') {
-    show(`<div class="item"><b>Primitive</b> · click a flat face to place it there (snaps to 1 mm), or place it at coordinates</div>`);
-    lab('kind'); sel(Object.keys(PRIM_FIELDS).map(k => [k, k]), primSpec.kind, v => { primSpec.kind = v; renderSelection(); });
+    show(`<div class="item"><b>${PRIM_LABELS[primSpec.kind]}</b> · press on the grid or a flat face and drag to size it, release, then move to set the height and click · type a number for an exact size · a plain click places it at the size below</div>`);
+    vis(Object.keys(PRIM_FIELDS).map(k => [k, PRIM_LABELS[k], k]), primSpec.kind, v => { primSpec.kind = v; renderSelection(); }, 'primkind');
     for (const k of PRIM_FIELDS[primSpec.kind]) { lab(k); const n = num(primSpec.size[k], k + ' mm'); n.oninput = () => primSpec.size[k] = parseFloat(n.value) || 0; }
     lab('result'); sel([['new', 'new part'], ['add', 'join to the face\'s part'], ['cut', 'cut from the face\'s part']], primSpec.mode, v => { primSpec.mode = v; renderSelection(); });
     if (primSpec.mode === 'new') { lab('name'); txt(primSpec.name, primSpec.kind, v => primSpec.name = v, '80px'); }
@@ -1716,7 +2016,7 @@ function renderToolPanel(ctx) {
   }
   if (tool === 'pattern') {
     show(`<div class="item"><b>Pattern</b> · part: ${partName ? '<b>' + partName + '</b>' : '<span class="muted">click a part</span>'} <span class="muted">(to pattern a hole or a sketch feature, edit it in the timeline)</span></div>`);
-    lab('type'); sel([['rect', 'rectangular'], ['circular', 'circular'], ['path', 'along a path']], td.type || 'rect', v => { td.type = v; td.pathEdges = []; renderSelection(); });
+    lab('type'); vis([['rect', 'Rectangular', 'pat_rect'], ['circular', 'Circular', 'pat_circular'], ['path', 'Along a path', 'pat_path']], td.type || 'rect', v => { td.type = v; td.pathEdges = []; renderSelection(); }, 'pattype');
     if ((td.type || 'rect') === 'rect') { for (const [k, d] of [['nx', 2], ['ny', 1], ['dx', 20], ['dy', 20]]) { lab(k); const n = num(td[k] != null ? td[k] : d, k); n.oninput = () => td[k] = parseFloat(n.value); } }
     else if (td.type === 'circular') { lab('count'); const n = num(td.n || 4, 'instances'); n.oninput = () => td.n = parseInt(n.value); lab('angle'); const a = num(td.angle != null ? td.angle : 360, 'total angle'); a.oninput = () => td.angle = parseFloat(a.value); lab('axis'); sel([['z', 'Z'], ['x', 'X'], ['y', 'Y']], td.axis || 'z', v => td.axis = v); lab('centre'); txt(td.center, '0,0,0', v => td.center = v, '70px'); }
     else { lab(`path: ${(td.pathEdges || []).length} edge(s)`); if (!(td.pathEdges || []).length) lab(partName ? '— click the edges of the path (on any part)' : '— click the part to copy first'); lab('count'); const n = num(td.n || 4, 'instances including the original'); n.oninput = () => td.n = parseInt(n.value); lab('spacing'); txt(td.spacing, 'spread', v => td.spacing = v, '60px'); chk('align to the path', td.align !== false, v => td.align = v); }
@@ -1734,7 +2034,7 @@ function renderToolPanel(ctx) {
   if (tool === 'form') {
     const s = formSpec;
     show(`<div class="item"><b>Form</b> · a smooth body from a quad cage, subdivided ${s.levels} time(s)</div>`);
-    lab('cage'); sel([['box', 'box'], ['sphere', 'sphere'], ['cylinder', 'cylinder'], ['torus', 'torus']], s.kind, v => { s.kind = v; renderSelection(); }).dataset.field = 'formkind';
+    lab('cage'); vis([['box', 'Box cage', 'box'], ['sphere', 'Sphere cage', 'sphere'], ['cylinder', 'Cylinder cage', 'cylinder'], ['torus', 'Torus cage', 'torus']], s.kind, v => { s.kind = v; renderSelection(); }, 'formkind');
     const fields = { box: [['w', 'width'], ['d', 'depth'], ['h', 'height'], ['nx', 'segments x'], ['ny', 'segments y'], ['nz', 'segments z']], sphere: [['r', 'radius'], ['n', 'segments']], cylinder: [['r', 'radius'], ['h', 'height'], ['n', 'segments'], ['nz', 'segments z']], torus: [['R', 'ring radius'], ['r', 'tube radius'], ['n', 'segments around'], ['m', 'segments across']] }[s.kind];
     for (const [k, title] of fields) { lab(k); const n = num(s.size[k], title); n.oninput = () => s.size[k] = parseFloat(n.value) || 0; }
     lab('levels'); sel([['1', '1'], ['2', '2'], ['3', '3']], String(s.levels), v => s.levels = parseInt(v));
@@ -1829,7 +2129,7 @@ function renderTimeline() {
   for (const f of feats) {
     const c = document.createElement('span'); c.className = 'tchip' + (selected.has('edit:' + f.index) ? ' on' : '') + (f.full.suppressed ? ' off' : '') + (f.note && !f.note.ok && !f.full.suppressed ? ' bad' : '');
     const byClaude = f.full.by === 'claude'; c.className += byClaude ? ' by-claude' : ' by-you';
-    c.innerHTML = `<span class="who">${icon(byClaude ? 'sparkles' : 'hand')}</span><b>${f.index + 1}</b> ${shortOp(f)}`; c.title = (byClaude ? 'Claude: ' : 'You: ') + f.desc + (f.note && !f.note.ok ? ' — ' + f.note.detail : '') + ' · click: select · double-click: edit';
+    c.innerHTML = `<span class="who">${icon(byClaude ? 'sparkles' : 'hand')}</span><b>${f.index + 1}</b> ${shortOp(f)}`; c.title = (byClaude ? 'Claude: ' : 'You: ') + f.desc + (f.note && !f.note.ok ? ' — ' + plainError(f.note.detail) : '') + ' · click: select · double-click: edit';
     c.onclick = ev => { const id = 'edit:' + f.index; if (ev.shiftKey) { if (selected.has(id)) selected.delete(id); else selected.add(id); } else { const was = selected.has(id) && selected.size === 1; selected.clear(); if (!was) selected.add(id); } formOpen = null; refreshMaterials(); renderSelection(); renderTimeline(); };
     c.ondblclick = () => { selected.clear(); selected.add('edit:' + f.index); openFeatureForm(f.index); };
     el.appendChild(c);
@@ -1899,7 +2199,7 @@ function renderFeaturePanel(ctx) {
     btn('Cancel', () => { formOpen = null; renderSelection(); });
     return;
   }
-  for (const f of feats) { const d = document.createElement('div'); d.className = 'item'; d.innerHTML = `<b>feature ${f.index + 1}</b> · ${f.desc}${f.note && !f.note.ok ? ' <span class="bad">— ' + f.note.detail + '</span>' : ''}`; items.appendChild(d); }
+  for (const f of feats) { const d = document.createElement('div'); d.className = 'item'; d.innerHTML = `<b>feature ${f.index + 1}</b> · ${f.desc}${f.note && !f.note.ok ? ' <span class="bad">— ' + escHtml(plainError(f.note.detail)) + '</span>' : ''}`; items.appendChild(d); }
   if (feats.length === 1) {
     const f = feats[0]; const n = (state.edits || []).length;
     btn('Edit…', () => openFeatureForm(f.index), true);
@@ -1931,11 +2231,18 @@ function applyFeatureForm(f, inputs) {
   if (edit.op === 'hole' && edit.size && edit.d != null) delete edit.d;
   postEdits('edits/update', { index: f.index, edit }).then(r => { if (r && r.ok) formOpen = null; });
 }
+// any request that rebuilds the model: queued with the direct edits, shown as pending, input never blocked
+function rebuildCall(path, payload) {
+  editsInFlight++; renderPending();
+  const run = () => { pollSoon(250); return fetch(path, { method: 'POST', body: JSON.stringify(payload || {}) }).then(r => r.json()).catch(e => ({ ok: false, error: String(e) })); };
+  const job = editChain.then(run, run); editChain = job.catch(() => null);
+  return job.then(r => { editsInFlight = Math.max(0, editsInFlight - 1); renderPending(); pollSoon(0); return r; });
+}
 async function postEdits(path, payload) {
-  const st = $('chatstatus'); st.textContent = 'rebuilding…'; hint('rebuilding…');
-  const r = await fetch(path, { method: 'POST', body: JSON.stringify(payload) }).then(r => r.json()).catch(e => ({ ok: false, error: String(e) }));
-  st.textContent = r.ok ? 'done' : ('failed: ' + (r.error || ''));
-  hint(r.ok ? HINTS[tool] : 'failed: ' + (r.error || '')); if (!r.ok) addMsg('err', 'edit failed: ' + (r.error || ''));
+  const st = $('chatstatus'); st.textContent = 'rebuilding…';
+  const r = await rebuildCall(path, payload);
+  st.textContent = r.ok ? 'done' : 'not applied';
+  hint(HINTS[tool] || ''); if (!r.ok) failNotice(r.error, 'Please change the feature as I tried in the timeline');
   return r;
 }
 
@@ -1947,15 +2254,127 @@ function showVertexHandles() {
   hideVertexHandles();
   if (!topo || !topo.vertices) return;
   const r = Math.min(Math.max(radius * 0.012, 0.25), 2.5);
-  const geo = new THREE.SphereGeometry(r, 10, 10);
+  const geo = new THREE.SphereGeometry(r, 10, 10), diamond = new THREE.OctahedronGeometry(r * 1.25);
   for (const v of topo.vertices) {
     if (hidden.has(v.part)) continue;
-    const m = new THREE.Mesh(geo, vertMat); m.position.set(...v.pos); m.userData = { kind: 'vertex', id: v.id, part: v.part, base: vertMat };
+    const act = handleAction(v); if (!act) continue;            // a corner nothing can be done with: no handle
+    const corner = act.kind === 'corner', mat = corner ? vertMat : rerouteVertMat;
+    const m = new THREE.Mesh(corner ? geo : diamond, mat); m.position.set(...v.pos); m.userData = { kind: 'vertex', id: v.id, part: v.part, base: mat, act: act.kind };
     handleGroup.add(m); vertexObjs.push(m);
   }
   refreshMaterials();
 }
 function hideVertexHandles() { for (const o of vertexObjs) handleGroup.remove(o); vertexObjs = []; }
+// What dragging a corner does, from the capabilities the build worked out (eitri.viewglb.vertex_capabilities):
+// the corner itself moves, or (when it cannot) the hole it is on moves, or a face meeting there is pushed/pulled.
+// Old builds without capabilities: every corner is offered as before.
+function handleAction(v) {
+  if (v.move === undefined) return { kind: 'corner' };
+  if (v.move) return { kind: 'corner' };
+  if (v.hole) { const h = (topo.holes || []).find(x => x.id === v.hole); const f = h && (h.faces || []).map(entry).find(x => x && x.type === 'cylinder' && x.full); if (h && f) return { kind: 'hole', hole: h, face: f }; }
+  const faces = (v.faces || []).map(entry).filter(f => f && (f.type === 'plane' || f.type === 'sphere' || (f.type === 'cylinder' && f.full && f.axis)));
+  if (faces.length) return { kind: 'face', faces };
+  return null;
+}
+const HANDLE_WHY = { curved: 'a curved face meets that corner', curved_edge: 'a curved edge ends at that corner', rigid_face: 'a face at that corner has a hole or a curved outline, so the corner cannot move on its own', hole: 'that corner is on a pocket outline' };
+function handleTip(o) {
+  const a = o.userData.act;
+  const v = entry(o.userData.id);
+  return a === 'corner' ? 'drag to move this corner' + (v && v.lock && v.lock.length ? (v.lock.length === 1 ? ' (it slides within the face that has a hole or curved outline)' : ' (it slides along the edge between two faces that cannot bend)') : '') : a === 'hole' ? 'drag to move the hole this corner belongs to' : 'this corner cannot move on its own: drag to push/pull a face that meets here';
+}
+function startHandleDrag(ev, hit) {
+  const v = entry(hit.object.userData.id); const act = v && handleAction(v); if (!act) return false;
+  const p0 = new THREE.Vector3(...v.pos);
+  controls.enabled = false; try { renderer.domElement.setPointerCapture(ev.pointerId); } catch (e) { /* synthetic */ }
+  renderer.domElement.style.cursor = 'grabbing'; $('hover').style.display = 'none';
+  const n = camera.getWorldDirection(new THREE.Vector3()).negate();
+  drag = { kind: 'handle', v, act, p0, start: new THREE.Vector2(ev.clientX, ev.clientY), moved: false, delta: new THREE.Vector3(), plane: new THREE.Plane().setFromNormalAndCoplanarPoint(n, p0), obj: hit.object, prevSel: new Set(selected), deform: [] };
+  if (act.kind === 'corner') {
+    if (!selected.has(v.id) || [...selected].some(id => { const e = entry(id); return e && e.part !== v.part; })) { selected.clear(); selected.add(v.id); }
+    refreshMaterials(); renderSelection(); startEditGizmo(false);             // the pivot and ghosts, without the gizmo
+    // the faces around the moving corners deform live: their mesh points that sit on a corner follow the pointer
+    const corners = [...selected].map(entry).filter(e => e && e.pos && e.part === v.part).map(e => new THREE.Vector3(...e.pos));
+    const tol = Math.max(radius * 1e-5, 1e-4);
+    for (const o of partMeshes[v.part] || []) {
+      if (!o.isMesh || !o.visible) continue;
+      o.updateWorldMatrix(true, false);
+      const inv = o.matrixWorld.clone().invert(); const local = corners.map(c => c.clone().applyMatrix4(inv));
+      const pos = o.geometry.attributes.position, idx = [];
+      for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i); if (local.some(c => Math.abs(c.x - x) < tol && Math.abs(c.y - y) < tol && Math.abs(c.z - z) < tol)) idx.push(i); }
+      if (!idx.length) continue;
+      const g = new THREE.Mesh(o.geometry.clone(), ghostMat); g.applyMatrix4(o.matrixWorld); g.userData.kind = 'ghost'; overlay.add(g);
+      drag.deform.push({ g, idx, base: Float32Array.from(o.geometry.attributes.position.array), inv3: new THREE.Matrix3().setFromMatrix4(inv) });
+    }
+  } else if (act.kind === 'hole') {
+    const ax = new THREE.Vector3(...act.hole.axis).normalize();
+    drag.axis = ax; drag.plane = new THREE.Plane().setFromNormalAndCoplanarPoint(ax, p0);      // a hole moves within its face
+    endEditGizmo(); epivot = new THREE.Object3D(); epivot.position.copy(p0); epivot.userData.start = p0.clone(); scene.add(epivot);
+    for (const fid of act.hole.faces || []) { const o = faceObjs.find(x => x.userData.id === fid); if (o) { const g = new THREE.Mesh(o.geometry, ghostMat); g.position.copy(o.position); g.userData.kind = 'eghost'; scene.add(g); epivot.attach(g); } }
+  }
+  drag.readout = addLabel(p0, '', 'readout');
+  return true;
+}
+function updateHandleDrag(ev) {
+  const d = drag;
+  if (!d.moved && Math.hypot(ev.clientX - d.start.x, ev.clientY - d.start.y) < 3) return;
+  if (!d.moved && d.act.kind === 'face') {            // the face whose push/pull direction follows the pointer best
+    const dir = new THREE.Vector2(ev.clientX - d.start.x, ev.clientY - d.start.y).normalize();
+    let best = null;
+    for (const f of d.act.faces) {
+      const o = faceObjs.find(x => x.userData.id === f.id); if (!o) continue;
+      const fake = { object: o, point: d.p0.clone() }; const ax = dragAxisFor(fake); if (!ax) continue;
+      const sv = pxPerMmAlong(d.p0, ax.axis); if (sv.length() < 0.05) continue;
+      const score = Math.abs(sv.normalize().dot(dir)) + (f.type === 'plane' ? 0.05 : 0);
+      if (!best || score > best.score) best = { score, hit: fake, f };
+    }
+    const why = HANDLE_WHY[d.v.why] || 'that corner cannot move on its own';
+    clearLabels('readout'); drag = null; controls.enabled = false;
+    if (!best) { controls.enabled = true; renderer.domElement.style.cursor = ''; failNotice(why, 'Please move the corner ' + d.v.id); return; }
+    toast(`${why.charAt(0).toUpperCase() + why.slice(1)} — pushing/pulling the ${best.f.type === 'plane' ? 'flat' : best.f.type === 'sphere' ? 'round' : 'round'} face instead`);
+    selected.clear(); selected.add(best.f.id); refreshMaterials(); renderSelection();
+    startPushPull({ clientX: d.start.x, clientY: d.start.y }, best.hit);
+    if (drag) updatePushPull(ev);
+    return;
+  }
+  if (!d.moved && d.act.kind === 'hole') toast('That corner is part of a hole — moving the hole');
+  d.moved = true;
+  setPointer(ev); const q = new THREE.Vector3(); if (!raycaster.ray.intersectPlane(d.plane, q)) return;
+  const delta = q.sub(d.p0);
+  if (d.axis) delta.sub(d.axis.clone().multiplyScalar(delta.dot(d.axis)));
+  const lock = (d.act.kind === 'corner' && d.v.lock) || [];       // faces here that cannot bend: stay in their planes
+  if (lock.length === 1) { const n = new THREE.Vector3(...lock[0]).normalize(); delta.sub(n.multiplyScalar(delta.dot(n))); }
+  else if (lock.length === 2) { const t = new THREE.Vector3().crossVectors(new THREE.Vector3(...lock[0]), new THREE.Vector3(...lock[1])).normalize(); delta.copy(t.multiplyScalar(delta.dot(t))); }
+  if (!ev.altKey) delta.set(Math.round(delta.x * 2) / 2, Math.round(delta.y * 2) / 2, Math.round(delta.z * 2) / 2);
+  d.delta.copy(delta);
+  if (epivot) epivot.position.copy(epivot.userData.start.clone().add(delta));
+  for (const f of d.deform) {
+    const ld = delta.clone().applyMatrix3(f.inv3), pos = f.g.geometry.attributes.position;
+    for (const i of f.idx) pos.setXYZ(i, f.base[3 * i] + ld.x, f.base[3 * i + 1] + ld.y, f.base[3 * i + 2] + ld.z);
+    pos.needsUpdate = true; f.g.geometry.computeVertexNormals();
+  }
+  d.readout.pos.copy(d.p0.clone().add(delta)); d.readout.el.textContent = `${delta.length().toFixed(1)} mm`;
+}
+function finishHandleDrag(ev) {
+  const d = drag; drag = null; controls.enabled = true; renderer.domElement.style.cursor = ''; clearLabels('readout');
+  if (!d.moved || d.delta.length() < 0.05) {         // no movement: an ordinary click on the handle
+    for (const f of d.deform) overlay.remove(f.g);
+    endEditGizmo(); selected.clear(); for (const id of d.prevSel) selected.add(id);
+    if (d.act.kind === 'corner') { editClick(ev, { object: d.obj }); } else { handleClick(d); } return;
+  }
+  const delta = [r2(d.delta.x), r2(d.delta.y), r2(d.delta.z)];
+  const ghosts = [...(epivot ? epivot.children : []), ...d.deform.map(f => f.g)];
+  for (const g of ghosts) pendingGroup.attach(g);
+  if (d.act.kind === 'corner') { endEditGizmo(); applyEditMove(delta, null, ghosts); }
+  else { endEditGizmo(); sendEdit({ op: 'move_hole', part: d.act.hole.part, face: selFace(d.act.face), delta }, ghosts); }
+}
+// a click on a diamond handle selects what dragging it would move (the hole, or the faces meeting there)
+function handleClick(d) {
+  selected.clear();
+  if (d.act.kind === 'hole') for (const f of d.act.hole.faces || []) selected.add(f);
+  else for (const f of d.act.faces) selected.add(f.id);
+  refreshMaterials(); renderSelection(); startEditGizmo();
+  hint(d.act.kind === 'hole' ? 'the hole is selected: drag the corner handle, or use the gizmo, to move it' : (HANDLE_WHY[d.v.why] || 'that corner cannot move on its own') + ': drag the handle to push/pull a face here');
+}
 function editClick(ev, hit) {
   const id = hit ? (hit.object.userData.id || null) : null;
   if (!id) { if (!ev.shiftKey) { selected.clear(); endEditGizmo(); refreshMaterials(); renderSelection(); } return; }
@@ -1979,7 +2398,7 @@ function editCentroid(sel) {
   if (!pts.length) return null;
   return pts.reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(pts.length);
 }
-function startEditGizmo() {
+function startEditGizmo(withGizmo) {
   endEditGizmo();
   const sel = editSelection(); const c = editCentroid(sel); if (!c) return;
   epivot = new THREE.Object3D(); epivot.position.copy(c); scene.add(epivot);
@@ -1987,6 +2406,9 @@ function startEditGizmo() {
   // ghosts: the selected faces and corner handles ride along with the gizmo
   for (const f of sel.faces) { const o = faceObjs.find(x => x.userData.id === f.id); if (o) { const g = new THREE.Mesh(o.geometry, ghostMat); g.position.copy(o.position); g.userData.kind = 'eghost'; scene.add(g); epivot.attach(g); } }
   for (const v of sel.verts) { const o = vertexObjs.find(x => x.userData.id === v.id); if (o) { const g = new THREE.Mesh(o.geometry, selVertMat); g.position.copy(o.position); g.userData.kind = 'eghost'; scene.add(g); epivot.attach(g); } }
+  if (withGizmo === false) return;
+  const unsupported = sel.faces.length && !sel.verts.length && !sel.edges.length && sel.faces.find(f => !(f.type === 'plane' || f.type === 'sphere' || (f.type === 'cylinder' && f.full)));
+  if (unsupported) { endEditGizmo(); showNotice(`A ${unsupported.type} face like this cannot be moved directly in the editor.`, { ask: `Please change the ${unsupported.type} face ${unsupported.id} as I describe:` }); return; }
   egizmo = new TransformControls(camera, renderer.domElement); egizmo.setSize(0.85); egizmo.setTranslationSnap(0.5); egizmo.setRotationSnap(THREE.MathUtils.degToRad(5));
   egizmo.showX = egizmo.showY = egizmo.showZ = true;
   if (!(sel.faces.length === 1 && !sel.verts.length && !sel.edges.length && sel.faces[0].type === 'plane')) egizmo.setMode('translate');
@@ -2007,26 +2429,27 @@ function commitEditGizmo() {
   }
   const delta = [r2(d.x), r2(d.y), r2(d.z)];
   if (!rotate && d.length() < 0.05) { epivot.position.copy(epivot.userData.start); epivot.quaternion.identity(); return; }
-  applyEditMove(delta, rotate);
+  const ghosts = [...epivot.children].map(g => { const c = g.clone(); g.updateWorldMatrix(true, false); c.applyMatrix4(g.matrixWorld); return c; });
+  applyEditMove(delta, rotate, ghosts);
 }
-function applyEditMove(delta, rotate) {
+function applyEditMove(delta, rotate, ghosts) {
   const sel = editSelection(); if (!sel.part) { hint('select corners, edges or faces first'); return; }
   const anyPoints = sel.verts.length || sel.edges.length;
   if (sel.faces.length && !anyPoints && editMode === 'extend') {
-    if (sel.faces.length === 1) sendEdit({ op: 'move_face', part: sel.part, face: selFace(sel.faces[0]), delta, ...(rotate ? { rotate } : {}) });
-    else { for (const f of sel.faces) sendEdit({ op: 'move_face', part: sel.part, face: selFace(f), delta, ...(rotate ? { rotate } : {}) }); }
+    if (sel.faces.length === 1) sendEdit({ op: 'move_face', part: sel.part, face: selFace(sel.faces[0]), delta, ...(rotate ? { rotate } : {}) }, ghosts);
+    else { sel.faces.forEach((f, i) => sendEdit({ op: 'move_face', part: sel.part, face: selFace(f), delta, ...(rotate ? { rotate } : {}) }, i ? null : ghosts)); }
     return;
   }
   if (sel.edges.length === 1 && !sel.verts.length && !sel.faces.length && sel.edges[0].type === 'circle') {
     const flat = (sel.edges[0].faces || []).map(entry).find(f => f && f.type === 'plane');
-    if (flat) { const n = new THREE.Vector3(...flat.normal); const dist = r2(n.dot(new THREE.Vector3(...delta))); if (Math.abs(dist) < 0.05) { hint('drag a rim along the face normal to push/pull that face'); return; } sendEdit({ op: 'push_pull', part: sel.part, face: selFace(flat), distance: dist }); return; }
+    if (flat) { const n = new THREE.Vector3(...flat.normal); const dist = r2(n.dot(new THREE.Vector3(...delta))); if (Math.abs(dist) < 0.05) { hint('drag a rim along the face normal to push/pull that face'); return; } sendEdit({ op: 'push_pull', part: sel.part, face: selFace(flat), distance: dist }, ghosts); return; }
   }
   if (rotate) { hint('tilting applies to a single flat face (switch the mode to "move face"); corners and edges only translate'); endEditGizmo(); startEditGizmo(); return; }
   const edit = { op: 'move_vertices', part: sel.part, delta };
   if (sel.verts.length) edit.vertices = sel.verts.map(selVertex);
   if (sel.edges.length) edit.edges = sel.edges.map(selEdge);
   if (sel.faces.length) edit.faces = sel.faces.map(selFace);
-  sendEdit(edit);
+  sendEdit(edit, ghosts);
 }
 function deleteSelectedFaces() {
   const sel = editSelection(); if (!sel.faces.length) { hint('select the faces of the feature to remove (a hole: its wall; a fillet: the round)'); return; }
@@ -2037,7 +2460,7 @@ function renderEditPanel(ctx) {
   panel.style.display = 'block';
   const chk = (label, value, onchange) => { const l = document.createElement('label'); l.className = 'chk'; const c = document.createElement('input'); c.type = 'checkbox'; c.checked = !!value; c.onchange = () => onchange(c.checked); l.appendChild(c); l.appendChild(document.createTextNode(label)); actions.appendChild(l); return c; };
   const what = [sel.verts.length ? `${sel.verts.length} corner(s)` : '', sel.edges.length ? `${sel.edges.length} edge(s)` : '', sel.faces.length ? `${sel.faces.length} face(s)` : ''].filter(Boolean).join(', ');
-  items.innerHTML = `<div class="item"><b>Edit geometry</b>${sel.part ? ` · <b>${sel.part}</b>: ${what}` : ' · click a corner, edge or face (shift adds)'} <span class="muted">· drag the gizmo (R tilt · T move) or type a move</span></div>`;
+  items.innerHTML = `<div class="item"><b>Edit geometry</b>${sel.part ? ` · <b>${sel.part}</b>: ${what}` : ' · drag a corner handle (◆: moves its hole, or pushes/pulls a face), or click corners, edges or faces (shift adds)'} <span class="muted">· drag the gizmo (R tilt · T move) or type a move</span></div>`;
   lab('pick'); chk('corners', editFilter.vertex, v => editFilter.vertex = v); chk('edges', editFilter.edge, v => editFilter.edge = v); chk('faces', editFilter.face, v => editFilter.face = v);
   if (sel.faces.length && !sel.verts.length && !sel.edges.length) {
     lab('faces'); const s = document.createElement('select'); for (const [v, t] of [['extend', 'move the face, neighbours extend'], ['deform', 'drag its corners, neighbours tilt']]) { const o = document.createElement('option'); o.value = v; o.textContent = t; if (v === editMode) o.selected = true; s.appendChild(o); } s.onchange = () => { editMode = s.value; renderSelection(); }; actions.appendChild(s);
@@ -2086,14 +2509,22 @@ function measureClick(ev, hit) {
 }
 
 // ---------------------------------------------------------------- pointer routing
-let downAt = null, downHit = null, band = null;
+let downAt = null, downHit = null, band = null, downTime = 0;
+// a click, not an orbit: the pointer stayed within 6 px, or within 12 px for a quick tap (trackpads and mice
+// wobble a few pixels on a click; an orbit is a longer, deliberate drag)
+function isClick(ev) { if (!downAt) return false; const d = Math.hypot(ev.clientX - downAt[0], ev.clientY - downAt[1]); return d <= 6 || (d <= 12 && performance.now() - downTime < 300); }
 renderer.domElement.addEventListener('pointerdown', ev => {
   if (ev.button !== 0) return;
-  downAt = [ev.clientX, ev.clientY]; downHit = null;
+  downAt = [ev.clientX, ev.clientY]; downHit = null; downTime = performance.now();
   if (sketch) { if (sketch.pickFace || sketch.pickEdge) return; if (sketch.sub === 'select' && skStartDrag(ev)) return; if (sketch.sub === 'select' && sketch.profile && !sketch.holeEdit && (sketch.method || 'extrude') === 'extrude') startExtrudeDrag(ev); return; }
   if ((gizmo && gizmo.dragging) || (egizmo && egizmo.dragging)) return;
   const hit = pickAt(ev);
+  if (tool === 'primitive') {
+    if (primDraw && primDraw.phase === 'height') { primDraw.clickCommit = true; controls.enabled = false; return; }
+    const site = primSite(ev, hit); if (site && !site.blocked) { startPrimDraw(ev, site); return; }
+  }
   if (ev.shiftKey && (tool === 'select' || tool === 'edit') && !hit) { band = { x0: ev.clientX, y0: ev.clientY }; controls.enabled = false; return; }
+  if (tool === 'edit' && hit && hit.object.userData.kind === 'vertex' && !ev.shiftKey && startHandleDrag(ev, hit)) return;
   if (tool === 'pushpull' && hit && hit.object.userData.kind === 'face') startPushPull(ev, hit);
   else if ((tool === 'fillet' || tool === 'chamfer') && hit && hit.object.userData.kind === 'edge') startEdgeDrag(ev, hit);
   else downHit = hit;
@@ -2101,9 +2532,11 @@ renderer.domElement.addEventListener('pointerdown', ev => {
 });
 renderer.domElement.addEventListener('pointermove', ev => {
   const h = $('hover');
+  if (primDraw) { movePrimDraw(ev); return; }
   if (band) { updateBand(ev); return; }
   if (drag) {
     if (drag.kind === 'skdrag') { skDragMove(ev); return; }
+    if (drag.kind === 'handle') { updateHandleDrag(ev); return; }
     if (drag.kind === 'pushpull') updatePushPull(ev); else if (drag.kind === 'extrude') updateExtrudeDrag(ev); else updateEdgeDrag(ev);
     return;
   }
@@ -2113,13 +2546,17 @@ renderer.domElement.addEventListener('pointermove', ev => {
   if (tool === 'boss') { bossHover(ev, hit); return; }
   if (tool === 'primitive') { primitiveHover(ev, hit); return; }
   setHover(o);
-  if (o) { const r = wrap.getBoundingClientRect(); h.style.display = 'block'; h.style.left = (ev.clientX - r.left + 14) + 'px'; h.style.top = (ev.clientY - r.top + 14) + 'px'; h.textContent = shortDesc(idOf(o)); }
+  const handle = o && o.userData.kind === 'vertex';
+  renderer.domElement.style.cursor = handle ? 'grab' : '';
+  if (o) { const r = wrap.getBoundingClientRect(); h.style.display = 'block'; h.style.left = (ev.clientX - r.left + 14) + 'px'; h.style.top = (ev.clientY - r.top + 14) + 'px'; h.textContent = handle ? handleTip(o) : shortDesc(idOf(o)); }
   else h.style.display = 'none';
 });
 renderer.domElement.addEventListener('pointerup', ev => {
   if (band) { finishBand(ev); return; }
+  if (primDraw) { upPrimDraw(ev); return; }
+  if (drag && drag.kind === 'handle') { finishHandleDrag(ev); return; }
   if (drag) { if (drag.kind === 'skdrag') { const moved = drag.moved; skEndDrag(); if (!moved && sketch) sketchClick(ev); return; } if (drag.kind === 'pushpull') finishPushPull(); else if (drag.kind === 'extrude') { const moved = drag.moved; drag = null; controls.enabled = true; clearLabels('readout'); if (!moved && sketch) sketchClick(ev); } else finishEdgeDrag(); return; }
-  if (!downAt || Math.hypot(ev.clientX - downAt[0], ev.clientY - downAt[1]) > 4) return;   // a drag/orbit, not a click
+  if (!isClick(ev)) return;   // a drag/orbit, not a click
   if (cageMode) { if (!(cgizmo && cgizmo.dragging)) cageClick(ev); return; }
   if (sketch) { if (sketch.pickFace || sketch.pickEdge) { const h = pickAt(ev, sketch.pickFace ? 'faces' : 'edges'); if (h) { const e = entry(h.object.userData.id); if (sketch.pickFace) { if (e.type !== 'plane' && !confirm('that face is not flat: the extrusion stops where it first meets it. Use it?')) return; sketch.toFace = e; sketch.pickFace = false; } else { sketch.axisEdge = e; sketch.pickEdge = false; } renderSelection(); hint('picked ' + e.id); } return; } if (sketch.profile && sketch.method === 'sweep') { const h = pickAt(ev, 'edges'); if (h) { const id = h.object.userData.id; sketch.path = sketch.path || []; const i = sketch.path.indexOf(id); if (i >= 0) sketch.path.splice(i, 1); else sketch.path.push(id); selected.clear(); for (const x of sketch.path) selected.add(x); refreshMaterials(); renderSelection(); } return; } sketchClick(ev); return; }
   const hit = downHit || pickAt(ev);
@@ -2151,6 +2588,14 @@ renderer.domElement.addEventListener('dblclick', ev => {
 });
 window.addEventListener('keydown', ev => {
   if (ev.target && (ev.target.tagName === 'INPUT' || ev.target.tagName === 'TEXTAREA' || ev.target.tagName === 'SELECT')) return;
+  if (primDraw) {                                                   // a primitive being drawn: numbers size it
+    const d = primDraw;
+    if (/^[0-9.]$/.test(ev.key) || ['x', 'X', '*', ',', ' '].includes(ev.key)) { d.typed += ev.key === ' ' ? ',' : ev.key; typedPrim(d); ev.preventDefault(); return; }
+    if (ev.key === 'Backspace') { d.typed = d.typed.slice(0, -1); typedPrim(d); ev.preventDefault(); return; }
+    if (ev.key === 'Enter') { ev.preventDefault(); if (d.phase === 'base' && !d.moved && !d.typedBase) return; advancePrim(d); return; }
+    if (ev.key === 'Escape') { ev.preventDefault(); endPrimDraw(); clearOverlay('ghost'); hint(HINTS.primitive); return; }
+    return;
+  }
   if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 'z') { ev.preventDefault(); if (ev.shiftKey) doRedo(); else doUndo(); return; }
   if (ev.key === 'Escape') {
     if (cageMode) { if (cageMode.sel.size) { cageMode.sel.clear(); endCageGizmo(); drawCage(); renderSelection(); } else endCage(); return; }
@@ -2160,7 +2605,9 @@ window.addEventListener('keydown', ev => {
       if (sketch.sel.size) { sketch.sel.clear(); redrawSketch(); renderSelection(); return; }
       endSketch(); setTool('select'); return;
     }
-    if (gizmo || drag || measurePts.length) { cancelTool(true); hint(HINTS[tool]); return; } selected.clear(); refreshMaterials(); renderSelection(); return; }
+    if (gizmo || drag || measurePts.length) { cancelTool(true); hint(HINTS[tool]); return; }
+    if (tool !== 'select') { setTool('select'); return; }          // Esc leaves any tool for Select, like every CAD tool
+    selected.clear(); refreshMaterials(); renderSelection(); return; }
   if (sketch) {
     if (ev.metaKey || ev.ctrlKey) return;
     const k = ev.key.toLowerCase();
@@ -2181,8 +2628,8 @@ window.addEventListener('keydown', ev => {
   if (ev.key.toLowerCase() === 'a') lookAt();
   if (ev.key === 'Enter') { const b = document.querySelector('#selactions button.primary'); if (b && !b.disabled) b.click(); }
 });
-async function doUndo() { const r = await fetch('undo', { method: 'POST', body: '{}' }).then(r => r.json()); if (!r.ok) hint(r.error || 'nothing to undo'); }
-async function doRedo() { const r = await fetch('redo', { method: 'POST', body: '{}' }).then(r => r.json()); if (!r.ok) hint(r.error || 'nothing to redo'); }
+async function doUndo() { const r = await rebuildCall('undo'); if (!r.ok) hint(plainError(r.error, 'Nothing to undo')); }
+async function doRedo() { const r = await rebuildCall('redo'); if (!r.ok) hint(plainError(r.error, 'Nothing to redo')); }
 $('undo').onclick = doUndo; $('redo').onclick = doRedo;
 async function showInterference() {
   for (const o of [...interfGroup.children]) interfGroup.remove(o);
@@ -2275,7 +2722,7 @@ function renderSelection() {
     lab('size'); selEl([...SIZES.map(s => [s, s]), ['custom', 'custom Ø']], holeSpec.size, v => { holeSpec.size = v; renderSelection(); }, 'size');
     if (holeSpec.size === 'custom') { lab('Ø'); const d = num(holeSpec.d, 'diameter mm'); d.oninput = () => holeSpec.d = parseFloat(d.value) || 1; }
     else { lab('type'); selEl([['clearance', 'clearance'], ['tapped', 'tapped (tap drill)']], holeSpec.tapped ? 'tapped' : 'clearance', v => { holeSpec.tapped = v === 'tapped'; renderSelection(); }, 'type'); if (!holeSpec.tapped) { lab('fit'); selEl([['close', 'close'], ['normal', 'normal'], ['loose', 'loose']], holeSpec.fit, v => holeSpec.fit = v, 'fit'); } }
-    lab('head'); selEl([['', 'none'], ['counterbore', 'counterbore'], ['countersink', 'countersink']], holeSpec.head, v => holeSpec.head = v, 'head');
+    lab('head'); actions.appendChild(visualPicker([['', 'Plain', 'hole_none'], ['counterbore', 'Counterbore', 'hole_counterbore'], ['countersink', 'Countersink', 'hole_countersink']], holeSpec.head, v => holeSpec.head = v, 'head'));
     lab('depth'); const dp = document.createElement('input'); dp.type = 'text'; dp.style.width = '60px'; dp.placeholder = 'through'; dp.value = holeSpec.depth; dp.oninput = () => holeSpec.depth = dp.value; actions.appendChild(dp);
     lab('pattern'); const p = document.createElement('input'); p.type = 'text'; p.style.width = '100px'; p.placeholder = '3x2 10x8 · 6 @ 360'; p.value = holeSpec.patternText || ''; p.oninput = () => { holeSpec.patternText = p.value; holeSpec.pattern = parsePattern(p.value); }; actions.appendChild(p);
     lab('mirror'); selEl([['', 'none'], ['u', 'across u'], ['v', 'across v'], ['uv', 'both']], holeSpec.mirror, v => holeSpec.mirror = v);
@@ -2384,14 +2831,54 @@ function renderSelection() {
   btn('Clear', () => { selected.clear(); refreshMaterials(); renderSelection(); });
 }
 function renderChips() { const c = $('chips'); c.innerHTML = ''; for (const id of selected) { const s = document.createElement('span'); s.className = 'chip'; s.textContent = String(id).startsWith('edit:') ? 'feature #' + (parseInt(String(id).slice(5)) + 1) : id; c.appendChild(s); } }
-async function sendEdit(edit) {
-  const st = $('chatstatus'); st.textContent = 'applying edit…'; hint('applying…');
-  const r = await fetch('edit', { method: 'POST', body: JSON.stringify(edit) }).then(r => r.json()).catch(e => ({ ok: false, error: String(e) }));
-  st.textContent = r.ok ? 'edit applied' : ('edit failed: ' + (r.error || ''));
-  hint(r.ok ? HINTS[tool] : 'edit failed: ' + (r.error || ''));
-  if (!r.ok) addMsg('err', 'edit failed: ' + (r.error || ''));
-  else if (ONE_SHOT.includes(tool)) setTool('select');
-  return r;
+// an edit in words, for "Ask Claude" when the editor could not apply it
+function describeEditIntent(e) {
+  const on = e.part ? ` on ${e.part}` : '', v = a => '(' + (a || []).map(x => +(+x).toFixed(2)).join(', ') + ') mm';
+  switch (e.op) {
+    case 'move_vertices': return `move the selected corner(s)${on} by ${v(e.delta)}`;
+    case 'move_face': return `move the selected face${on} by ${v(e.delta)}` + (e.rotate ? ` and tilt it ${e.rotate.angle}°` : '');
+    case 'push_pull': return `push/pull the selected face${on} by ${e.distance} mm`;
+    case 'move_hole': return `move the hole${on} by ${v(e.delta)}`;
+    case 'primitive': return `add a ${e.kind} (${Object.entries(e.size || {}).map(([k, x]) => k + ' ' + x).join(', ')} mm)` + (e.mode === 'cut' ? ` cut from ${e.part}` : e.mode === 'add' ? ` joined to ${e.part}` : ' as a new part');
+    case 'fillet': return `round the selected edge(s)${on} with r = ${e.radius} mm`;
+    case 'chamfer': return `chamfer the selected edge(s)${on} by ${e.size} mm`;
+    case 'hole': return `add a hole${on}`;
+    case 'move': return `move ${e.part || 'the part'} by ${v(e.delta)}`;
+    case 'delete_faces': return `remove the selected feature${on}`;
+    default: return `apply a ${String(e.op || 'direct').replace(/_/g, ' ')} edit${on}`;
+  }
+}
+// Edits are optimistic and queued: the change shows at once (its ghost stays on screen, the revision chip
+// breathes) while the kernel rebuilds in the background; edits made meanwhile wait their turn, input is never
+// blocked. When the rebuild lands the real geometry replaces the ghost; if it fails the ghost goes and a notice
+// says why. No edit ever goes through Claude: this is the editor and the kernel only.
+let editChain = Promise.resolve(), editSeq = 0;
+const pendingTickets = [];
+function dropTicket(t) { for (const o of t.objs) pendingGroup.remove(o); t.objs = []; const i = pendingTickets.indexOf(t); if (i >= 0) pendingTickets.splice(i, 1); }
+function landPending(rev) {        // new geometry is on screen: the ghosts it already contains go
+  for (const t of [...pendingTickets]) {
+    if (t.landRev != null && typeof rev === 'number' && rev >= t.landRev) dropTicket(t);
+    else if (typeof rev === 'string' && t.sentAt && parseFloat(rev.slice(1)) > t.sentAt) dropTicket(t);   // a preview built after it was sent
+  }
+}
+function sendEdit(edit, ghosts) {
+  const ticket = { id: ++editSeq, objs: [], sentAt: 0, landRev: null };
+  for (const g of ghosts || []) { if (g) { pendingGroup.attach(g); ticket.objs.push(g); } }
+  pendingTickets.push(ticket); editsInFlight++; renderPending();
+  const st = $('chatstatus'); st.textContent = 'applying edit…';
+  const run = async () => {
+    ticket.sentAt = Date.now() / 1000; pollSoon(250);
+    return fetch('edit', { method: 'POST', body: JSON.stringify(edit) }).then(r => r.json()).catch(e => ({ ok: false, error: String(e) }));
+  };
+  const job = editChain.then(run, run); editChain = job.catch(() => null);
+  return job.then(r => {
+    editsInFlight = Math.max(0, editsInFlight - 1);
+    if (!r.ok) { dropTicket(ticket); failNotice(r.error, 'Please ' + describeEditIntent(edit)); st.textContent = 'edit not applied'; }
+    else { ticket.landRev = r.state && r.state.ok_revision; if (typeof loadedRev === 'number' && ticket.landRev != null && loadedRev >= ticket.landRev) dropTicket(ticket); st.textContent = 'edit applied'; if (ONE_SHOT.includes(tool) && !editsInFlight) setTool('select'); }
+    renderPending(); pollSoon(0);
+    if (!editsInFlight) hint(lastHint || HINTS[tool] || '');
+    return r;
+  });
 }
 
 // ---------------------------------------------------------------- explode / section / parts
@@ -2557,7 +3044,7 @@ function renderConfigs() {
   const key = cfgs.join(','); if (el.dataset.key === key) return; el.dataset.key = key; el.innerHTML = '';
   if (!cfgs.length) return;
   const s = document.createElement('select'); s.id = 'configsel'; s.innerHTML = '<option value="">configuration…</option>' + cfgs.map(c => `<option value="${c}">${c}</option>`).join('');
-  s.onchange = async () => { if (!s.value) return; $('applyStatus').textContent = 'applying ' + s.value + '…'; const r = await fetch('set', { method: 'POST', body: JSON.stringify({ config: s.value }) }).then(r => r.json()); $('applyStatus').textContent = r.ok ? 'built' : ('failed: ' + (r.error || '')); };
+  s.onchange = async () => { if (!s.value) return; $('applyStatus').textContent = 'applying ' + s.value + '…'; const r = await fetch('set', { method: 'POST', body: JSON.stringify({ config: s.value }) }).then(r => r.json()); $('applyStatus').textContent = r.ok ? 'built' : 'not applied'; if (!r.ok) failNotice(r.error, 'Please switch to the configuration ' + s.value); };
   el.appendChild(s);
 }
 function renderParams() {
@@ -2593,8 +3080,8 @@ $('apply').onclick = async () => {
   const st = $('applyStatus');
   if (!Object.keys(updates).length) { st.textContent = 'no changes'; return; }
   st.textContent = 'rebuilding…';
-  const r = await fetch('set', { method: 'POST', body: JSON.stringify(updates) }).then(r => r.json());
-  st.textContent = r.ok ? 'done' : ('failed: ' + (r.error || '').split('\n').slice(-1)[0]);
+  const r = await rebuildCall('set', updates);
+  st.textContent = r.ok ? 'done' : 'not applied'; if (!r.ok) failNotice(r.error, 'Please change the parameters to ' + Object.entries(updates).map(([k, v]) => k + ' = ' + v).join(', '));
   $('params').dataset.keys = '';
 };
 let editsKey = '';
@@ -2607,17 +3094,17 @@ function renderEdits() {
   for (const e of list) {
     const note = (state.edit_notes || [])[e.index];
     const row = document.createElement('div'); row.className = 'edit';
-    row.innerHTML = `<span class="${note && !note.ok ? 'bad' : ''}" style="flex:1">${e.index + 1}. ${e.description}${note && !note.ok ? ' — ' + note.detail : ''}</span>`;
+    row.innerHTML = `<span class="${note && !note.ok ? 'bad' : ''}" style="flex:1">${e.index + 1}. ${e.description}${note && !note.ok ? ' — ' + escHtml(plainError(note.detail)) : ''}</span>`;
     row.style.cursor = 'pointer'; row.title = 'click: select in the timeline · double-click: edit';
     row.firstChild.onclick = () => { selected.clear(); selected.add('edit:' + e.index); formOpen = null; refreshMaterials(); renderSelection(); renderTimeline(); };
     row.firstChild.ondblclick = () => { selected.clear(); selected.add('edit:' + e.index); openFeatureForm(e.index); };
     const b = document.createElement('button'); b.className = 'small'; b.textContent = '✕'; b.title = 'remove this edit';
-    b.onclick = () => fetch('edits/remove', { method: 'POST', body: JSON.stringify({ index: e.index }) });
+    b.onclick = () => rebuildCall('edits/remove', { index: e.index }).then(r => { if (!r.ok) failNotice(r.error, 'Please remove direct edit ' + (e.index + 1)); });
     row.appendChild(b); el.appendChild(row);
   }
   renderTimeline();
 }
-$('clearedits').onclick = () => { if ((state.edits || []).length && confirm('Remove all direct edits?')) fetch('edits/clear', { method: 'POST', body: '{}' }); };
+$('clearedits').onclick = () => { if ((state.edits || []).length && confirm('Remove all direct edits?')) rebuildCall('edits/clear').then(r => { if (!r.ok) failNotice(r.error, 'Please remove all direct edits'); }); };
 $('fold').onclick = () => sendChat('Fold the direct edits (EDITS) into the parametric model: express each one in build()/PARAMS, then set EDITS = [].', []);
 const icon = (name, cls) => `<svg class="i${cls ? ' ' + cls : ''}"><use href="assets/icons.svg#i-${name}"/></svg>`;
 let checkBase = null, checkNow = null, checkRev = null, checkVerdict = null;
@@ -2635,7 +3122,7 @@ function renderReport() {
     d.textContent.length; ch.appendChild(d);
   }
   const is = $('issues'); is.innerHTML = '';
-  if (state.last_ok === false && state.last_error) { const d = document.createElement('div'); d.className = 'issue'; d.style.background = 'var(--bad-soft)'; d.innerHTML = `<span class="ic" style="color:var(--bad)">${icon('octagon-alert', 'sm')}</span><span>The latest build failed: ${escHtml(state.last_error.split('\n').filter(Boolean).pop() || '')}</span>`; is.appendChild(d); }
+  if (state.last_ok === false && state.last_error) { const d = document.createElement('div'); d.className = 'issue'; d.style.background = 'var(--bad-soft)'; d.innerHTML = `<span class="ic" style="color:var(--bad)">${icon('octagon-alert', 'sm')}</span><span>The latest build failed: ${escHtml(plainError(state.last_error, 'the model code raised an error (Claude can fix it, or see the code panel)'))}</span>`; is.appendChild(d); }
   for (const i of issues) { const d = document.createElement('div'); d.className = 'issue'; d.innerHTML = `<span class="ic">${icon('triangle-alert', 'sm')}</span><span>${escHtml(i)}</span>`; is.appendChild(d); }
   const fails = checks.filter(c => !c.ok).length, card = $('checkcard');
   const verdict = !checks.length && !issues.length ? 'none' : (fails || state.last_ok === false) ? 'fail' : 'pass';
@@ -2687,13 +3174,13 @@ async function runToolpaths(opsOverride) {
     if ($('opchamfer').checked) ops.push('chamfer');
   }
   const r = await fetch('cam', { method: 'POST', body: JSON.stringify({ part: $('mfgpart').value, ops, post: $('mfgpost').value }) }).then(r => r.json()).catch(e => ({ ok: false, error: String(e) }));
-  if (!r.ok) { hint('toolpaths failed: ' + (r.error || '')); return r; }
+  if (!r.ok) { hint(plainError(r.error, 'The toolpaths could not be made')); return r; }
   showToolpaths(r); hint(`toolpaths: ${r.paths.length} operation(s), ~${(r.seconds / 60).toFixed(1)} min`); return r;
 }
 $('mfgrun').onclick = () => runToolpaths();
 $('mfgclear').onclick = () => { for (const o of [...camGroup.children]) camGroup.remove(o); $('mfgclear').style.display = 'none'; $('mfggcode').style.display = 'none'; $('mfgtime').textContent = ''; $('mfgbox').style.display = 'none'; };
 $('mfgcut').onclick = () => { const k = prompt('kerf (mm) and format (dxf or svg), e.g. "0.2 dxf"', '0.2 dxf'); if (!k) return; const [kerf, kind] = k.trim().split(/\s+/); window.location = `download?fmt=cut&part=${encodeURIComponent($('mfgpart').value)}&kerf=${parseFloat(kerf) || 0}&kind=${kind || 'dxf'}`; };
-$('mfgprint').onclick = async () => { const b = prompt('bed size (mm), e.g. "220x220"', '220x220'); if (!b) return; const r = await fetch('print_prep?bed=' + encodeURIComponent(b)).then(r => r.json()).catch(e => ({ ok: false, error: String(e) })); if (!r.ok) { hint('print prep failed: ' + (r.error || '')); return; } $('mfgbox').style.display = 'block'; $('mfgbox').textContent = r.report + (r.files && r.files.stl ? '\nplate: /download?fmt=bed&kind=stl  ·  /download?fmt=bed&kind=3mf' : ''); hint(`print prep: ${r.placements.length} part(s) on the bed`); };
+$('mfgprint').onclick = async () => { const b = prompt('bed size (mm), e.g. "220x220"', '220x220'); if (!b) return; const r = await fetch('print_prep?bed=' + encodeURIComponent(b)).then(r => r.json()).catch(e => ({ ok: false, error: String(e) })); if (!r.ok) { hint(plainError(r.error, 'Print preparation did not work')); return; } $('mfgbox').style.display = 'block'; $('mfgbox').textContent = r.report + (r.files && r.files.stl ? '\nplate: /download?fmt=bed&kind=stl  ·  /download?fmt=bed&kind=3mf' : ''); hint(`print prep: ${r.placements.length} part(s) on the bed`); };
 const compareGroup = new THREE.Group(); scene.add(compareGroup);
 let compareRev = null;
 async function compareWith(number) {
@@ -2701,7 +3188,7 @@ async function compareWith(number) {
   compareRev = number; renderRevisions();
   if (number == null) { $('comparebox').style.display = 'none'; return; }
   const r = await fetch(`compare?a=${number}`).then(r => r.json()).catch(() => ({ ok: false }));
-  if (r.error) { hint('compare failed: ' + r.error); return; }
+  if (r.error) { hint(plainError(r.error, 'Those revisions could not be compared')); return; }
   $('comparebox').style.display = 'block'; $('comparebox').textContent = r.summary;
   loader.load(r.glb, g => { if (compareRev !== number) return; g.scene.traverse(o => { if (o.isMesh) o.material = new THREE.MeshStandardMaterial({ color: 0xd9534f, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }); if (o.isLine || o.isLineSegments) o.visible = false; }); compareGroup.add(g.scene); hint(`revision ${number} shown in red over the current model`); });
 }
@@ -2770,7 +3257,7 @@ async function sendChat(text, selection) {
   if (!r.ok) {
     if (pendingUser) pendingUser.remove(); pendingUser = null;
     agentBusy = false; hideBubble(); $('send').disabled = false; $('stop').style.display = 'none';
-    addMsg('err', r.error || 'could not send');
+    addMsg('err', plainError(r.error, 'The message could not be sent'));
     if (r.code) poll();                                  // a quota or guard refusal: show the designed state at once
     return false;
   }
@@ -2791,7 +3278,7 @@ async function attachFiles(files) {
     if (!/^image\/(png|jpeg|gif|webp)$/.test(f.type)) { hint('attach PNG, JPEG, GIF or WebP images'); continue; }
     const data = await new Promise((res, rej) => { const rd = new FileReader(); rd.onload = () => res(rd.result); rd.onerror = rej; rd.readAsDataURL(f); });
     const r = await fetch('upload', { method: 'POST', body: JSON.stringify({ name: f.name || 'pasted.png', data }) }).then(r => r.json()).catch(e => ({ ok: false, error: String(e) }));
-    if (r.ok) pendingImages.push({ path: r.path }); else hint('could not attach: ' + (r.error || ''));
+    if (r.ok) pendingImages.push({ path: r.path }); else hint(plainError(r.error, 'That image could not be attached'));
   }
   renderAttachments();
 }
@@ -2817,7 +3304,7 @@ function renderEvent(ev) {
     const t = d.text || ''; const row = d.id && toolRows[d.id];
     let line = '';
     if (t.startsWith('[revision')) { const pass = (t.match(/\[PASS\]/g) || []).length, fail = (t.match(/\[FAIL\]/g) || []).length; line = t.split('\n')[0].slice(0, 90) + (fail ? ` · ${fail} check(s) failed` : pass ? ` · ${pass} checks passed` : ''); }
-    else if (d.is_error) line = t.split('\n')[0].slice(0, 140);
+    else if (d.is_error) line = plainError(t, 'that step did not work').slice(0, 140);
     if (row) {
       const st = row.querySelector('.st'); if (st) { st.textContent = d.is_error ? '✗' : '✓'; st.className = 'st ' + (d.is_error ? 'bad' : 'ok'); }
       if (line) { const s = document.createElement('div'); s.textContent = '  ' + line; row.appendChild(s); }
@@ -2832,7 +3319,7 @@ function renderEvent(ev) {
     if (liveEl && liveEl.parentNode === m) m.insertBefore(det, liveEl); else m.appendChild(det);
     if (stick) m.scrollTop = m.scrollHeight;
   }
-  else if (k === 'error') addMsg('err', d.text);
+  else if (k === 'error') addMsg('err', plainError(d.text, 'Claude ran into a problem; try again'));
   else if (k === 'stopping') addMsg('tool', 'stopping…');
   else if (k === 'divider') addMsg('divider', d.text);
   else if (k === 'result') addMsg('tool', d.stopped ? 'stopped' : `done${d.num_turns ? ' · ' + d.num_turns + ' steps' : ''}${d.duration_ms ? ' · ' + dur(d.duration_ms) : ''}`);
@@ -2938,7 +3425,9 @@ function renderCode(r) {
     }
     showCode(name === 'build_model' ? 'Claude is writing the model' : 'Claude is editing the model', `${lines} line${lines === 1 ? '' : 's'}${live.note ? ' · ' + escHtml(live.note) : ''}`, body + '<span class="caret"></span>');
   } else if (run && isCodeTool(run.name) && lc && lc.id === run.id) {
-    showCode(lc.previewAt ? 'Built: Claude is checking it' : 'Building', `<span class="spin"></span> ${r.build && r.build.stage ? escHtml(r.build.stage) + ' · ' : ''}${run.elapsed.toFixed(1)} s`, null);
+    // the streamed code may have been caught mid-line by the last poll: once the build starts, show it whole
+    const full = run.code && !lc.full ? (lc.full = true, hlPy(run.code)) : null;
+    showCode(lc.previewAt ? 'Built: Claude is checking it' : 'Building', `<span class="spin"></span> ${r.build && r.build.stage ? escHtml(r.build.stage) + ' · ' : ''}${run.elapsed.toFixed(1)} s`, full);
     const pre = $('lccode'); const caret = pre.querySelector('.caret'); if (caret) caret.remove();
   } else if (lc) hideCode(false);
 }
@@ -3025,8 +3514,18 @@ function captureThumb(rev) {
 })();
 
 // ---------------------------------------------------------------- state polling
+let pollTimer = null, polling = false, pollAgain = false;
+function pollSoon(ms) { clearTimeout(pollTimer); pollTimer = setTimeout(poll, ms || 0); }
 async function poll() {
-  try {
+  if (polling) { pollAgain = true; return; }
+  polling = true;
+  try { await pollOnce(); } catch (e) { /* server restarting */ }
+  polling = false;
+  const again = pollAgain; pollAgain = false;
+  pollSoon(again ? 50 : (agentBusy || editsInFlight ? 300 : 1200));
+}
+async function pollOnce() {
+  {
     const s = await fetch('state.json').then(r => r.json());
     state = s;
     const title = s.title || s.name || 'eitri'; if ($('title').textContent !== title) $('title').textContent = title;
@@ -3034,19 +3533,21 @@ async function poll() {
     if (s.home && $('homelink').style.display === 'none') { $('homelink').href = s.home; $('homelink').style.display = 'inline-block'; }
     const status = s.ok_revision ? `revision ${s.ok_revision}` + (s.last_ok ? '' : ' (latest build failed)') + (s.last_note ? ' — ' + s.last_note : '') : 'waiting for the first build…';
     if ($('status').textContent !== status) $('status').textContent = status;
-    const pv = s.preview;
-    if (pv && agentBusy && pv.ts !== shownPreview) {          // new geometry from a build still being checked
-      shownPreview = pv.ts;
-      const key = 'p' + pv.ts; currentRev = key;
+    const pv = s.preview, building = agentBusy || editsInFlight > 0;
+    const stage = s.building ? s.building.stage : '';
+    if (stage !== buildStage) { buildStage = stage; renderPending(); }
+    if (pv && building && pv.ts !== shownPreview && !previewBusy) {   // new geometry from a build still being checked
+      shownPreview = pv.ts;                                    // (an assembly: the parts meshed so far)
+      const key = 'p' + pv.ts; currentRev = key; previewBusy = true;
       const newTopo = await fetch(pv.topology).then(r => r.json()).catch(() => null);
-      if (currentRev !== key) return setTimeout(poll, 200);
-      if (newTopo) { if (lc) lc.previewAt = Date.now(); loadModel(pv.glb, key, newTopo, { animate: true }); }
-    } else if (s.ok_revision && s.ok_revision !== currentRev && !(pv && agentBusy && currentRev === 'p' + pv.ts)) {
+      if (currentRev !== key || !newTopo) { previewBusy = false; if (currentRev === key) currentRev = loadedRev; pollAgain = true; return; }
+      if (lc) lc.previewAt = Date.now(); loadModel(pv.glb, key, newTopo, { animate: !pv.parts_total || !faceObjs.length });
+    } else if (s.ok_revision && s.ok_revision !== currentRev && !(pv && building && currentRev === 'p' + pv.ts)) {
       const quiet = typeof currentRev === 'string';         // the build that was just previewed: same geometry
       currentRev = s.ok_revision;
       const rev = currentRev;
       const newTopo = await fetch(s.topology).then(r => r.json()).catch(() => null);
-      if (rev !== currentRev) return setTimeout(poll, 300);
+      if (rev !== currentRev) { pollAgain = true; return; }
       loadModel(s.glb, rev, newTopo, { animate: agentBusy && !quiet });
       $('sheet').src = 'image.png?r=' + s.ok_revision;
       if ($('showdrawing').checked) $('drawing').src = drawingUrl('svg', true) + '&r=' + s.ok_revision;
@@ -3056,17 +3557,21 @@ async function poll() {
     renderDemo(); renderKeyNote(); renderEngine(); renderHosted();
     if (!s.ok_revision || !(s.parts || []).length) hideLoading();
     if (!autoReplay && s.demo) { autoReplay = true; const q = new URLSearchParams(location.search); if (q.get('replay') === '1') { history.replaceState(null, '', location.pathname); if (!s.busy) startReplay(parseFloat(q.get('speed')) || 1); } }
-  } catch (e) { /* server restarting */ }
-  setTimeout(poll, agentBusy ? 400 : 1200);
+  }
 }
-poll(); pollEvents();
+setTool('select'); poll(); pollEvents();
 
 window.__eitri_debug = () => ({ rev: loadedRev, bbox: bbox ? { min: bbox.min.toArray(), max: bbox.max.toArray() } : null, centre: centre.toArray(), radius,
   camera: camera.position.toArray(), target: controls.target.toArray(), ortho: camera === ortho, tool, sketch: sketch ? { face: sketch.face.id, sub: sketch.sub, profile: sketch.profile, shape: sketch.simple, model: sketch.model, status: sketch.status, profiles: sketch.preview.profiles, open: sketch.preview.open, distance: sketch.distance, mode: sketch.mode, sel: [...sketch.sel], editing: sketch.editing ? sketch.editing.index : null, busy: skBusy || !!skQueue } : null,
   meshes: Object.fromEntries(Object.entries(partMeshes).map(([k, v]) => [k, v.filter(o => o.isMesh).length])), faces: faceObjs.length, edges: edgeObjs.length, selected: [...selected], topo: !!topo, drag: drag ? { kind: drag.kind, value: drag.value } : null,
+  pending: pendingGroup.children.length, inflight: editsInFlight, currentRev, shownPreview, deferred: !!deferredLoad,
   toolData, form: formOpen, timeline: [...document.querySelectorAll('#timeline .tchip')].map(c => c.textContent), vertices: vertexObjs.length, egizmo: !!egizmo, editMode });
 window.__eitri_edit = { move: applyEditMove, del: deleteSelectedFaces, mode: m => { editMode = m; renderSelection(); }, commit: (delta, rotate) => { if (!epivot) startEditGizmo(); if (epivot) { epivot.position.copy(epivot.userData.start.clone().add(new THREE.Vector3(...delta))); if (rotate) egizmo.setMode('rotate'); } applyEditMove(delta, rotate || null); } };
 window.__eitri_entry = entry;
+window.__eitri_plain_error = (raw, fallback) => plainError(raw, fallback);
+window.__eitri_send = { edit: (e) => sendEdit(e), call: (path, body) => rebuildCall(path, body) };
+window.__eitri_screen = (pos) => { const r = renderer.domElement.getBoundingClientRect(); const v = screenOf(new THREE.Vector3(...pos)); return [v.x + r.left, v.y + r.top]; };
+window.__eitri_vertex_handles = () => vertexObjs.filter(o => o.visible).map(o => ({ id: o.userData.id, act: o.userData.act, pos: o.position.toArray() }));
 window.__eitri_tooldata = (patch) => { if (patch) Object.assign(toolData, patch); renderSelection(); return toolData; };
 window.__eitri_spec = { hole: holeSpec, primitive: primSpec, boss: bossSpec, insert: insertSpec, form: formSpec };
 window.__eitri_cage = { start: startCage, end: endCage, select: keys => { if (cageMode) { cageMode.sel = new Set(keys); drawCage(); renderSelection(); startCageGizmo(); } }, state: () => cageMode ? { part: cageMode.part, sel: [...cageMode.sel], markers: cageGroup.children.filter(o => o.isMesh).length } : null, action: cageAction, moveBy: d => { if (!cpivot) return false; cpivot.position.copy(cpivot.userData.start).add(new THREE.Vector3(...d)); commitCageGizmo(); return true; } };
@@ -3140,7 +3645,7 @@ function renderDemo() {
 async function startReplay(speed = 1) {
   $('replaybtn').disabled = true;
   const r = await fetch('replay', { method: 'POST', body: JSON.stringify({ speed }) }).then(r => r.json()).catch(e => ({ ok: false, error: String(e) }));
-  if (!r.ok) { $('replaybtn').disabled = false; hint(r.error || 'the replay could not start'); return; }
+  if (!r.ok) { $('replaybtn').disabled = false; hint(plainError(r.error, 'The replay could not start')); return; }
   schedulePoll(100);
 }
 $('replaybtn').onclick = () => startReplay();
@@ -3194,7 +3699,7 @@ function syncCube() {
 const openPrint = () => import('./assets/print.js').then(m => m.openPrintDialog({ title: state.title || state.name || 'model' })).catch(e => hint('the print export could not open: ' + e.message));
 $('printbtn').onclick = openPrint; $('printdlg').onclick = openPrint;
 
-function animate(now) { requestAnimationFrame(animate); stepViewTween(now || performance.now()); controls.update(); updateLabels(); syncCube(); renderer.render(scene, camera); }
+function animate(now) { requestAnimationFrame(animate); if (deferredLoad && !interacting()) { const f = deferredLoad; deferredLoad = null; f(); } stepViewTween(now || performance.now()); controls.update(); updateLabels(); syncCube(); renderer.render(scene, camera); }
 animate();
 </script>
 </body>
