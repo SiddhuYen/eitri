@@ -175,8 +175,11 @@ pickable (hover shows what it is: "flat face, normal (0,0,1), 2361 mm²",
 - **Boss** - a cylindrical boss or screw standoff (plain Ø + hole, heat-set insert,
   self-tapping, clearance; height, hole depth) standing where you click on a flat face.
 - **Primitive (B)** - box, cylinder, sphere, torus, cone, hexagon, wedge (ramp) and
-  coil (spring: radius, wire, pitch, height): a new part, or joined to / cut from the
-  face you click (or placed at coordinates).
+  coil (spring), picked from a grid of shapes and **drawn to size**: press on the
+  ground grid or on a flat face, drag the footprint (live ghost and dimensions),
+  release, move to set the height, click or Enter; type a number at any point for an
+  exact size ("30", "24x16"), Esc cancels. A plain click places it at the panel's
+  size. A new part, or joined to / cut from the face it is drawn on.
 - **Insert (W)** - a screw (socket/button/countersunk/pan/hex head, any length),
   hex nut, washer or ball bearing from the fastener library, placed by clicking a
   hole: the screw's head sits on the surface with the shank down the hole, a nut or
@@ -221,18 +224,27 @@ pickable (hover shows what it is: "flat face, normal (0,0,1), 2361 mm²",
   or modelled (a real helix from bd_warehouse).
 - **Move (M)** - drag the gizmo arrows (R rotate, T translate).
 
-**Edit geometry (D)** - the solid-modeling version of Fusion's Edit Form: every
-corner of the model gets a handle; click corners, edges or faces (a filter picks
-which) and drag the gizmo, or type a move. Corners and edges move anywhere and the
-flat faces around them follow - a face whose corners stop being coplanar becomes a
-smooth patch, so a box corner pulled up simply stops being a box. A flat face can be
+**Edit geometry (D)** - the solid-modeling version of Fusion's Edit Form: the
+corners of the model get handles you **drag directly** (the orbit stays out of the
+way; the faces around the corner deform live as you drag), or click corners, edges
+or faces (a filter picks which) and drag the gizmo, or type a move. Corners and
+edges move anywhere and the flat faces around them follow - a face whose corners
+stop being coplanar becomes a smooth patch, so a box corner pulled up simply stops
+being a box. The build works out what each corner can do, so a handle never fails
+on you: a round handle moves; a diamond handle sits on a corner that cannot move by
+itself and instead moves the hole it belongs to, or pushes/pulls a face meeting there
+(a short message says which); a corner of a face with a hole in it slides within
+that face; a corner nothing can be done with gets no handle. A flat face can be
 moved freely and **tilted** (R on the gizmo, or type an angle), with its neighbours
 extending or trimming to meet it; holes and bosses translate. **Delete** removes
 the selected faces and heals the body (a fillet, a hole, a boss, a pocket - the
 captive floor of a blind hole comes along automatically). Shift-drag on empty space
 window-selects many corners/edges/faces at once; dragging a cylinder's rim pushes the
-face it bounds. Only curved faces cannot
-be dragged by their corners; move them as faces instead. Existing **fillets** are
+face it bounds. When the kernel cannot do something, the editor says why in a plain
+sentence and offers to hand the job to Claude with the selection filled in. Edits
+are optimistic: the change stays on screen while the model rebuilds (the revision
+chip pulses), further edits queue behind it, and a rebuild never blocks the editor.
+Existing **fillets** are
 live too: drag a round-over with Push/Pull or type a new radius (chamfers: type a
 new size); **Split face** by a
 plane lets you push just part of a face; **Separate** turns a part with several

@@ -3568,6 +3568,7 @@ window.__eitri_debug = () => ({ rev: loadedRev, bbox: bbox ? { min: bbox.min.toA
   toolData, form: formOpen, timeline: [...document.querySelectorAll('#timeline .tchip')].map(c => c.textContent), vertices: vertexObjs.length, egizmo: !!egizmo, editMode });
 window.__eitri_edit = { move: applyEditMove, del: deleteSelectedFaces, mode: m => { editMode = m; renderSelection(); }, commit: (delta, rotate) => { if (!epivot) startEditGizmo(); if (epivot) { epivot.position.copy(epivot.userData.start.clone().add(new THREE.Vector3(...delta))); if (rotate) egizmo.setMode('rotate'); } applyEditMove(delta, rotate || null); } };
 window.__eitri_entry = entry;
+window.__eitri_controls = controls;        // tests: did the orbit start during a handle drag?
 window.__eitri_plain_error = (raw, fallback) => plainError(raw, fallback);
 window.__eitri_send = { edit: (e) => sendEdit(e), call: (path, body) => rebuildCall(path, body) };
 window.__eitri_screen = (pos) => { const r = renderer.domElement.getBoundingClientRect(); const v = screenOf(new THREE.Vector3(...pos)); return [v.x + r.left, v.y + r.top]; };

@@ -149,3 +149,21 @@ def test_an_edit_that_fails_only_on_a_reused_copy_is_rebuilt_from_scratch(tmp_pa
     project.set_edits(first + [chamfer])
     _, notes, _ = _shapes(project)
     assert notes[-1].startswith("[applied] chamfer"), notes
+
+
+def test_a_merged_last_edit_reuses_the_result_before_it(tmp_path, monkeypatch):
+    """Dragging the same face again merges into the previous edit (same list length, last entry changed):
+    the result before that edit is reused, and the geometry equals a fresh build."""
+    project = _project(tmp_path)
+    M._BASE_BUILDS.clear(); M._EDITED.clear()
+    top = {"kind": "face", "type": "plane", "center": [0, 0, 6], "normal": [0, 0, 1], "area": 1200}
+    project.set_edits([{"op": "move", "part": "lid", "delta": [0, 5, 0]}, {"op": "push_pull", "part": "base", "face": top, "distance": 2}])
+    _shapes(project)
+    calls = _calls(project)
+    project.set_edits([{"op": "move", "part": "lid", "delta": [0, 5, 0]}, {"op": "push_pull", "part": "base", "face": top, "distance": 3}])
+    reused, notes, _ = _shapes(project)
+    assert _calls(project) == calls                               # build(p) was not run again
+    snaps = M._EDITED[str(project.model_path.resolve())][1]
+    assert sorted(len(k[0]) for k in snaps) == [1, 2]             # kept: after both edits, and after the first alone
+    fresh, fresh_notes, _ = _fresh(project, monkeypatch)
+    assert reused == fresh and notes == fresh_notes

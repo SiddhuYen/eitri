@@ -388,30 +388,53 @@ _PREFIX_SAFE_OPS = frozenset({
     "thread", "primitive", "combine", "split", "mirror", "pattern", "rib", "boss", "lip", "copy_part", "repair", "scale",
     "align", "move_vertices", "move_face", "chamfer_size", "fillet_radius", "split_face", "separate", "delete_faces",
     "move", "rotate", "material", "color", "rename", "delete_part"})
-_EDITED: dict[str, tuple] = {}         # model path -> (base key, the edits applied, the parts after them, their notes)
+_EDITED: dict[str, tuple] = {}         # model path -> (base key, [(edits applied, the parts after them, their notes), ...])
 
 
 def _apply_edits_reusing(path: str, base_key: str | None, parts: "Parts", edits: list[dict], reuse: bool = True):
-    """(parts, notes, whether a kept result was reused)."""
+    """(parts, notes, whether a kept result was reused).
+
+    Two results are kept per model: after all the edits, and after all but the last one. The second covers
+    the commonest gesture, a repeated drag on the same face, which the server merges into the previous edit
+    instead of appending (the list keeps its length and only its last entry changes)."""
     from .edits import apply_edits
     safe = (base_key is not None and os.environ.get("EITRI_REUSE_EDITS", "1") != "0"
             and all(e.get("op") in _PREFIX_SAFE_OPS for e in edits))
-    done = _EDITED.get(path) if (safe and reuse) else None
-    hit = False
-    if done is not None and done[0] == base_key and len(done[1]) <= len(edits) and edits[:len(done[1])] == done[1]:
-        out, notes = _clone_parts(done[2]), list(done[3])
-        rest = edits[len(done[1]):]
-        if rest:
-            out, more = apply_edits(out, rest)
-            notes += more
-        hit = True
+    snaps = _EDITED.get(path) if (safe and reuse) else None
+    hit = None
+    if snaps and snaps[0] == base_key:
+        for pre, kept_parts, kept_notes in snaps[1]:        # the longest kept prefix of the current list
+            if len(pre) <= len(edits) and edits[:len(pre)] == pre and (hit is None or len(pre) > len(hit[0])):
+                hit = (pre, kept_parts, kept_notes)
+    if hit is not None:
+        out, notes = _clone_parts(hit[1]), list(hit[2])
+        rest = edits[len(hit[0]):]
     else:
-        out, notes = apply_edits(parts, edits)
+        out, notes = parts, []
+        rest = list(edits)
+    prev = None
+    if len(rest) > 1:
+        out, more = apply_edits(out, rest[:-1])
+        notes += more
+    if rest and safe:
+        prev = (list(edits[:-1]), _clone_parts(out), list(notes))     # before the last edit
+    if rest:
+        out, more = apply_edits(out, rest[-1:])
+        notes += more
     if safe:
-        _EDITED[path] = (base_key, copy.deepcopy(edits), _clone_parts(out), list(notes))
+        if hit is not None or rest:
+            out = _clone_parts(out)              # handed out as a copy either way: byte-identical behaviour
+        kept = [(copy.deepcopy(edits), _clone_parts(out), list(notes))]
+        if prev is not None:
+            kept.append(prev)
+        elif hit is not None and len(hit[0]) == len(edits) - 1:
+            kept.append(hit)                     # the one before the last edit is what we reused
+        elif snaps and snaps[0] == base_key:     # a rebuild of the same list: keep the previous "before last"
+            kept += [k for k in snaps[1] if len(k[0]) == len(edits) - 1][:1]
+        _EDITED[path] = (base_key, kept)
     else:
         _EDITED.pop(path, None)
-    return out, notes, hit
+    return out, notes, hit is not None
 
 
 def _copy_shape(shape):
