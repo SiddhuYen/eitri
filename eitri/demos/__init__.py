@@ -14,6 +14,7 @@ import hashlib
 import json
 import shutil
 import tarfile
+import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).parent
@@ -58,29 +59,50 @@ def install(root: Path, demo_id: str, force: bool = False) -> Path:
     version = _bundle_hash(demo_id)
     if folder.is_dir() and not force and marker.is_file() and marker.read_text(encoding="utf-8").strip() == version:
         return folder
-    if folder.exists():
-        shutil.rmtree(folder)
-    folder.mkdir(parents=True)
-    with tarfile.open(HERE / demo_id / "project.tar.xz", mode="r:xz") as tar:
-        try:
-            tar.extractall(folder, filter="data")
-        except TypeError:                                   # Python without extraction filters
-            for m in tar.getmembers():
-                if m.name.startswith(("/", "..")) or ".." in Path(m.name).parts or not (m.isfile() or m.isdir()):
-                    raise ValueError(f"unsafe path in the demo bundle: {m.name}")
-            tar.extractall(folder)
-    state_file = folder / "eitri.json"
-    state = json.loads(state_file.read_text(encoding="utf-8"))
-    for h in state.get("history", []):               # every output re-anchored in this folder, whatever the bundle said
-        h["outputs"] = {k: _anchor(folder, v) for k, v in (h.get("outputs") or {}).items()}
-    text = json.dumps(state, indent=1)
-    state_file.write_text(text, encoding="utf-8")
-    (folder / ".eitri").mkdir(exist_ok=True)
-    (folder / ".eitri" / STATE_COPY).write_text(text, encoding="utf-8")
-    demo = load_demo(demo_id, events=False)
-    (folder / ".eitri" / "web.json").write_text(json.dumps({"title": demo["title"], "demo": demo_id}, indent=2), encoding="utf-8")
-    marker.write_text(version, encoding="utf-8")
+    # built complete in a sibling folder, then swapped in: an install that fails (or races a late write into
+    # the old folder) never leaves a half-extracted demo behind
+    folder.parent.mkdir(parents=True, exist_ok=True)
+    tmp = Path(tempfile.mkdtemp(prefix=f".{demo_id}.new-", dir=folder.parent))
+    try:
+        with tarfile.open(HERE / demo_id / "project.tar.xz", mode="r:xz") as tar:
+            try:
+                tar.extractall(tmp, filter="data")
+            except TypeError:                               # Python without extraction filters
+                for m in tar.getmembers():
+                    if m.name.startswith(("/", "..")) or ".." in Path(m.name).parts or not (m.isfile() or m.isdir()):
+                        raise ValueError(f"unsafe path in the demo bundle: {m.name}")
+                tar.extractall(tmp)
+        state_file = tmp / "eitri.json"
+        state = json.loads(state_file.read_text(encoding="utf-8"))
+        for h in state.get("history", []):           # every output re-anchored in the final folder, whatever the bundle said
+            h["outputs"] = {k: _anchor(folder, v) for k, v in (h.get("outputs") or {}).items()}
+        text = json.dumps(state, indent=1)
+        state_file.write_text(text, encoding="utf-8")
+        (tmp / ".eitri").mkdir(exist_ok=True)
+        (tmp / ".eitri" / STATE_COPY).write_text(text, encoding="utf-8")
+        demo = load_demo(demo_id, events=False)
+        (tmp / ".eitri" / "web.json").write_text(json.dumps({"title": demo["title"], "demo": demo_id}, indent=2), encoding="utf-8")
+        (tmp / ".eitri" / "demo.txt").write_text(version, encoding="utf-8")
+        old = None
+        if folder.exists():
+            old = folder.parent / f".{demo_id}.old-{tmp.name.rsplit('-', 1)[-1]}"
+            folder.rename(old)
+        tmp.rename(folder)
+    except BaseException:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
+    if old is not None:
+        shutil.rmtree(old, ignore_errors=True)
     return folder
+
+
+def is_installed(root: Path, demo_id: str) -> bool:
+    """Whether the demo's folder holds a complete install of the current bundle (edited or not)."""
+    marker = demo_folder(root, demo_id) / ".eitri" / "demo.txt"
+    try:
+        return marker.read_text(encoding="utf-8").strip() == _bundle_hash(demo_id)
+    except OSError:
+        return False
 
 
 def _anchor(folder: Path, path: str) -> str:

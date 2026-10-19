@@ -190,8 +190,12 @@ class Workspace:
         with self._lock:
             app = self.apps.pop(pid, None)
             if app is not None:
+                app.hub.history_path = None           # a late event from a stopping replay must not write into the folder
                 if app.hub.busy:
                     app.hub.interrupt()
+                    deadline = time.time() + 15
+                    while app.hub.busy and time.time() < deadline:
+                        time.sleep(0.05)
                 app.close()
             install(self.root, meta["id"], force=True)
         return {"ok": True}
@@ -415,6 +419,10 @@ class Workspace:
             folder = self.folder_of(pid)
             if folder is None:
                 raise KeyError(pid)
+            if pid in getattr(self, "demos", {}):       # a demo whose install is missing or broken: put it back, never
+                from ..demos import install, is_installed   # open it as an empty (blank) project
+                if not is_installed(self.root, self.demos[pid]["id"]):
+                    install(self.root, self.demos[pid]["id"], force=True)
             app = ProjectApp(self, pid, folder)
             self.apps[pid] = app
             return app
