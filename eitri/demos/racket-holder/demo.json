@@ -1,0 +1,319 @@
+{
+ "id": "racket-holder",
+ "title": "Wall racket holder",
+ "blurb": "A wall hook for a tennis racket. Watch the thin-wall check fail, Claude find the cause, and every check go green.",
+ "outcome": "3 failed builds and a 0.1 mm sliver, then all checks pass (3 min 17 s).",
+ "order": 1,
+ "model": "tennis_racket_holder_to_clip_onto.py",
+ "last_revision": 7,
+ "prompt": "a tennis racket holder to clip onto my wall to hold my racket in my college dorm",
+ "recorded": {
+  "seconds": 196.9,
+  "cost_usd": 0.670344,
+  "stopped": false,
+  "turns": 13,
+  "model": "Claude Opus (Claude Code, effort high)",
+  "date": "2026-10"
+ },
+ "events": [
+  {
+   "t": 0.0,
+   "kind": "user",
+   "data": {
+    "text": "a tennis racket holder to clip onto my wall to hold my racket in my college dorm",
+    "selection": [],
+    "images": []
+   }
+  },
+  {
+   "t": 87.636,
+   "kind": "text",
+   "data": {
+    "text": "**Plan:** A wall plate with a single rounded hook. The hook goes through the racket's open throat triangle, the racket hangs head-down, and the V of the throat centres itself on the hook. That's how most racket wall hooks work, and it stays stable because the racket's balance point ends up below the hook.\n- Plate 50 \u00d7 115 \u00d7 5 mm. The flat back fits two large Command strips side by side, since most dorms don't allow drilling. Two optional countersunk M4 screw holes sit between the strips.\n- Hook 28 mm wide, 45 mm deep, with a 12 mm lip at the tip and a gusset underneath. There's 37 mm of clear space between the plate and the lip, enough for a racket frame (typically 22\u201328 mm deep).\n- Rounded edges so it doesn't scratch the racket. The model is shown in its wall-mounted position; print it lying on its side so the hook needs no supports and is strong."
+   }
+  },
+  {
+   "t": 103.747,
+   "kind": "tool_use",
+   "data": {
+    "name": "mcp__eitri__build_model",
+    "input": {
+     "code": "from eitri import *\n\nPARAMS = dict(\n    plate_w=50.0,        # wall plate width (X)\n    plate_h=115.0,       # wall plate height (Z)\n    plate_t=5.0,         # wall plate thickness (Y)\n    plate_r=6\u2026",
+     "note": "Wall racket hook v1"
+    },
+    "id": "toolu_01NEZtyfYUfH6rCNT8J5Jf9n"
+   }
+  },
+  {
+   "t": 107.148,
+   "kind": "tool_result",
+   "data": {
+    "id": "toolu_01NEZtyfYUfH6rCNT8J5Jf9n",
+    "text": "[revision 2] BUILD FAILED\n^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^\nValueError: PARAMS expressions refer to unknown or circular names: screw = 'M4'",
+    "is_error": false
+   }
+  },
+  {
+   "t": 110.489,
+   "kind": "tool_use",
+   "data": {
+    "name": "mcp__eitri__edit_model",
+    "input": {
+     "old": "    screw=\"M4\",          # optional screw size\n",
+     "new": ""
+    },
+    "id": "toolu_019utxywN93yb3nzNjYY2iQF"
+   }
+  },
+  {
+   "t": 110.695,
+   "kind": "tool_result",
+   "data": {
+    "id": "toolu_019utxywN93yb3nzNjYY2iQF",
+    "text": "[revision 3] BUILD FAILED\n~~~~^^^^^^\nKeyError: 'screw'\n\nThe above exception was the direct cause of the following exception:\n\n            ^^^^^^^^^^^^^\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"tennis_racket_holder_to_clip_onto.py\", line 53, in build\n    cutter = countersink_cutter(0, size=p.screw, depth=t + 4)\n                                        ^^^^^^^\nAttributeError: no parameter 'screw'; PARAMS has: plate_w, plate_h, plate_t, plate_r, hook_w, hook_reach, hook_t, hook_top_z, lip_h, lip_t, gusset_drop, gusset_reach, edge_r, screw_z_low, screw_z_high",
+    "is_error": false
+   }
+  },
+  {
+   "t": 111.286,
+   "kind": "tool_use",
+   "data": {
+    "name": "mcp__eitri__edit_model",
+    "input": {
+     "old": "        cutter = countersink_cutter(0, size=p.screw, depth=t + 4)",
+     "new": "        cutter = countersink_cutter(0, size=SCREW, depth=t + 4)"
+    },
+    "id": "toolu_01FAFE6NHzcMErKyYQ4Q2CTY"
+   }
+  },
+  {
+   "t": 111.477,
+   "kind": "tool_result",
+   "data": {
+    "id": "toolu_01FAFE6NHzcMErKyYQ4Q2CTY",
+    "text": "[revision 4] BUILD FAILED\n^^^^^^^^^^^^^\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"tennis_racket_holder_to_clip_onto.py\", line 53, in build\n    cutter = countersink_cutter(0, size=SCREW, depth=t + 4)\n                                        ^^^^^\nNameError: name 'SCREW' is not defined",
+    "is_error": false
+   }
+  },
+  {
+   "t": 111.712,
+   "kind": "tool_use",
+   "data": {
+    "name": "mcp__eitri__edit_model",
+    "input": {
+     "old": "def build(p):",
+     "new": "SCREW = \"M4\"            # optional screw size (countersunk)\n\ndef build(p):"
+    },
+    "id": "toolu_01S5ST4uK5H328gFvpkBv2hK"
+   }
+  },
+  {
+   "t": 117.922,
+   "kind": "tool_result",
+   "data": {
+    "id": "toolu_01S5ST4uK5H328gFvpkBv2hK",
+    "text": "[revision 5] built in 0.1s; files: tennis_racket_holder_to_clip_onto.step, tennis_racket_holder_to_clip_onto.glb, tennis_racket_holder_to_clip_onto.view.glb, tennis_racket_holder_to_clip_onto.topology.json\nOverall bbox 50 x 50 x 115 mm (X -25..25, Y -50..0, Z -0..115); total volume 54070.6 mm^3; 1 part(s)\n- tennis_racket_holder_to_clip_onto: 1 solid(s), 51 faces, valid; size 50 x 50 x 115; bbox X -25..25 Y -50..0 Z -0..115; volume 54070.6 mm^3\n    thinnest wall ~0.1 mm at (-0.7262, -5.0, 102.765)\n    2x \u00d84.5 through depth 2.55 axis Y: centres (0,-1.275,12), (0,-1.275,105)\n    rounded-edge radii: 2.5, 3, 6\n    ! thinnest wall ~0.10 mm at (-0.7262, -5.0, 102.765) (a sliver; thicken it, or say why it is intended)\nChecks (verify):\n  [PASS] single solid: 1 (expected 1 \u00b10.01)\n  [PASS] plate width: 50 (expected 50 \u00b10.01)\n  [PASS] height: 115 (expected 115 \u00b10.01)\n  [PASS] depth from wall: 50 (expected 50 \u00b10.01)\n  [PASS] racket clearance plate->lip: 37 (expected >= 30)\n  [PASS] lip height: 12 (expected >= 10)\n  [PASS] screw holes: 2 (expected 2)\n  [PASS] flat back area for strips (mm2): 5687.289 (expected >= 3420)\n  [FAIL] thinnest wall: 0.1 (expected >= 2)\n  [PASS] resting point on the hook is empty: yes\n\nATTENTION: thinnest wall failed verify(); 1 geometry issue(s) flagged above\n\nThe image shows iso / front / top / right views. Check it against the request before finishing.\n\nReview image: out/tennis_racket_holder_to_clip_onto.png  <- Read this file now and check it.",
+    "is_error": false
+   }
+  },
+  {
+   "t": 124.824,
+   "kind": "tool_use",
+   "data": {
+    "name": "mcp__eitri__inspect",
+    "input": {
+     "code": "c = countersink_cutter(0, size=\"M4\", depth=9)\nprint(c.bounding_box())\nfor f in c.faces(): print(f.geom_type, f.center(), f.area)\nprint(min_wall(parts[0]))"
+    },
+    "id": "toolu_01RTvJeLuTC8hQhddF3G7VRb"
+   }
+  },
+  {
+   "t": 125.457,
+   "kind": "tool_use",
+   "data": {
+    "name": "Read",
+    "input": {
+     "file_path": "out/tennis_racket_holder_to_clip_onto.png"
+    },
+    "id": "toolu_019qjyatXP92AuptmktPY2gX"
+   }
+  },
+  {
+   "t": 128.852,
+   "kind": "tool_result",
+   "data": {
+    "id": "toolu_01RTvJeLuTC8hQhddF3G7VRb",
+    "text": "bbox: -4.7 <= x <= 4.7, -4.7 <= y <= 4.7, -9.0 <= z <= 1.0\nGeomType.PLANE Vector: (X=0, Y=0, Z=1) 69.39778171779854\nGeomType.CYLINDER Vector: (X=-4.7, Y=0, Z=0.5) 29.53097094374405\nGeomType.PLANE Vector: (X=0, Y=0, Z=0) 53.49346890900021\nGeomType.CONE Vector: (X=-3.475, Y=0, Z=-1.225) 75.65118922949158\nGeomType.PLANE Vector: (X=0, Y=0, Z=-2.45) 53.49346890900021\nGeomType.CYLINDER Vector: (X=-2.25, Y=0, Z=-5.725) 92.59844346455913\nGeomType.PLANE Vector: (X=0, Y=0, Z=-9) 15.904312808798327\nWallSample(thickness=0.09999999999981424, point=Vector(-0.7261899367811, -5, 102.7650171867), normal=Vector(0, 1, 0))",
+    "is_error": false
+   }
+  },
+  {
+   "t": 128.866,
+   "kind": "tool_result",
+   "data": {
+    "id": "toolu_019qjyatXP92AuptmktPY2gX",
+    "text": "",
+    "is_error": false
+   }
+  },
+  {
+   "t": 136.639,
+   "kind": "tool_use",
+   "data": {
+    "name": "mcp__eitri__view",
+    "input": {
+     "section": "YZ:0",
+     "views": [
+      "right"
+     ]
+    },
+    "id": "toolu_01CDV31wsEzYv82sqCmpATay"
+   }
+  },
+  {
+   "t": 141.079,
+   "kind": "tool_result",
+   "data": {
+    "id": "toolu_01CDV31wsEzYv82sqCmpATay",
+    "text": "section YZ at 0: cut faces are red; parts shown: ['tennis_racket_holder_to_clip_onto']\n\nReview image: out/view.png  <- Read this file now and check it.",
+    "is_error": false
+   }
+  },
+  {
+   "t": 143.022,
+   "kind": "tool_use",
+   "data": {
+    "name": "Read",
+    "input": {
+     "file_path": "out/view.png"
+    },
+    "id": "toolu_01TiWxdhtxUKmzHuRzhdjkMU"
+   }
+  },
+  {
+   "t": 143.038,
+   "kind": "tool_result",
+   "data": {
+    "id": "toolu_01TiWxdhtxUKmzHuRzhdjkMU",
+    "text": "",
+    "is_error": false
+   }
+  },
+  {
+   "t": 147.148,
+   "kind": "tool_use",
+   "data": {
+    "name": "mcp__eitri__set_params",
+    "input": {
+     "params": {
+      "plate_t": 6
+     }
+    },
+    "id": "toolu_01Khp2fByuRds2T9P7Z46h9k"
+   }
+  },
+  {
+   "t": 152.763,
+   "kind": "tool_result",
+   "data": {
+    "id": "toolu_01Khp2fByuRds2T9P7Z46h9k",
+    "text": "PARAMS now: {\"plate_w\": 50.0, \"plate_h\": 115.0, \"plate_t\": 6, \"plate_r\": 6.0, \"hook_w\": 28.0, \"hook_reach\": 45.0, \"hook_t\": 12.0, \"hook_top_z\": 85.0, \"lip_h\": 12.0, \"lip_t\": 8.0, \"gusset_drop\": 45.0, \"gusset_reach\": 20.0, \"edge_r\": 2.5, \"screw_z_low\": 12.0, \"screw_z_high\": 105.0}\n\n[revision 6] built in 0.1s; files: tennis_racket_holder_to_clip_onto.step, tennis_racket_holder_to_clip_onto.glb, tennis_racket_holder_to_clip_onto.view.glb, tennis_racket_holder_to_clip_onto.topology.json\nOverall bbox 50 x 51 x 115 mm (X -25..25, Y -51..0, Z -0..115); total volume 59757.9 mm^3; 1 part(s)\n- tennis_racket_holder_to_clip_onto: 1 solid(s), 51 faces, valid; size 50 x 51 x 115; bbox X -25..25 Y -51..0 Z -0..115; volume 59757.9 mm^3\n    thinnest wall ~0.1 mm at (1.9012, -6.0, 103.6187)\n    2x \u00d84.5 through depth 3.55 axis Y: centres (0,-1.775,12), (0,-1.775,105)\n    rounded-edge radii: 2.5, 3, 6\n    ! thinnest wall ~0.10 mm at (1.9012, -6.0, 103.6187) (a sliver; thicken it, or say why it is intended)\nChecks (verify):\n  [PASS] single solid: 1 (expected 1 \u00b10.01)\n  [PASS] plate width: 50 (expected 50 \u00b10.01)\n  [PASS] height: 115 (expected 115 \u00b10.01)\n  [PASS] depth from wall: 51 (expected 51 \u00b10.01)\n  [PASS] racket clearance plate->lip: 37 (expected >= 30)\n  [PASS] lip height: 12 (expected >= 10)\n  [PASS] screw holes: 2 (expected 2)\n  [PASS] flat back area for strips (mm2): 5687.289 (expected >= 3420)\n  [FAIL] thinnest wall: 0.1 (expected >= 2)\n  [PASS] resting point on the hook is empty: yes\n\nATTENTION: thinnest wall failed verify(); 1 geometry issue(s) flagged above\n\nThe image shows iso / front / top / right views. Check it against the request before finishing.\n\nReview image: out/tennis_racket_holder_to_clip_onto.png  <- Read this file now and check it.",
+    "is_error": false
+   }
+  },
+  {
+   "t": 164.919,
+   "kind": "text",
+   "data": {
+    "text": "Checking a thin-wall flag at the countersunk screw holes. It's probably a measurement artifact, but I'm confirming before deciding."
+   }
+  },
+  {
+   "t": 166.298,
+   "kind": "tool_use",
+   "data": {
+    "name": "mcp__eitri__inspect",
+    "input": {
+     "code": "part=parts[0]\nfor f in part.faces():\n    c=f.center()\n    if abs(c.Z-105)<6 and abs(c.X)<6: print(f.geom_type, c, round(f.area,2), f.bounding_box())\nfor y in (-5.9,-5.5,-5,-4,-3.6):\n    print(y, point\u2026"
+    },
+    "id": "toolu_01TQyL6n5ixNCDmjpkiDfPuW"
+   }
+  },
+  {
+   "t": 169.87,
+   "kind": "tool_result",
+   "data": {
+    "id": "toolu_01TQyL6n5ixNCDmjpkiDfPuW",
+    "text": "GeomType.CYLINDER Vector: (X=-2.25, Y=-1.775, Z=105) 50.19 bbox: -2.25 <= x <= 2.25, -3.5499999999999994 <= y <= 4.996003610813204e-16, 102.75 <= z <= 107.25\nGeomType.CONE Vector: (X=-3.475, Y=-4.775, Z=105) 75.65 bbox: -4.7 <= x <= 4.7, -6.000000000000001 <= y <= -3.549999999999998, 100.3 <= z <= 109.7\nGeomType.PLANE Vector: (X=0, Y=-3.55, Z=105) 53.49 bbox: -4.7 <= x <= 4.7, -3.55 <= y <= -3.549999999999998, 100.3 <= z <= 109.7\n-5.9 False True\n-5.5 False True\n-5 False True\n-4 False False\n-3.6 False False",
+    "is_error": false
+   }
+  },
+  {
+   "t": 177.795,
+   "kind": "text",
+   "data": {
+    "text": "The library countersink cutter came out inverted (I passed d=0), which left an undercut. I'll build the cutter myself:"
+   }
+  },
+  {
+   "t": 180.437,
+   "kind": "tool_use",
+   "data": {
+    "name": "mcp__eitri__edit_model",
+    "input": {
+     "old": "        cutter = countersink_cutter(0, size=SCREW, depth=t + 4)\n        part = part - Pos(0, -t, z) * Rot(90, 0, 0) * cutter",
+     "new": "        d_hole = screw_clearance(SCREW)\n        d_top, _ = countersink_dims(SCREW)\n        cs_depth = (d_top - d_hole) / 2          # 90 deg countersink\n        cutter = (Cylinder(d_hole / 2, t + 4, a\u2026"
+    },
+    "id": "toolu_016YnA3tbwLKe4zdeNLeaqAu"
+   }
+  },
+  {
+   "t": 185.77,
+   "kind": "tool_result",
+   "data": {
+    "id": "toolu_016YnA3tbwLKe4zdeNLeaqAu",
+    "text": "[revision 7] built in 0.1s; files: tennis_racket_holder_to_clip_onto.step, tennis_racket_holder_to_clip_onto.glb, tennis_racket_holder_to_clip_onto.view.glb, tennis_racket_holder_to_clip_onto.topology.json\nOverall bbox 50 x 51 x 115 mm (X -25..25, Y -51..0, Z -0..115); total volume 59757.9 mm^3; 1 part(s)\n- tennis_racket_holder_to_clip_onto: 1 solid(s), 49 faces, valid; size 50 x 51 x 115; bbox X -25..25 Y -51..0 Z -0..115; volume 59757.9 mm^3\n    thinnest wall ~3.65 mm at (1.9012, -0.0, 103.6187)\n    2x \u00d84.5 through depth 3.55 axis Y: centres (0,-1.775,12), (0,-1.775,105)\n    rounded-edge radii: 2.5, 3, 6\nChecks (verify):\n  [PASS] single solid: 1 (expected 1 \u00b10.01)\n  [PASS] plate width: 50 (expected 50 \u00b10.01)\n  [PASS] height: 115 (expected 115 \u00b10.01)\n  [PASS] depth from wall: 51 (expected 51 \u00b10.01)\n  [PASS] racket clearance plate->lip: 37 (expected >= 30)\n  [PASS] lip height: 12 (expected >= 10)\n  [PASS] screw holes: 2 (expected 2)\n  [PASS] flat back area for strips (mm2): 5687.289 (expected >= 3420)\n  [PASS] thinnest wall: 3.65 (expected >= 2)\n  [PASS] resting point on the hook is empty: yes\n\nThe image shows iso / front / top / right views. Check it against the request before finishing.\n\nReview image: out/tennis_racket_holder_to_clip_onto.png  <- Read this file now and check it.",
+    "is_error": false
+   }
+  },
+  {
+   "t": 187.686,
+   "kind": "tool_use",
+   "data": {
+    "name": "Read",
+    "input": {
+     "file_path": "out/tennis_racket_holder_to_clip_onto.png"
+    },
+    "id": "toolu_01LPRh1C64TEEX1G3N4ZLGyY"
+   }
+  },
+  {
+   "t": 187.711,
+   "kind": "tool_result",
+   "data": {
+    "id": "toolu_01LPRh1C64TEEX1G3N4ZLGyY",
+    "text": "",
+    "is_error": false
+   }
+  },
+  {
+   "t": 196.874,
+   "kind": "text",
+   "data": {
+    "text": "I've modelled a wall hook for your racket. All checks pass, and it's one solid piece.\n\n**How it works:** the hook goes through the open triangle at the racket's throat (the gap between the head and the handle), and the racket hangs head-down. The V of the throat settles itself onto the hook. That's how most racket wall hooks work, and it's stable because the racket's balance point ends up below the hook. A raised lip at the tip stops it from sliding off.\n\n**Key dimensions**\n- Wall plate: 50 \u00d7 115 \u00d7 6 mm with rounded corners. It sticks out 51 mm from the wall.\n- Hook: 28 mm wide, 12 mm thick, with a 12 mm lip at the tip and a gusset underneath for strength. Its top surface is 85 mm above the bottom of the plate.\n- Gap between the plate and the lip: 37 mm. Racket frames are usually 22\u201328 mm deep, so it should fit easily. All edges that touch the racket are rounded so they won't scratch it.\n\n**Mounting (dorm-friendly)**\n- The back is completely flat and has room for two large Command strips side by side, stuck on vertically. A racket weighs about 300 g, which is far under what two strips hold.\n- If you're allowed to use screws, there are also two countersunk M4 holes (No. 8 wood screws also work) between where the strips go. They're optional.\n\n**Printing:** print it lying on its side, not flat on its back. That way the hook and lip need no supports, and the layer lines run the length of the hook, which makes it much stronger. PLA or PETG at 3\u20134 walls and 20\u201330% infill is enough.\n\n**Settings you can change:** `hook_w` (try 22\u201324 mm if your racket's throat is narrow), `hook_reach` and `lip_t` (the gap for the frame), `lip_h`, `hook_top_z`, `plate_w`, `plate_h`, `plate_t`, the gusset size, and how rounded the edges are.\n\n**Assumptions I haven't checked:** that your racket is a standard adult tennis racket with an open throat (most have one). Measure the width of the throat triangle about 2\u20133 cm from its point and make sure it's wider than 28 mm. If it's narrower, I can make the hook thinner."
+   }
+  },
+  {
+   "t": 196.907,
+   "kind": "result",
+   "data": {
+    "subtype": "success",
+    "is_error": false,
+    "num_turns": 13,
+    "duration_ms": 192327,
+    "turn_cost_usd": 0.670344,
+    "stopped": false
+   }
+  }
+ ]
+}

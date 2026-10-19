@@ -1,0 +1,31 @@
+# environments and build output
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# editor and agent scratch
+.vscode/
+.claude/
+.DS_Store
+
+# benchmark run outputs (STEP files, renders, transcripts): large; the summary is bench/RESULTS.md
+bench/results/
+
+# per-project working state
+out/
+.eitri/
+
+# secrets and local data
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.hosted-data/
+eitri-projects/
+node_modules/

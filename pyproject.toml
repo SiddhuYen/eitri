@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eitri-cad"                     # "eitri" is taken on PyPI; the import and the command are both `eitri`
+version = "0.1.0"
+description = "A local AI CAD agent: describe a part, Claude models it in build123d, checks it, and you edit it in a browser CAD editor."
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+license = { file = "LICENSE.md" }
+keywords = ["cad", "build123d", "opencascade", "claude", "3d-printing", "step"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Computer Aided Design",
+  "License :: Other/Proprietary License",
+]
+dependencies = [
+  "build123d>=0.13",          # the CAD kernel (OpenCASCADE via cadquery-ocp); brings scipy, ezdxf, lib3mf
+  "bd_warehouse>=0.4",        # ISO threads, fasteners, bearings
+  "numpy>=1.26",
+  "pillow>=10",
+  "trimesh>=4",               # mesh import/repair, OBJ export, print-plate checks
+  "networkx>=3",              # trimesh's hole filling
+  "anthropic>=1.0",           # API-key check (and the --backend api session)
+  "mcp>=1.2",                 # the tool server Claude talks to
+  "claude-agent-sdk>=0.2",    # ships the Claude Code binary eitri drives (API key only)
+]
+
+[project.urls]
+Homepage = "https://eitri.io"
+Source = "https://github.com/SiddhuYen/eitri"
+Issues = "https://github.com/SiddhuYen/eitri/issues"
+
+[project.optional-dependencies]
+pdf = ["playwright>=1.40"]                  # PDF drawings and drawing previews (then: playwright install chromium)
+dev = ["pytest>=8", "playwright>=1.40"]
+
+[project.scripts]
+eitri = "eitri.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["eitri*"]
+
+[tool.setuptools.package-data]
+eitri = [
+  "viewer/*.html", "viewer/*.js", "viewer/vendor/**/*",
+  "web/*.html", "web/*.css", "web/*.js", "web/assets/**/*",
+  "agent/*.md", "lib/*.md",
+  "demos/*/demo.json", "demos/*/project.tar.xz",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

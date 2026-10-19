@@ -1,0 +1,645 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eitri</title>
+<link rel="icon" href="assets/mark.svg">
+<link rel="stylesheet" href="assets/eitri.css">
+<style>
+  [hidden] { display: none !important; }
+  body { min-height: 100vh; }
+  .spacer { flex: 1; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ------------------------------------------------------------ header */
+  .top { position: sticky; top: 0; z-index: 20; height: 56px; display: flex; align-items: center; gap: var(--s3);
+    padding: 0 var(--s6); border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter: blur(10px); }
+  .top .wordmark { gap: 0; } .top .wordmark .mark { margin-right: 9px; }
+  .top .tag { padding-left: var(--s3); margin-left: var(--s1); border-left: 1px solid var(--line-2); color: var(--muted);
+    font: 400 var(--t-sm)/1 var(--font-mono); letter-spacing: .01em; }
+  #agent { max-width: 340px; }
+  #agent > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #agent .spinner { width: 10px; height: 10px; border-width: 1.5px; color: var(--muted); }
+  .keywrap { position: relative; }
+  .pop { position: absolute; right: 0; top: calc(100% + var(--s2)); width: 320px; z-index: 30; padding: var(--s4);
+    background: var(--raised); border: 1px solid var(--line-2); border-radius: var(--r2); box-shadow: var(--shadow-2);
+    animation: cc-rise var(--med) var(--ease); }
+  .pop .eyebrow { margin-bottom: var(--s2); }
+  .pop .masked { display: flex; align-items: center; gap: var(--s2); padding: var(--s2) var(--s3); border-radius: var(--r1);
+    background: var(--bg-2); border: 1px solid var(--line); font: 500 var(--t-md)/1.2 var(--font-mono); color: var(--fg); }
+  .pop p { margin: var(--s3) 0 0; color: var(--muted); font-size: var(--t-sm); line-height: 1.5; }
+  .pop p code { font-size: 11.5px; color: var(--fg-2); }
+  .pop .row { display: flex; gap: var(--s2); margin-top: var(--s4); }
+
+  /* ------------------------------------------------------------ layout */
+  main { position: relative; max-width: 1200px; margin: 0 auto; padding: var(--s6) var(--s6) var(--s7); }
+  .backdrop { position: absolute; inset: 0 0 auto 0; height: 560px; z-index: -1; pointer-events: none;
+    background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 32px 32px; background-position: -1px -1px; opacity: .45;
+    -webkit-mask-image: radial-gradient(ellipse 70% 80% at 50% 0%, #000 0%, transparent 72%);
+            mask-image: radial-gradient(ellipse 70% 80% at 50% 0%, #000 0%, transparent 72%); }
+  section + section { margin-top: var(--s7); }
+  .sechead { display: flex; align-items: flex-end; gap: var(--s4); margin-bottom: var(--s4); flex-wrap: wrap; }
+  .sechead .eyebrow { font-family: var(--font-mono); font-weight: 500; letter-spacing: .06em; margin-bottom: var(--s2); display: flex; align-items: center; gap: var(--s2); }
+  .sechead .eyebrow i { display: inline-block; width: 16px; height: 1px; background: var(--accent); }
+  .sechead h2 { margin: 0; font: 600 var(--t-xl)/1.25 var(--font-ui); letter-spacing: -.015em; }
+  .sechead p { margin: var(--s1) 0 0; color: var(--muted); max-width: 640px; }
+
+  /* ------------------------------------------------------------ setup panel */
+  .setup { position: relative; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); overflow: hidden;
+    background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r3); box-shadow: var(--shadow-2);
+    animation: cc-rise var(--med) var(--ease); }
+  .setup::before { content: ""; position: absolute; left: 0; top: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 0%, transparent) 70%); }
+  .setup-main { padding: var(--s5) var(--s6) var(--s5); display: flex; flex-direction: column; }
+  .setup-later { margin-top: auto; padding-top: var(--s4); display: flex; align-items: center; gap: var(--s2); color: var(--faint); font-size: var(--t-sm); }
+  .setup-later a { color: var(--fg-2); text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+  .setup-later a:hover { color: var(--fg); }
+  .setup-close { position: absolute; top: var(--s3); right: var(--s3); z-index: 1; }
+  .setup .eyebrow { display: flex; align-items: center; gap: var(--s2); color: var(--accent); }
+  .setup h2 { margin: var(--s2) 0 var(--s2); font: 600 var(--t-xl)/1.25 var(--font-ui); letter-spacing: -.015em; }
+  .setup-main > p { margin: 0; color: var(--fg-2); max-width: 520px; }
+  .setup-main > p a { white-space: nowrap; }
+  .setup-main > p a .i { width: 13px; height: 13px; vertical-align: -2px; }
+  .setup-note { display: flex; gap: var(--s2); align-items: flex-start; margin-top: var(--s3); padding: var(--s2) var(--s3);
+    border-radius: var(--r1); background: var(--accent-soft); color: var(--fg); font-size: var(--t-md); }
+  .setup-note .i { color: var(--accent); margin-top: 2px; }
+  .keyrow { display: flex; gap: var(--s2); margin-top: var(--s4); max-width: 560px; }
+  .keyfield { position: relative; flex: 1; min-width: 0; }
+  .keyfield > .i { position: absolute; left: 11px; top: 11px; color: var(--faint); pointer-events: none; }
+  .keyfield .input { height: 38px; padding-left: 34px; padding-right: 38px; }
+  .keyfield .reveal { position: absolute; right: 4px; top: 4px; width: 30px; height: 30px; }
+  .keyrow .btn { height: 38px; padding: 0 var(--s4); }
+  .setup-status { min-height: 24px; margin-top: var(--s3); font-size: var(--t-md); max-width: 560px; }
+  .setup-status .line { display: flex; align-items: flex-start; gap: var(--s2); padding: var(--s2) var(--s3); border-radius: var(--r1); }
+  .setup-status .line .i, .setup-status .line .spinner { margin-top: 2px; }
+  .setup-status .wait { color: var(--fg-2); background: var(--raised); }
+  .setup-status .bad { color: var(--bad); background: var(--bad-soft); }
+  .setup-status .ok { color: var(--ok); background: var(--ok-soft); }
+  .setup-status .idle { color: var(--muted); padding-left: 0; }
+  .setup-facts { margin: 0; padding: var(--s5) var(--s6) var(--s5) var(--s5); border-left: 1px solid var(--line); background: var(--bg-2);
+    display: flex; flex-direction: column; gap: var(--s4); }
+  .fact { display: grid; grid-template-columns: 28px 1fr; gap: var(--s3); }
+  .fact .ico { width: 28px; height: 28px; border-radius: var(--r1); display: grid; place-items: center; background: var(--raised); border: 1px solid var(--line); color: var(--fg-2); }
+  .fact b { display: block; font-weight: 600; font-size: var(--t-md); color: var(--fg); margin-bottom: 2px; }
+  .fact p { margin: 0; color: var(--muted); font-size: var(--t-sm); line-height: 1.55; }
+  .fact code { font-size: 11px; color: var(--fg-2); word-break: break-all; }
+  .fact .num { font-family: var(--font-mono); color: var(--fg); }
+
+  /* ------------------------------------------------------------ demos */
+  .demos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s4); }
+  .demo { display: flex; flex-direction: column; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r2);
+    transition: border-color var(--med) var(--ease), transform var(--med) var(--ease), box-shadow var(--med) var(--ease); }
+  .demo:hover { border-color: var(--line-2); transform: translateY(-2px); box-shadow: var(--shadow-2); }
+  .shot { position: relative; display: block; aspect-ratio: 4 / 3; overflow: hidden; background: var(--bg-2); border-bottom: 1px solid var(--line); }
+  .shot img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .5s var(--ease); }
+  .demo:hover .shot img { transform: scale(1.025); }
+  .shot .tl { position: absolute; left: var(--s3); top: var(--s3); display: flex; gap: var(--s1); }
+  .shot .tl .badge { background: rgba(13, 16, 21, .82); color: var(--fg-2); backdrop-filter: blur(4px); border: 1px solid rgba(255, 255, 255, .08); }
+  .shot .tl .badge.live { color: var(--accent); }
+  .shot .play { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%;
+    display: grid; place-items: center; background: rgba(13, 16, 21, .78); color: var(--fg); border: 1px solid rgba(255, 255, 255, .14);
+    opacity: 0; transform: scale(.9); transition: opacity var(--med) var(--ease), transform var(--med) var(--ease); backdrop-filter: blur(4px); }
+  .shot .play .i { width: 20px; height: 20px; margin-left: 3px; fill: currentColor; }
+  .demo:hover .shot .play, .shot:focus-visible .play { opacity: 1; transform: none; }
+  .demo .body { display: flex; flex-direction: column; flex: 1; gap: var(--s2); padding: var(--s4); }
+  .demo h3 { margin: 0; font: 600 var(--t-lg)/1.3 var(--font-ui); letter-spacing: -.01em; }
+  .demo .blurb { margin: 0; color: var(--fg-2); font-size: var(--t-md); line-height: 1.5; }
+  .demo .outcome { display: flex; gap: var(--s2); align-items: flex-start; margin: 0; color: var(--muted); font-size: var(--t-sm); line-height: 1.5; }
+  .demo .outcome .i { margin-top: 1px; color: var(--ok); }
+  .demo .outcome.stopped .i { color: var(--warn); }
+  .stats { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s4); margin-top: auto; padding-top: var(--s3); border-top: 1px dashed var(--line);
+    font: 400 var(--t-sm)/1.4 var(--font-mono); color: var(--muted); }
+  .stats span { display: inline-flex; align-items: center; gap: 6px; }
+  .stats b { font-weight: 500; color: var(--fg-2); }
+  .demo .acts { display: flex; gap: var(--s2); margin-top: var(--s1); }
+  .demo .acts .btn:first-child { flex: 1; }
+  .demo .acts .btn:first-child .i { color: var(--accent); fill: currentColor; }
+  .note { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s3); color: var(--faint); font-size: var(--t-sm); }
+
+  /* thumbnail placeholder: a faint isometric part on a drafting grid */
+  .ph { width: 100%; height: 100%; display: grid; place-items: center; color: var(--faint);
+    background-color: var(--bg-2);
+    background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 20px 20px; background-position: center; }
+  .ph svg { width: 56px; height: 56px; stroke-width: 1.1; opacity: .8; }
+
+  /* ------------------------------------------------------------ compose */
+  .compose { padding: var(--s5) var(--s6) var(--s5); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r3); }
+  .compose h2 { margin: 0; font: 600 var(--t-xl)/1.25 var(--font-ui); letter-spacing: -.015em; }
+  .compose .lede { margin: var(--s1) 0 var(--s4); color: var(--muted); }
+  .composer { border: 1px solid var(--line-2); border-radius: var(--r2); background: var(--bg-2); transition: border-color var(--fast), box-shadow var(--fast); }
+  .composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  #prompt { display: block; width: 100%; min-height: 96px; resize: vertical; border: 0; background: transparent; color: var(--fg);
+    padding: var(--s3) var(--s4) var(--s2); font: 400 var(--t-lg)/1.55 var(--font-ui); }
+  #prompt::placeholder { color: var(--faint); }
+  #prompt:focus-visible { outline: none; }
+  .composer-bar { display: flex; align-items: center; gap: var(--s3); padding: var(--s2) var(--s2) var(--s2) var(--s4); }
+  .composer-bar .hint { color: var(--faint); font-size: var(--t-sm); display: inline-flex; align-items: center; gap: 4px; }
+  .composer-bar .keyneed { color: var(--muted); font-size: var(--t-sm); display: inline-flex; align-items: center; gap: 6px; }
+  .composer-bar .keyneed .i { color: var(--warn); }
+  #create { height: 34px; padding: 0 var(--s4); }
+  .examples { display: flex; gap: var(--s2); flex-wrap: wrap; align-items: center; margin-top: var(--s3); }
+  .examples .lbl { color: var(--faint); font-size: var(--t-sm); margin-right: var(--s1); }
+  .ex { height: 28px; padding: 0 var(--s3); border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--fg-2);
+    font: 400 var(--t-sm)/1 var(--font-ui); cursor: pointer; transition: border-color var(--fast), color var(--fast), background var(--fast); }
+  .ex:hover { border-color: var(--line-2); background: var(--raised); color: var(--fg); }
+  .actions { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; margin-top: var(--s4); padding-top: var(--s4); border-top: 1px solid var(--line); }
+  .actions .lbl { color: var(--faint); font-size: var(--t-sm); margin-right: var(--s1); }
+  .msg { margin-top: var(--s3); font-size: var(--t-md); color: var(--fg-2); display: flex; align-items: center; gap: var(--s2); }
+  .msg:empty { display: none; }
+  .msg.err { color: var(--bad); }
+
+  /* ------------------------------------------------------------ projects */
+  .tools { display: flex; align-items: center; gap: var(--s3); }
+  #count { color: var(--muted); font: 400 var(--t-sm)/1 var(--font-mono); white-space: nowrap; }
+  .search { position: relative; width: 240px; }
+  .search .i { position: absolute; left: 10px; top: 9px; color: var(--faint); pointer-events: none; }
+  #filter { padding-left: 32px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--s4); }
+  .grid > .card { position: relative; display: flex; flex-direction: column; overflow: visible; color: inherit; text-decoration: none; cursor: pointer;
+    transition: border-color var(--med) var(--ease), transform var(--med) var(--ease), box-shadow var(--med) var(--ease); }
+  .grid > .card:hover { border-color: var(--line-2); transform: translateY(-2px); box-shadow: var(--shadow-2); color: inherit; }
+  .card .thumb { aspect-ratio: 4 / 3; overflow: hidden; border-bottom: 1px solid var(--line); background: var(--bg-2); border-radius: var(--r2) var(--r2) 0 0; }
+  .card .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .card .body { display: flex; flex-direction: column; gap: 3px; padding: var(--s3) var(--s3) var(--s3) var(--s4); min-height: 84px; }
+  .card .name { font-weight: 600; font-size: var(--t-md); color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 28px; }
+  .card .meta { display: flex; align-items: center; gap: 6px; color: var(--muted); font: 400 var(--t-xs)/1.4 var(--font-mono); }
+  .card .meta .i { width: 12px; height: 12px; vertical-align: 0; }
+  .card .last { color: var(--muted); font-size: var(--t-sm); line-height: 1.45; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .card .flags { position: absolute; left: var(--s2); top: var(--s2); right: var(--s2); display: flex; gap: var(--s1); flex-wrap: wrap; pointer-events: none; }
+  .card .flags .badge { background: rgba(13, 16, 21, .84); color: var(--fg-2); border: 1px solid rgba(255, 255, 255, .08); backdrop-filter: blur(4px); }
+  .card .flags .badge.busy { color: var(--accent); }
+  .card .flags .badge.busy .dot { width: 6px; height: 6px; }
+  .more { position: absolute; right: 6px; top: 0; width: 26px; height: 26px; padding: 0; border-radius: var(--r1); border: 0;
+    background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+  .more:hover { background: var(--raised-2); color: var(--fg); }
+  .menu { position: absolute; right: 6px; z-index: 5; min-width: 168px; padding: var(--s1); display: none;
+    background: var(--raised); border: 1px solid var(--line-2); border-radius: var(--r1); box-shadow: var(--shadow-2); }
+  .menu.open { display: block; animation: cc-rise var(--fast) var(--ease); }
+  .menu button { display: flex; align-items: center; gap: var(--s2); width: 100%; padding: 7px var(--s2); border: 0; border-radius: 4px;
+    background: transparent; color: var(--fg-2); font: 400 var(--t-md)/1.2 var(--font-ui); text-align: left; cursor: pointer; }
+  .menu button:hover { background: var(--raised-2); color: var(--fg); }
+  .menu button.danger { color: var(--bad); }
+  .menu button.danger:hover { background: var(--bad-soft); }
+
+  .skel { border-radius: var(--r2); border: 1px solid var(--line); background: var(--panel); overflow: hidden; }
+  .skel .s-img { aspect-ratio: 4 / 3; border-radius: 0; }
+  .skel .s-body { padding: var(--s3) var(--s4) var(--s4); display: flex; flex-direction: column; gap: var(--s2); }
+  .skel .s-line { height: 10px; }
+  .skel.big .s-body { padding: var(--s4); gap: var(--s3); }
+
+  .empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--s2);
+    padding: var(--s7) var(--s5); border: 1px dashed var(--line-2); border-radius: var(--r3);
+    background: radial-gradient(ellipse 50% 70% at 50% 0%, var(--bg-2), transparent); }
+  .empty .ring { width: 56px; height: 56px; border-radius: 14px; display: grid; place-items: center; margin-bottom: var(--s2);
+    background: var(--raised); border: 1px solid var(--line-2); color: var(--fg-2); box-shadow: var(--shadow-1); }
+  .empty .ring .i { width: 26px; height: 26px; stroke-width: 1.4; }
+  .empty h3 { margin: 0; font: 600 var(--t-lg)/1.3 var(--font-ui); }
+  .empty p { margin: 0; color: var(--muted); max-width: 420px; }
+  .empty .row { display: flex; gap: var(--s2); flex-wrap: wrap; justify-content: center; margin-top: var(--s3); }
+  .banner { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4); border-radius: var(--r2);
+    border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); background: var(--warn-soft); color: var(--fg); margin-bottom: var(--s4); }
+  .banner .i { color: var(--warn); }
+
+  /* ------------------------------------------------------------ footer */
+  .foot { display: flex; align-items: center; gap: var(--s4); flex-wrap: wrap; margin-top: var(--s7); padding-top: var(--s4);
+    border-top: 1px solid var(--line); color: var(--muted); font-size: var(--t-sm); }
+  .foot .priv { display: inline-flex; align-items: center; gap: var(--s2); }
+  .foot .priv .i { color: var(--ok); }
+  .foot .ws { display: inline-flex; align-items: center; gap: var(--s2); min-width: 0; }
+  #workspace { font-size: 11.5px; color: var(--fg-2); background: var(--raised); border: 1px solid var(--line); border-radius: 4px; padding: 2px 6px;
+    max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle; }
+
+  /* ------------------------------------------------------------ responsive */
+  @media (max-width: 1080px) {
+    .setup { grid-template-columns: 1fr; }
+    .setup-facts { border-left: 0; border-top: 1px solid var(--line); padding: var(--s5) var(--s6); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  @media (max-width: 860px) {
+    .top, main { padding-left: var(--s4); padding-right: var(--s4); }
+    .top .tag { display: none; }
+    #agent { max-width: 200px; }
+    .setup-main, .compose { padding-left: var(--s5); padding-right: var(--s5); }
+    .setup-facts { grid-template-columns: 1fr; padding: var(--s5); }
+    .search { width: 180px; }
+  }
+  @media (max-width: 760px) { .demos { grid-template-columns: 1fr; } }
+  @media (max-width: 620px) {
+    .keyrow { flex-direction: column; }
+    .sechead .tools { width: 100%; } .search { flex: 1; width: auto; }
+    #agent { display: none; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <span class="wordmark"><img class="mark" src="assets/mark.svg" alt="">eitri</span>
+  <span class="tag">CAD with Claude</span>
+  <div class="spacer"></div>
+  <span class="pill" id="agent" title="Checking whether Claude can run"><span class="spinner"></span><span>checking Claude…</span></span>
+  <div class="keywrap">
+    <button class="btn sm" id="keybtn" hidden></button>
+    <div class="pop" id="keymenu" role="dialog" aria-label="API key" hidden></div>
+  </div>
+</header>
+
+<main>
+  <div class="backdrop" aria-hidden="true"></div>
+
+  <!-- the API key setup panel: shown on first run when no key is set -->
+  <section class="setup" id="setup" aria-labelledby="setuptitle" hidden>
+    <button class="btn ghost icon sm setup-close" id="setupclose" title="Close (you can add a key later from the top bar)" aria-label="Close"><svg class="i"><use href="assets/icons.svg#i-x"/></svg></button>
+    <div class="setup-main">
+      <div class="eyebrow"><svg class="i sm"><use href="assets/icons.svg#i-key-round"/></svg>Connect Claude</div>
+      <h2 id="setuptitle">Add your Anthropic API key</h2>
+      <p>eitri uses your own Anthropic API key, and requests are billed to it. Create one in the
+        <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">Anthropic Console <svg class="i"><use href="assets/icons.svg#i-external-link"/></svg></a>,
+        then paste it here.</p>
+      <div class="setup-note" id="setupnote" hidden><svg class="i"><use href="assets/icons.svg#i-info"/></svg><span></span></div>
+      <form class="keyrow" id="setupform" autocomplete="off">
+        <label class="sr" for="keyinput">Anthropic API key</label>
+        <div class="keyfield">
+          <svg class="i"><use href="assets/icons.svg#i-key-round"/></svg>
+          <input class="input mono" id="keyinput" type="password" placeholder="sk-ant-api03-…" spellcheck="false" autocomplete="off" autocapitalize="off">
+          <button class="btn ghost icon sm reveal" type="button" id="keyreveal" title="Show the key" aria-label="Show the key"><svg class="i"><use href="assets/icons.svg#i-eye"/></svg></button>
+        </div>
+        <button class="btn primary" type="submit" id="keysave"><svg class="i"><use href="assets/icons.svg#i-check"/></svg>Save key</button>
+      </form>
+      <div class="setup-status" id="setupstatus" role="status" aria-live="polite"></div>
+      <p class="setup-later"><svg class="i sm"><use href="assets/icons.svg#i-play"/></svg><span>No key yet? The <a href="#demosec" id="setupdemos">recorded demos</a> and the editor work without one.</span></p>
+    </div>
+    <aside class="setup-facts">
+      <div class="fact"><span class="ico"><svg class="i"><use href="assets/icons.svg#i-zap"/></svg></span>
+        <div><b>What it costs</b><p>Expect about <span class="num">$0.24</span> per request on average across our 22-task benchmark (range <span class="num">$0.07</span> to <span class="num">$1.10</span> per task). Long design sessions cost more: the recorded V8 engine session in the demos cost <span class="num">$3.21</span>.</p></div></div>
+      <div class="fact"><span class="ico"><svg class="i"><use href="assets/icons.svg#i-shield-check"/></svg></span>
+        <div><b>Where the key is kept</b><p>In <code id="setuppath">your eitri config file</code>, readable only by you. Never in a project folder.</p></div></div>
+      <div class="fact"><span class="ico"><svg class="i"><use href="assets/icons.svg#i-cpu"/></svg></span>
+        <div><b>Nothing else leaves this computer</b><p>eitri makes no network calls except to Anthropic's API. Checking the key makes one free call that lists models.</p></div></div>
+    </aside>
+  </section>
+
+  <!-- recorded demo sessions -->
+  <section id="demosec">
+    <div class="sechead">
+      <div>
+        <div class="eyebrow"><i></i>Recorded sessions · no key needed</div>
+        <h2>Try it without a key</h2>
+        <p>Replays of real Claude sessions, recorded end to end: the chat, every tool call and each model revision, played back in the editor. No API calls, nothing billed.</p>
+      </div>
+    </div>
+    <div class="demos" id="demos"></div>
+  </section>
+
+  <!-- describe a new part -->
+  <section class="compose" id="compose">
+    <h2>What do you want to make?</h2>
+    <p class="lede">Describe a part or an assembly. Claude models it, checks it, and you keep editing it by hand or by chat.</p>
+    <div class="composer">
+      <label class="sr" for="prompt">Describe the part</label>
+      <textarea id="prompt" placeholder="e.g. a wall bracket for a 25 mm pipe, 3 mm thick, two M4 screw holes 40 mm apart"></textarea>
+      <div class="composer-bar">
+        <span class="hint" id="kbdhint"><kbd id="modkey">Ctrl</kbd><kbd>Enter</kbd>&nbsp;creates</span>
+        <span class="keyneed" id="keyneed" hidden><svg class="i sm"><use href="assets/icons.svg#i-key-round"/></svg>Needs an API key</span>
+        <div class="spacer"></div>
+        <button class="btn primary" id="create" title="Create the project and let Claude start (⌘/Ctrl+Enter)"><svg class="i"><use href="assets/icons.svg#i-sparkles"/></svg>Create with Claude</button>
+      </div>
+    </div>
+    <div class="examples" id="examples"><span class="lbl">Try</span></div>
+    <div class="actions">
+      <span class="lbl">Or start another way</span>
+      <button class="btn" id="blank" title="An empty project to model by hand"><svg class="i"><use href="assets/icons.svg#i-plus"/></svg>Start blank</button>
+      <button class="btn" id="import" title="A STEP, IGES, STL, OBJ, 3MF or PLY file, or a eitri model (.py)"><svg class="i"><use href="assets/icons.svg#i-upload"/></svg>Import a file…</button>
+      <button class="btn" id="link" title="A eitri project folder kept somewhere else on this computer"><svg class="i"><use href="assets/icons.svg#i-folder-open"/></svg>Open a folder…</button>
+      <input type="file" id="file" accept=".step,.stp,.iges,.igs,.stl,.obj,.3mf,.ply,.py" style="display:none">
+    </div>
+    <div class="msg" id="msg" role="status" aria-live="polite"></div>
+  </section>
+
+  <!-- the user's projects -->
+  <section id="projsec">
+    <div class="sechead">
+      <div>
+        <div class="eyebrow"><i></i>On this computer</div>
+        <h2>Your projects</h2>
+      </div>
+      <div class="spacer"></div>
+      <div class="tools">
+        <span id="count"></span>
+        <div class="search"><svg class="i"><use href="assets/icons.svg#i-scan-eye"/></svg>
+          <input class="input" id="filter" type="search" placeholder="Filter projects" aria-label="Filter projects"></div>
+      </div>
+    </div>
+    <div class="banner" id="offline" hidden><svg class="i"><use href="assets/icons.svg#i-triangle-alert"/></svg><span>Can't reach the eitri server. It may be restarting; this page retries every few seconds.</span></div>
+    <div class="grid" id="grid"></div>
+    <div class="empty" id="empty" style="display:none">
+      <div class="ring"><svg class="i"><use href="assets/icons.svg#i-cuboid"/></svg></div>
+      <h3>No projects yet</h3>
+      <p>Describe a part above and Claude will model it, or start from a blank sketch or a file you already have.</p>
+      <div class="row">
+        <button class="btn" id="emptydescribe"><svg class="i"><use href="assets/icons.svg#i-sparkles"/></svg>Describe a part</button>
+        <button class="btn" id="emptyblank"><svg class="i"><use href="assets/icons.svg#i-plus"/></svg>Start blank</button>
+        <button class="btn" id="emptyimport"><svg class="i"><use href="assets/icons.svg#i-upload"/></svg>Import a file…</button>
+      </div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <span class="priv"><svg class="i"><use href="assets/icons.svg#i-shield-check"/></svg>Runs on this computer. No telemetry. Network calls only to Anthropic's API, with your key.</span>
+    <div class="spacer"></div>
+    <span class="ws"><svg class="i sm"><use href="assets/icons.svg#i-folder-open"/></svg>Projects live in <code id="workspace">…</code></span>
+  </footer>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const EXAMPLES = ['a phone stand with a 65° back and a cable slot', 'an enclosure for an Arduino Uno with a snap-on lid', 'a 20-tooth and a 40-tooth spur gear pair, module 1.5', 'a cable clip for a 6 mm cable with a screw hole', 'a sheet-metal bracket from 2 mm aluminium'];
+const ICON = (name, cls) => `<svg class="i${cls ? ' ' + cls : ''}" aria-hidden="true"><use href="assets/icons.svg#i-${name}"/></svg>`;
+const MORE = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg>';
+const PLACEHOLDER = '<div class="ph"><svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M32 6 56 19v26L32 58 8 45V19z"/><path d="M8 19l24 13 24-13M32 32v26"/><path d="M20 12.5 44 25.5v13" stroke-dasharray="2 3"/></svg></div>';
+const DISMISS_KEY = 'eitri.setup.dismissed';
+let last = '', lastDemos = '', projects = [], demos = [], agent = null, busyCreate = false, loaded = false, fails = 0, setupBusy = false;
+
+for (const e of EXAMPLES) { const b = document.createElement('button'); b.className = 'ex'; b.textContent = e; b.onclick = () => { $('prompt').value = e; $('prompt').focus(); }; $('examples').appendChild(b); }
+const isMac = /Mac|iPhone|iPad/.test(navigator.platform || '');
+$('modkey').textContent = isMac ? '⌘' : 'Ctrl';
+
+function ago(t) {
+  const s = Math.max(0, Date.now() / 1000 - t);
+  if (s < 60) return 'just now'; if (s < 3600) return Math.floor(s / 60) + ' min ago'; if (s < 86400) return Math.floor(s / 3600) + ' h ago';
+  if (s < 7 * 86400) return Math.floor(s / 86400) + ' d ago'; return new Date(t * 1000).toLocaleDateString();
+}
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
+function say(text, err) { $('msg').textContent = text || ''; $('msg').className = 'msg' + (err ? ' err' : ''); }
+function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { return null; } }
+function toast(text, kind) {
+  const t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status');
+  t.innerHTML = ICON(kind === 'bad' ? 'circle-alert' : 'circle-check') + `<span>${esc(text)}</span>`;
+  t.querySelector('.i').style.color = kind === 'bad' ? 'var(--bad)' : 'var(--ok)';
+  document.body.appendChild(t); setTimeout(() => t.remove(), 3200);
+}
+
+/* ------------------------------------------------------------------ skeletons (first load) */
+function skeletons() {
+  const card = big => `<div class="skel${big ? ' big' : ''}" aria-hidden="true"><div class="skeleton s-img"></div><div class="s-body">
+    <div class="skeleton s-line" style="width:${big ? 55 : 62}%;height:${big ? 14 : 11}px"></div><div class="skeleton s-line" style="width:88%"></div>
+    <div class="skeleton s-line" style="width:${big ? 70 : 40}%"></div>${big ? '<div class="skeleton" style="height:32px;margin-top:8px"></div>' : ''}</div></div>`;
+  $('demos').innerHTML = card(true).repeat(3);
+  $('grid').innerHTML = card(false).repeat(4);
+}
+skeletons();
+
+/* ------------------------------------------------------------------ agent status + key controls */
+function renderAgent(ag) {
+  agent = ag || {};
+  const pill = $('agent');
+  const cls = ag.available ? 'ok' : ag.needs_key ? 'warn' : 'bad';
+  pill.innerHTML = `<span class="dot ${cls}"></span><span>${esc(ag.label || 'Claude')}</span>`;
+  pill.title = ag.detail || '';
+  const kb = $('keybtn'); kb.hidden = false;
+  if (ag.needs_key) {
+    kb.className = 'btn sm primary'; kb.innerHTML = ICON('key-round', 'sm') + 'Add API key'; kb.dataset.mode = 'add';
+    kb.setAttribute('aria-haspopup', 'false'); $('keymenu').hidden = true;
+  } else {
+    kb.className = 'btn sm ghost'; kb.innerHTML = ICON('key-round', 'sm') + 'API key' + ICON('chevron-down', 'sm'); kb.dataset.mode = 'manage';
+    kb.setAttribute('aria-haspopup', 'dialog');
+  }
+  $('keyneed').hidden = !ag.needs_key; $('kbdhint').hidden = !!ag.needs_key;
+}
+
+$('keybtn').onclick = ev => {
+  ev.stopPropagation();
+  if ($('keybtn').dataset.mode === 'add') { openSetup(); return; }
+  const m = $('keymenu');
+  if (!m.hidden) { m.hidden = true; return; }
+  m.hidden = false; m.innerHTML = '<div class="eyebrow">Anthropic API key</div><div class="masked"><span class="spinner"></span><span class="muted">loading…</span></div>';
+  loadKeyMenu();
+};
+$('keymenu').onclick = ev => ev.stopPropagation();
+async function loadKeyMenu() {
+  const m = $('keymenu');
+  let s;
+  try { s = await fetch('/api/setup').then(r => r.json()); }
+  catch (e) { m.innerHTML = `<div class="eyebrow">Anthropic API key</div><p style="color:var(--bad)">Could not reach the server: ${esc(e)}</p>`; return; }
+  const cost = '<p>Requests are billed to this key: about $0.24 per request on average across our 22-task benchmark (range $0.07 to $1.10 per task).</p>';
+  if (!s.has_key) {
+    m.innerHTML = `<div class="eyebrow">Anthropic API key</div><div class="masked"><span class="muted">No key set</span></div>
+      <div class="row"><button class="btn sm primary" id="menuadd">${ICON('key-round', 'sm')}Add API key</button></div>`;
+    $('menuadd').onclick = () => { m.hidden = true; openSetup(); };
+    return;
+  }
+  const env = s.source === 'environment';
+  m.innerHTML = `<div class="eyebrow">Anthropic API key</div>
+    <div class="masked">${ICON('key-round', 'sm')}<span>${esc(s.masked || '…')}</span><div class="spacer"></div><span class="badge ok">${ICON('check', 'sm')}active</span></div>
+    ${env ? '<p>This key comes from the <code>ANTHROPIC_API_KEY</code> environment variable, so it cannot be removed here. Unset the variable and restart eitri to change it.</p>'
+          : `<p>Saved in <code>${esc(s.config_path)}</code>, readable only by you.</p>`}
+    ${cost}
+    ${env ? '' : `<div class="row"><button class="btn sm danger" id="menuforget">${ICON('trash-2', 'sm')}Remove key</button><div class="spacer"></div><button class="btn sm" id="menureplace">Replace…</button></div>`}`;
+  if (!env) {
+    $('menuforget').onclick = async () => {
+      if (!confirm('Remove the saved API key from this computer? Claude will stop working until you add one again. The demos keep working.')) return;
+      const r = await post('/api/setup/forget', {});
+      m.hidden = true;
+      if (r.ok === false) toast(r.error || 'could not remove the key', 'bad'); else { toast('API key removed'); store(DISMISS_KEY, null); }
+      refresh(true);
+    };
+    $('menureplace').onclick = () => { m.hidden = true; openSetup('Paste the new key. It replaces the saved one once Anthropic accepts it.'); };
+  }
+}
+
+/* ------------------------------------------------------------------ setup panel */
+function setStatus(kind, text) {
+  const el = $('setupstatus');
+  if (!kind) { el.innerHTML = ''; return; }
+  const ic = { wait: '<span class="spinner"></span>', bad: ICON('circle-alert'), ok: ICON('circle-check'), idle: '' }[kind];
+  el.innerHTML = `<div class="line ${kind}">${ic}<span>${esc(text)}</span></div>`;
+}
+async function loadSetupPath() {
+  try { const s = await fetch('/api/setup').then(r => r.json()); if (s.config_path) $('setuppath').textContent = s.config_path; } catch (e) { /* keep the generic wording */ }
+}
+function openSetup(note, quiet) {
+  const p = $('setup'), n = $('setupnote');
+  p.hidden = false;
+  if (note) { n.hidden = false; n.querySelector('span').textContent = note; } else n.hidden = true;
+  if (!setupBusy) setStatus(null);
+  loadSetupPath();
+  if (!quiet) { p.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => $('keyinput').focus({ preventScroll: true }), 250); }
+}
+function closeSetup() { $('setup').hidden = true; store(DISMISS_KEY, '1'); }
+$('setupclose').onclick = closeSetup;
+$('keyreveal').onclick = () => {
+  const i = $('keyinput'), show = i.type === 'password';
+  i.type = show ? 'text' : 'password';
+  $('keyreveal').innerHTML = ICON(show ? 'eye-off' : 'eye'); $('keyreveal').title = show ? 'Hide the key' : 'Show the key';
+};
+$('setupform').onsubmit = async ev => {
+  ev.preventDefault();
+  if (setupBusy) return;
+  const key = $('keyinput').value.trim();
+  if (!key) { setStatus('bad', 'Paste a key first. Anthropic keys start with sk-ant-.'); $('keyinput').focus(); return; }
+  setupBusy = true; $('keysave').disabled = true; $('keyinput').disabled = true;
+  setStatus('wait', 'Checking the key with Anthropic (one free call that lists models)…');
+  const r = await post('/api/setup', { key });
+  setupBusy = false; $('keysave').disabled = false; $('keyinput').disabled = false;
+  if (!r.ok) { setStatus('bad', r.error || 'Anthropic did not accept that key.'); $('keyinput').focus(); $('keyinput').select(); return; }
+  $('keyinput').value = '';
+  setStatus('ok', (r.message ? r.message.charAt(0).toUpperCase() + r.message.slice(1) + '. ' : 'Key saved. ') + 'Claude is ready.');
+  if (r.agent) renderAgent(r.agent);
+  await refresh(true);
+  if ($('prompt').value.trim()) say('Claude is ready: press Create with Claude to start on your description.');
+  setTimeout(() => { $('setup').hidden = true; setStatus(null); }, 2400);
+};
+
+/* ------------------------------------------------------------------ demos */
+function mins(sec) { const m = Math.round((sec || 0) / 60); return m < 1 ? '<1 min' : m + ' min'; }
+function renderDemos() {
+  const box = $('demos'); box.innerHTML = '';
+  $('demosec').hidden = !demos.length;
+  for (const d of demos) {
+    const rec = d.recorded || {}, replay = `${d.url}?replay=1`;
+    const el = document.createElement('article'); el.className = 'demo'; el.dataset.id = d.id;
+    el.innerHTML = `<a class="shot" href="${esc(replay)}" aria-label="Watch the replay of ${esc(d.title)}">
+        ${d.thumb ? `<img alt="" loading="lazy" src="/thumb/${encodeURIComponent(d.id)}">` : PLACEHOLDER}
+        <div class="tl"><span class="badge">${ICON('history', 'sm')}recorded session</span>${d.busy ? `<span class="badge live"><span class="dot live" style="width:6px;height:6px"></span>replaying</span>` : ''}</div>
+        <span class="play">${ICON('play')}</span></a>
+      <div class="body">
+        <h3>${esc(d.title)}</h3>
+        <p class="blurb">${esc(d.blurb)}</p>
+        ${d.outcome ? `<p class="outcome${rec.stopped ? ' stopped' : ''}">${ICON(rec.stopped ? 'hand' : 'circle-check', 'sm')}<span>${esc(d.outcome)}</span></p>` : ''}
+        <div class="stats" title="${esc([rec.model, rec.date].filter(Boolean).join(' · '))}">
+          <span>${ICON('clock', 'sm')}<b>${esc(mins(rec.seconds))}</b></span>
+          <span><b>$${(+rec.cost_usd || 0).toFixed(2)}</b>&nbsp;API cost</span>
+          ${rec.turns ? `<span><b>${esc(rec.turns)}</b>&nbsp;turns</span>` : ''}
+        </div>
+        <div class="acts">
+          <a class="btn" href="${esc(replay)}">${ICON('play')}Watch replay</a>
+          <a class="btn ghost" href="${esc(d.url)}" title="Open the finished model in the editor">${ICON('external-link', 'sm')}Open</a>
+        </div>
+      </div>`;
+    box.appendChild(el);
+  }
+  if (demos.length && !$('demonote')) {
+    const n = document.createElement('p'); n.className = 'note'; n.id = 'demonote';
+    n.innerHTML = ICON('info', 'sm') + '<span>Replays play back what was recorded; they make no API calls and need no key. Costs shown are what the original sessions cost.</span>';
+    box.after(n);
+  }
+}
+
+/* ------------------------------------------------------------------ projects */
+function render() {
+  const q = $('filter').value.trim().toLowerCase();
+  const shown = projects.filter(p => !q || p.title.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || (p.last_message || '').toLowerCase().includes(q));
+  $('count').textContent = projects.length ? (q ? `${shown.length} of ${projects.length}` : `${projects.length} project${projects.length === 1 ? '' : 's'}`) : '';
+  $('empty').style.display = projects.length ? 'none' : '';
+  const grid = $('grid'); grid.innerHTML = '';
+  if (projects.length && !shown.length) {
+    grid.innerHTML = `<p class="muted" style="grid-column:1/-1;margin:0">No project matches “${esc(q)}”.</p>`;
+  }
+  for (const p of shown) {
+    const a = document.createElement('a'); a.className = 'card'; a.href = p.url; a.dataset.id = p.id;
+    a.innerHTML = `<div class="thumb">${p.thumb ? `<img alt="" loading="lazy" src="/thumb/${encodeURIComponent(p.id)}?t=${Math.round(p.modified)}">` : PLACEHOLDER}</div>
+      <div class="body"><div class="name" title="${esc(p.folder)}">${esc(p.title)}</div>
+      <div class="meta">${ICON('clock')}${esc(ago(p.modified))}${p.revision ? ' · rev ' + p.revision : ''}</div>
+      ${p.last_message ? `<div class="last">“${esc(p.last_message)}”</div>` : (p.note ? `<div class="last">${esc(p.note)}</div>` : '')}</div>
+      <div class="flags">${p.busy ? '<span class="badge busy"><span class="dot live"></span>Claude is working</span>' : ''}${p.linked ? `<span class="badge">${ICON('link-2', 'sm')}linked folder</span>` : ''}</div>
+      <button class="more" title="More" aria-label="More actions for ${esc(p.title)}">${MORE}</button>
+      <div class="menu"><button data-act="rename">${ICON('pencil', 'sm')}Rename…</button><button class="danger" data-act="trash">${ICON('trash-2', 'sm')}${p.linked ? 'Remove from list' : 'Move to trash'}</button></div>`;
+    const menu = a.querySelector('.menu'), more = a.querySelector('.more');
+    const place = () => { const top = a.querySelector('.thumb').offsetHeight + 8; more.style.top = top + 'px'; menu.style.top = (top + 30) + 'px'; };
+    more.onclick = ev => { ev.preventDefault(); ev.stopPropagation(); $('keymenu').hidden = true; document.querySelectorAll('.menu.open').forEach(m => m !== menu && m.classList.remove('open')); place(); menu.classList.toggle('open'); };
+    menu.querySelector('[data-act=rename]').onclick = async ev => {
+      ev.preventDefault(); ev.stopPropagation(); menu.classList.remove('open');
+      const t = prompt('Name', p.title); if (t === null || !t.trim()) return;
+      const r = await post('/api/rename', { id: p.id, title: t.trim() }); if (!r.ok) say(r.error || 'could not rename it', true); else refresh(true);
+    };
+    menu.querySelector('[data-act=trash]').onclick = async ev => {
+      ev.preventDefault(); ev.stopPropagation(); menu.classList.remove('open');
+      const what = p.linked ? `Remove “${p.title}” from this list? The folder stays where it is.` : `Move “${p.title}” to the trash? It goes to .trash inside the projects folder, so you can get it back.`;
+      if (!confirm(what)) return;
+      const r = await post('/api/trash', { id: p.id });
+      if (!r.ok) say(r.error || 'could not remove it', true); else { say(r.trashed ? 'Moved to ' + r.trashed : 'Removed from the list'); refresh(true); }
+    };
+    grid.appendChild(a);
+    requestAnimationFrame(place);
+  }
+}
+document.addEventListener('click', () => { document.querySelectorAll('.menu.open').forEach(m => m.classList.remove('open')); $('keymenu').hidden = true; });
+document.addEventListener('keydown', ev => { if (ev.key === 'Escape') { document.querySelectorAll('.menu.open').forEach(m => m.classList.remove('open')); $('keymenu').hidden = true; } });
+window.addEventListener('resize', () => document.querySelectorAll('.grid > .card').forEach(a => { const t = a.querySelector('.thumb').offsetHeight + 8; a.querySelector('.more').style.top = t + 'px'; a.querySelector('.menu').style.top = (t + 30) + 'px'; }));
+
+async function post(url, body) {
+  try { const r = await fetch(url, { method: 'POST', body: JSON.stringify(body) }); return await r.json(); }
+  catch (e) { return { ok: false, error: String(e) }; }
+}
+
+async function refresh(force) {
+  try {
+    const r = await fetch('/api/projects').then(r => r.json());
+    fails = 0; $('offline').hidden = true;
+    $('workspace').textContent = r.workspace; $('workspace').title = r.workspace;
+    const ag = r.agent || {};
+    renderAgent(ag);
+    if (!loaded) { loaded = true; if (ag.needs_key && !store(DISMISS_KEY)) openSetup(null, true); }
+    else if (!ag.needs_key && !$('setup').hidden && !setupBusy && !$('setupstatus').querySelector('.ok')) $('setup').hidden = true;
+    const dk = JSON.stringify(r.demos || []);
+    if (force || dk !== lastDemos) { lastDemos = dk; demos = r.demos || []; renderDemos(); }
+    const key = JSON.stringify(r.projects);
+    if (force || key !== last) { last = key; projects = r.projects || []; render(); }
+  } catch (e) {
+    fails += 1;                                   /* server restarting: say so instead of freezing on skeletons */
+    if (!loaded || fails >= 2) {
+      $('offline').hidden = false;
+      $('agent').innerHTML = '<span class="dot bad"></span><span>server not responding</span>';
+      if (!loaded) { $('grid').innerHTML = ''; $('demos').innerHTML = ''; }
+    }
+  }
+}
+$('filter').oninput = render;
+
+async function create(prompt, name) {
+  if (busyCreate) return; busyCreate = true;
+  const btns = document.querySelectorAll('#create, .actions button, .empty button');
+  for (const b of btns) b.disabled = true;
+  $('msg').innerHTML = `<span class="spinner"></span><span>${prompt ? 'Creating the project and starting Claude…' : 'Creating the project…'}</span>`; $('msg').className = 'msg';
+  const r = await post('/api/projects', { prompt, name });
+  busyCreate = false; for (const b of btns) b.disabled = false;
+  if (!r.ok) { say(r.error || 'could not create the project', true); return; }
+  if (r.warning) { alert(r.warning); }
+  location.href = r.url;
+}
+$('create').onclick = () => {
+  const t = $('prompt').value.trim();
+  if (!t) { say('Describe what to make first, or press Start blank.', true); $('prompt').focus(); return; }
+  if (agent && agent.needs_key && agent.available === false) {
+    say('');
+    openSetup('Claude needs an API key to build this. Add one and your description stays in the box, ready to go.');
+    return;
+  }
+  create(t);
+};
+$('prompt').addEventListener('keydown', ev => { if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); $('create').onclick(); } });
+$('blank').onclick = () => { const n = prompt('Name for the new design', 'untitled'); if (n === null) return; create('', n.trim() || 'untitled'); };
+$('import').onclick = () => $('file').click();
+$('file').onchange = () => {
+  const f = $('file').files[0]; if (!f) return; $('file').value = '';
+  $('msg').innerHTML = `<span class="spinner"></span><span>Importing ${esc(f.name)}…</span>`; $('msg').className = 'msg';
+  const rd = new FileReader();
+  rd.onload = async () => { const r = await post('/api/import', { filename: f.name, data: rd.result }); if (r.ok) location.href = r.url; else say(r.error || 'import failed', true); };
+  rd.onerror = () => say('could not read that file', true);
+  rd.readAsDataURL(f);
+};
+$('link').onclick = async () => {
+  const p = prompt('Path of a eitri project folder on this computer (it stays where it is)', ''); if (!p) return;
+  const r = await post('/api/link', { path: p.trim() }); if (r.ok) location.href = r.url; else say(r.error || 'could not open that folder', true);
+};
+$('emptydescribe').onclick = () => { $('compose').scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => $('prompt').focus({ preventScroll: true }), 300); };
+$('emptyblank').onclick = () => $('blank').onclick();
+$('emptyimport').onclick = () => $('file').click();
+
+refresh(true); setInterval(refresh, 3000);
+window.__eitri_home = { projects: () => projects, refresh };
+</script>
+</body>
+</html>
