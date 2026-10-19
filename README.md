@@ -17,7 +17,9 @@ Fusion-style 3D editor in your browser, by hand or by chat: both edit the same m
 -->
 ![A recorded eitri session, replayed: the thinnest-wall check fails, Claude finds the cause and rebuilds, and all 10 checks turn green](docs/check-fix-green.gif)
 
-<sub>A real recorded session (the Wall racket holder demo, which anyone can replay without a key), with the waits shortened: 3 min 17 s of work shown in about 35 s.</sub>
+<sub>A real recorded session (the Wall racket holder demo, which anyone can replay without a key), cut to its
+key moments: the plan, the first failed build, the thinnest-wall check failing, the fix, all 10 checks passing.
+3 min 17 s of work in 20 s; [full session (39 s)](docs/check-fix-green-full.gif).</sub>
 
 Every build comes back to the agent as a **geometry report** (bounding box, volume, every hole with diameter,
 depth and through-or-blind, thinnest wall and knife edges, interferences and clearances between parts, the
