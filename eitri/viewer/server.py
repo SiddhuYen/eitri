@@ -29,6 +29,7 @@ agent's builds and your own edits appear live.
 from __future__ import annotations
 
 import json
+from urllib.parse import quote, unquote
 import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -102,6 +103,7 @@ def _state(project: Project, hub=None, home: str | None = None) -> dict:
         "bearings": _bearings(),
         "has_agent": hub is not None,
         "preview": _preview(project, history),
+        "building": _build_progress(project),
         "home": home,
         "title": _title(project),
         "busy": bool(hub.busy) if hub is not None else False,
@@ -327,8 +329,12 @@ def make_handler(project: Project, lock: threading.Lock, hub=None, home: str | N
                 self._send(200, f.read_bytes(), "model/gltf-binary") if f.is_file() else self._send(404, b"none", "text/plain")
             elif path in ("/preview.glb", "/preview_topology.json"):
                 try:
-                    pv = json.loads((project.out_dir / "preview.json").read_text(encoding="utf-8"))
-                    f = project.out_dir / Path(pv["glb" if path == "/preview.glb" else "topology"]).name
+                    named = Path(unquote(params.get("f", ""))).name  # a file the preview named (see _preview)
+                    if named and named.endswith((".view.glb", ".partial.glb", ".topology.json")):
+                        f = project.out_dir / named
+                    else:
+                        pv = json.loads((project.out_dir / "preview.json").read_text(encoding="utf-8"))
+                        f = project.out_dir / Path(pv["glb" if path == "/preview.glb" else "topology"]).name
                     body = f.read_bytes()
                 except (OSError, ValueError, KeyError):
                     self._send(404, b"no preview", "text/plain")
@@ -344,14 +350,12 @@ def make_handler(project: Project, lock: threading.Lock, hub=None, home: str | N
                         st["build"] = _build_progress(project)
                     self._json({"events": hub.events_since(since), "last": hub.last_event_id, "has_agent": True, **st})
             elif path == "/file":                      # an image inside the project (review renders, attachments)
-                from urllib.parse import unquote
                 f = _project_file(project, unquote(params.get("path", "")))
                 if f is None:
                     self._send(404, b"no such image in this project", "text/plain")
                 else:
                     self._send(200, f.read_bytes(), _IMAGE_TYPES[f.suffix.lower()])
             elif path == "/print/file":
-                from urllib.parse import unquote
                 f = printer.file(unquote(params.get("path", "")))
                 if f is None:
                     self._send(404, b"no such file", "text/plain")
@@ -855,7 +859,13 @@ def _preview(project: Project, history) -> dict | None:
     newest = max((h.created for h in history), default=0.0)
     if ts <= newest:
         return None
-    return {"glb": f"preview.glb?t={ts:.3f}", "topology": f"preview_topology.json?t={ts:.3f}", "ts": ts}
+    # the exact files are named in the URLs: a newer preview (the next batch of an assembly's parts) cannot pair
+    # one batch's geometry with another's topology
+    g, t = quote(Path(str(pv.get("glb", ""))).name), quote(Path(str(pv.get("topology", ""))).name)
+    out = {"glb": f"preview.glb?f={g}&t={ts:.3f}", "topology": f"preview_topology.json?f={t}&t={ts:.3f}", "ts": ts}
+    if pv.get("parts_total"):
+        out.update(parts_done=int(pv.get("parts_done") or 0), parts_total=int(pv["parts_total"]))
+    return out
 
 
 def _title(project: Project) -> str | None:

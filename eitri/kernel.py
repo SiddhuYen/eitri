@@ -46,8 +46,9 @@ def build_model(model_path: str | Path, out_dir: str | Path, params: Mapping[str
     out_dir = Path(out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     result_file = out_dir / "result.json"
-    if result_file.exists():
-        result_file.unlink()
+    # the previous result stays readable while this build runs (the page keeps showing its checks); the runner
+    # replaces it atomically, and a result that was not rewritten by this build is never taken for its own
+    before = result_file.stat().st_mtime_ns if result_file.exists() else None
     cmd = [sys.executable, "-m", "eitri._runner", "--model", str(model_path), "--out", str(out_dir),
            "--formats", ",".join(formats), "--views", ",".join(views), "--quality", str(quality),
            "--wall-samples", str(wall_samples)]
@@ -88,7 +89,7 @@ def build_model(model_path: str | Path, out_dir: str | Path, params: Mapping[str
                                error=f"build timed out after {timeout:g} s (infinite loop or a very slow boolean?)",
                                stdout=stdout, stderr=stderr, seconds=time.time() - t0)
     seconds = time.time() - t0
-    if result_file.exists():
+    if result_file.exists() and result_file.stat().st_mtime_ns != before:
         data = json.loads(result_file.read_text(encoding="utf-8"))
         report = _report_from_dict(data["report"]) if data.get("report") else None
         return BuildResult(

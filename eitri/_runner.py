@@ -33,7 +33,9 @@ def main(argv: list[str] | None = None) -> int:
     result: dict = {"ok": False, "outputs": {}, "params": {}, "report": None, "summary": "", "error": None}
 
     def finish(code: int) -> int:
-        (out_dir / "result.json").write_text(json.dumps(result, indent=1, default=str), encoding="utf-8")
+        tmp = out_dir / "result.json.tmp"           # replaced in one step: a reader never sees half a file
+        tmp.write_text(json.dumps(result, indent=1, default=str), encoding="utf-8")
+        os.replace(tmp, out_dir / "result.json")
         _Stages(out_dir)("done", done=True)
         return code
 
@@ -63,6 +65,9 @@ def main(argv: list[str] | None = None) -> int:
     build_seconds = time.time() - t0
     result["build_seconds"] = round(build_seconds, 2)
     timings = result["timings"] = {"build": round(build_seconds, 3)}
+    # exact-geometry fingerprints, taken before meshing: the analysis reuses what it measured on unchanged parts
+    from .report import fingerprint
+    fingerprints = {p.name: fingerprint(p.shape) for p in parts}
 
     # the viewer's model first, announced as a preview: the page shows the new geometry at once while the
     # checks, the exports and the review render (the slow part) are still running
@@ -72,10 +77,22 @@ def main(argv: list[str] | None = None) -> int:
         from .viewglb import write_view_glb
         vg = out_dir / f"{model_path.stem}.view.glb"
         tj = out_dir / f"{model_path.stem}.topology.json"
-        write_view_glb(parts, vg, tj, quality=args.quality)
+        pg = out_dir / f"{model_path.stem}.partial.glb"
+        pt = out_dir / f"{model_path.stem}.partial.topology.json"
+
+        def partial(glb: bytes, topo, done: int, total: int) -> None:
+            """The parts meshed so far, shown by the page while the rest are meshed (an assembly appears part
+            by part; build(p) itself makes every part in one call, so this is as early as parts can appear)."""
+            _write_atomic(pg, glb)
+            _write_atomic(pt, json.dumps(topo.to_dict()).encode())
+            _announce_preview(out_dir, pg, pt, parts_done=done, parts_total=total)
+
+        write_view_glb(parts, vg, tj, quality=args.quality, fingerprints=fingerprints, progress=stage, on_partial=partial)
         result["outputs"]["view_glb"] = str(vg)
         result["outputs"]["topology"] = str(tj)
         _announce_preview(out_dir, vg, tj)
+        for f in (pg, pt):
+            f.unlink(missing_ok=True)
     except Exception:
         result["error"] = (result.get("error") or "") + "\nviewer export failed:\n" + _clean_traceback(traceback.format_exc(), model_path)
     timings["view"] = round(time.time() - t, 3)
@@ -106,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
     t = time.time()
     try:
         from .report import analyze, summarize
-        report = analyze(parts, checker, wall_samples=args.wall_samples, progress=stage)
+        report = analyze(parts, checker, wall_samples=args.wall_samples, progress=stage, fingerprints=fingerprints)
         if export_note:
             report.issues.append(export_note) if "LOST" in export_note else None
         for note in model.edit_notes:
@@ -162,9 +179,18 @@ class _Stages:
             pass
 
 
-def _announce_preview(out_dir: Path, glb: Path, topo: Path) -> None:
-    """out/preview.json: the newest geometry, before the build is checked and recorded as a revision."""
+def _write_atomic(path: Path, data: bytes) -> None:
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_bytes(data)
+    os.replace(tmp, path)
+
+
+def _announce_preview(out_dir: Path, glb: Path, topo: Path, parts_done: int | None = None, parts_total: int | None = None) -> None:
+    """out/preview.json: the newest geometry, before the build is checked and recorded as a revision (with
+    parts_done/parts_total while an assembly is still being meshed)."""
     data = {"glb": glb.name, "topology": topo.name, "ts": time.time()}
+    if parts_total:
+        data.update(parts_done=parts_done, parts_total=parts_total)
     tmp = out_dir / "preview.json.tmp"
     tmp.write_text(json.dumps(data), encoding="utf-8")
     os.replace(tmp, out_dir / "preview.json")

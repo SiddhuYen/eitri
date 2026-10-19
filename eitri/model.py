@@ -20,9 +20,14 @@ measures them and renders them.
 """
 from __future__ import annotations
 
+import ast
+import copy
+import dataclasses
+import hashlib
 import importlib
 import importlib.util
 import math
+import os
 import shutil
 import sys
 from collections.abc import Mapping
@@ -324,6 +329,119 @@ class Checker:
 
 
 # ---------------------------------------------------------------------------
+# Reusing build(p) across direct edits
+# ---------------------------------------------------------------------------
+
+_BASE_BUILDS: dict[str, tuple[str, "Parts"]] = {}       # model path -> (what it depended on, the parts build(p) made)
+_SKIP_DIRS = {"out", "revisions", ".eitri", "__pycache__", ".git"}
+
+
+def _source_without_edits(path: Path) -> str | None:
+    """The model's source with the top-level EDITS assignment cut out (None if it cannot be parsed)."""
+    try:
+        text = path.read_text(encoding="utf-8")
+        tree = ast.parse(text)
+    except (OSError, SyntaxError, ValueError):
+        return None
+    lines = text.splitlines(keepends=True)
+    for node in tree.body:
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target] if isinstance(node, ast.AnnAssign) else []
+        if any(isinstance(t, ast.Name) and t.id == "EDITS" for t in targets):
+            lines[node.lineno - 1:node.end_lineno] = ["EDITS = ...\n"]
+    return "".join(lines)
+
+
+def _base_key(model: "LoadedModel") -> str | None:
+    """What build(p) can depend on, hashed; None when that cannot be told (the result is then never reused)."""
+    if os.environ.get("EITRI_REUSE_BUILD", "1") == "0" or not isinstance(model.module, type(sys)):
+        return None
+    src = _source_without_edits(model.path)
+    if src is None:
+        return None
+    h = hashlib.sha1(src.encode())
+    h.update(repr(sorted((k, repr(v)) for k, v in model.params.items())).encode())
+    h.update(repr(model.config).encode())
+    seen = 0
+    for root, dirs, files in os.walk(model.path.parent):          # helper modules, imported files, inputs/
+        dirs[:] = sorted(d for d in dirs if d not in _SKIP_DIRS)
+        for f in sorted(files):
+            fp = Path(root) / f
+            if fp == model.path or (Path(root) == model.path.parent and f == "eitri.json"):
+                continue
+            seen += 1
+            if seen > 400:                                          # a big linked folder: not worth tracking
+                return None
+            try:
+                st = fp.stat()
+            except OSError:
+                continue
+            h.update(f"{fp}|{st.st_size}|{st.st_mtime_ns}".encode())
+    return h.hexdigest()
+
+
+# Direct edits are applied in order, each to the result of the ones before. When the list only grew (the usual
+# direct edit appends one), the result of the earlier ones is reused and only the new ones are applied. Only edits
+# that act on part geometry alone qualify: joints, sheet metal, forms, surfaces and face colours keep state across
+# the whole list, so a list with any of them is always applied from the start.
+_PREFIX_SAFE_OPS = frozenset({
+    "push_pull", "sketch_extrude", "revolve", "loft", "hole", "move_hole", "fillet", "chamfer", "hole_diameter", "shell",
+    "thread", "primitive", "combine", "split", "mirror", "pattern", "rib", "boss", "lip", "copy_part", "repair", "scale",
+    "align", "move_vertices", "move_face", "chamfer_size", "fillet_radius", "split_face", "separate", "delete_faces",
+    "move", "rotate", "material", "color", "rename", "delete_part"})
+_EDITED: dict[str, tuple] = {}         # model path -> (base key, the edits applied, the parts after them, their notes)
+
+
+def _apply_edits_reusing(path: str, base_key: str | None, parts: "Parts", edits: list[dict], reuse: bool = True):
+    """(parts, notes, whether a kept result was reused)."""
+    from .edits import apply_edits
+    safe = (base_key is not None and os.environ.get("EITRI_REUSE_EDITS", "1") != "0"
+            and all(e.get("op") in _PREFIX_SAFE_OPS for e in edits))
+    done = _EDITED.get(path) if (safe and reuse) else None
+    hit = False
+    if done is not None and done[0] == base_key and len(done[1]) <= len(edits) and edits[:len(done[1])] == done[1]:
+        out, notes = _clone_parts(done[2]), list(done[3])
+        rest = edits[len(done[1]):]
+        if rest:
+            out, more = apply_edits(out, rest)
+            notes += more
+        hit = True
+    else:
+        out, notes = apply_edits(parts, edits)
+    if safe:
+        _EDITED[path] = (base_key, copy.deepcopy(edits), _clone_parts(out), list(notes))
+    else:
+        _EDITED.pop(path, None)
+    return out, notes, hit
+
+
+def _copy_shape(shape):
+    """A copy with its own topology (kernel operations may change an input's tolerances in place) over the very
+    same geometry: curves and surfaces are shared, not re-made, so later operations behave exactly as on the
+    original."""
+    try:
+        from OCP.BRepBuilderAPI import BRepBuilderAPI_Copy
+        mk = BRepBuilderAPI_Copy(shape.wrapped, False, False)
+        out = copy.copy(shape)
+        out.wrapped = type(shape.wrapped)(mk.Shape()) if not isinstance(mk.Shape(), type(shape.wrapped)) else mk.Shape()
+        return out
+    except Exception:
+        return copy.deepcopy(shape)
+
+
+def _clone_parts(parts: "Parts") -> "Parts":
+    """Independent copies (own topology: some kernel operations modify their input shape in place)."""
+    out = Parts([dataclasses.replace(p, shape=_copy_shape(p.shape), face_colors=dict(p.face_colors) if p.face_colors else p.face_colors)
+                 for p in parts])
+    for k, v in vars(parts).items():
+        if k not in ("_parts", "_by_name"):
+            try:
+                setattr(out, k, copy.deepcopy(v))
+            except Exception:
+                setattr(out, k, v)
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Loading a model file
 # ---------------------------------------------------------------------------
 
@@ -344,19 +462,42 @@ class LoadedModel:
         return [dict(e) for e in raw if isinstance(e, Mapping)]
 
     def build(self) -> Parts:
-        """build(p), then the file's direct EDITS (viewer push/pull, fillets, ...) on top."""
-        result = self.module.build(self.params)
-        parts = result if isinstance(result, Parts) else normalize_result(result, self.path.stem)
+        """build(p), then the file's direct EDITS (viewer push/pull, fillets, ...) on top.
+
+        A direct edit changes only EDITS, so the geometry build(p) made (and the result of an unchanged run of
+        edits before the new ones) is kept per model file in this process and reused while nothing that could
+        change it did: the model's code apart from EDITS, the parameters, the other files in its folder. A
+        reused result is a copy, and a copy is not guaranteed to behave exactly like the original in every
+        later kernel operation; so if any edit fails on a build that reused something, the whole build runs
+        again from scratch and that result is the one used."""
+        key = _base_key(self)
+        parts, notes, reused = self._build_once(key, reuse=True)
+        if reused and any(not getattr(n, "ok", True) for n in notes):
+            parts, notes, _ = self._build_once(key, reuse=False)
+        self.edit_notes = notes
+        return parts
+
+    def _build_once(self, key: str | None, reuse: bool):
+        reused = False
+        cached = _BASE_BUILDS.get(str(self.path)) if (key and reuse) else None
+        if cached is not None and cached[0] == key:
+            parts, reused = _clone_parts(cached[1]), True
+        else:
+            result = self.module.build(self.params)
+            parts = result if isinstance(result, Parts) else normalize_result(result, self.path.stem)
+            if key:                                   # the kept copy is never handed out
+                _BASE_BUILDS[str(self.path)] = (key, _clone_parts(parts))
         mats = getattr(self.module, "MATERIALS", None) or {}
         if isinstance(mats, Mapping):
             for part in parts:
                 if part.name in mats and mats[part.name]:
                     part.material = material_key(mats[part.name])
+        notes: list = []
         edits = self.edits
         if edits:
-            from .edits import apply_edits
-            parts, self.edit_notes = apply_edits(parts, edits)
-        return parts
+            parts, notes, hit = _apply_edits_reusing(str(self.path), key, parts, edits, reuse)
+            reused = reused or hit
+        return parts, notes, reused
 
     def verify(self, parts: Parts) -> Checker:
         c = Checker()

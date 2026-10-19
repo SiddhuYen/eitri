@@ -17,6 +17,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from collections import OrderedDict
+
 import numpy as np
 import build123d as bd
 from build123d import Vector
@@ -70,6 +72,14 @@ class VertexInfo:
     index: int
     pos: list[float]
     edges: list[str] = field(default_factory=list)
+    # what dragging this corner can do (the editor draws handles from this, see vertex_capabilities):
+    move: bool = False           # the corner itself can move (eitri.direct.move_vertices accepts it)
+    why: str | None = None       # why not: "curved" (a curved face meets it), "curved_edge", "hole" (on a hole or pocket
+                                 # outline), "rigid_face" (a face here has a hole or a curved outline, so it cannot bend)
+    hole: str | None = None      # on the outline of this round hole ("part:h1"): dragging moves the hole
+    faces: list[str] = field(default_factory=list)   # faces meeting here that push/pull can move instead
+    lock: list[list[float]] = field(default_factory=list)   # normals of faces here that cannot bend: the corner moves
+                                                            # only within their planes (one: a plane, two: a line)
 
 
 @dataclass
@@ -306,7 +316,67 @@ def part_topology(name: str, shape: bd.Shape, holes_from_report: list | None = N
                         fi.hole = hid
         hole_infos.append(HoleInfo(id=hid, part=name, diameter=round(h.diameter, 4), depth=round(h.depth, 3),
                                    through=h.through, axis=_v(ax), center=_v(c), faces=members))
+    vertex_capabilities(shape, face_infos, edge_infos, vertex_infos, faces)
     return face_infos, edge_infos, hole_infos, vertex_infos
+
+
+def vertex_capabilities(shape: bd.Shape, face_infos: list[FaceInfo], edge_infos: list[EdgeInfo],
+                        vertex_infos: list[VertexInfo], faces: list | None = None) -> None:
+    """Fill each vertex's move / why / hole / faces from the same rules eitri.direct.move_vertices applies, so the
+    editor knows before a drag whether the corner can move, and what to do instead when it cannot."""
+    faces = faces if faces is not None else list(shape.faces())
+
+    def key_of(p) -> tuple:
+        return (round(p[0], 3), round(p[1], 3), round(p[2], 3))
+
+    by_key = {key_of(v.pos): v for v in vertex_infos}
+    adj: dict[str, list[FaceInfo]] = {}
+    on_inner: set[str] = set()
+    rigid: set[str] = set()                 # flat faces that cannot bend: with a hole/pocket, or a curved outline
+    for fi, f in zip(face_infos, faces):
+        try:
+            for v in f.vertices():
+                vi = by_key.get(key_of((v.X, v.Y, v.Z)))
+                if vi is not None and fi not in adj.setdefault(vi.id, []):
+                    adj[vi.id].append(fi)
+            if fi.type == "plane":
+                inner = list(f.inner_wires())
+                for w in inner:
+                    for v in w.vertices():
+                        vi = by_key.get(key_of((v.X, v.Y, v.Z)))
+                        if vi is not None:
+                            on_inner.add(vi.id)
+                if inner or any(e.geom_type != bd.GeomType.LINE for e in f.outer_wire().edges()):
+                    rigid.add(fi.id)
+        except Exception:
+            continue
+    edges_at: dict[str, list[EdgeInfo]] = {}
+    for ei in edge_infos:
+        for vid in ei.vertices:
+            edges_at.setdefault(vid, []).append(ei)
+    for vi in vertex_infos:
+        around = adj.get(vi.id, [])
+        if not around:
+            continue
+        movable = [f for f in around if f.type == "plane" or f.type == "sphere" or (f.type == "cylinder" and f.full and f.axis)]
+        vi.faces = [f.id for f in movable]
+        holes = [f.hole for f in around if f.hole]
+        if vi.id in on_inner or holes:
+            vi.why = "hole"
+            # moving a hole needs one full-round wall (eitri.edits._move_hole); a wall split in halves cannot
+            movable_holes = [h for h in holes if any(f.hole == h and f.full for f in face_infos)]
+            vi.hole = movable_holes[0] if movable_holes else None
+        elif any(f.type != "plane" for f in around):
+            vi.why = "curved"
+        elif any(e.type != "line" for e in edges_at.get(vi.id, [])):
+            vi.why = "curved_edge"
+        else:
+            stiff = [f for f in around if f.id in rigid]  # faces that cannot bend: the corner may only slide within them
+            if len(stiff) >= 3:
+                vi.why = "rigid_face"
+            else:
+                vi.move = True
+                vi.lock = [list(f.normal) for f in stiff if f.normal]
 
 
 def _point_on_face(f: bd.Face) -> Vector:
@@ -453,40 +523,73 @@ def edge_polyline(edge: bd.Edge, ang: float = 0.3, lin: float = 0.05) -> np.ndar
         return None
 
 
-def write_view_glb(parts: Parts, glb_path: str | Path, topo_path: str | Path | None = None,
-                   quality: float = 1.0, holes_by_part: dict[str, list] | None = None) -> Topology:
-    """Write the pickable GLB (one node per face and edge, mm, Z-up) and topology.json."""
-    from OCP.BRepMesh import BRepMesh_IncrementalMesh
+# per-part view data (meshes, edge polylines, topology), kept between builds in this process: a part whose exact
+# geometry did not change (same fingerprint, see eitri.report.fingerprint) is not meshed or described again
+_VIEW_CACHE: "OrderedDict[tuple, dict]" = OrderedDict()
+_VIEW_CACHE_MAX = 1500
 
-    diag = max(parts.bbox.diagonal, 1e-6) if len(parts) else 1.0
-    lin = max(diag * 0.0012 / quality, 1e-3)
-    ang = 0.25 / quality
+
+def _part_view(p, lin: float, ang: float, edge_dev: float, holes: list | None, fp: str | None) -> dict:
+    """One part's meshes, edge polylines and topology (from the cache when its geometry is unchanged)."""
+    from OCP.BRepMesh import BRepMesh_IncrementalMesh
+    from .fastmesh import indexed
+    key = (fp, p.name, lin, ang, edge_dev) if fp else None
+    if key is not None and key in _VIEW_CACHE:
+        _VIEW_CACHE.move_to_end(key)
+        return _VIEW_CACHE[key]
+    shape = p.shape
+    BRepMesh_IncrementalMesh(shape.wrapped, lin, False, ang, True)
+    try:
+        from .fastmesh import face_triangles
+        chunks = face_triangles(shape)
+    except Exception:
+        chunks = None
+    faces = list(shape.faces())
+    boxes = None
+    if chunks is not None:
+        boxes = [None if c is None or not len(c) else
+                 [round(float(v), 3) for v in (*c.reshape(-1, 3).min(axis=0), *c.reshape(-1, 3).max(axis=0))]
+                 for c in chunks]
+    if holes is None:
+        try:
+            from . import measure
+            holes = [h for h in measure.cylindrical_features(shape) if h.kind == "hole"]
+        except Exception:
+            holes = []
+    topo = part_topology(p.name, shape, holes, boxes)
+    face_meshes = []
+    for fi, face in enumerate(faces):
+        if chunks is not None:
+            face_meshes.append(indexed(chunks[fi]) if chunks[fi] is not None and len(chunks[fi]) else None)
+        else:
+            face_meshes.append(face_mesh(face))
+    edge_lines = [edge_polyline(edge, ang, edge_dev) for edge in shape.edges()]
+    data = {"faces": face_meshes, "edges": edge_lines, "topo": topo, "volume": round(abs(shape.volume), 3), "bbox": _bbox(shape)}
+    if key is not None:
+        _VIEW_CACHE[key] = data
+        while len(_VIEW_CACHE) > _VIEW_CACHE_MAX:
+            _VIEW_CACHE.popitem(last=False)
+    return data
+
+
+def _assemble(entries: list, bbox: list[float]) -> tuple[bytes, Topology]:
+    """The GLB (one node per face and edge, mm, Z-up) and topology for (part, view data) pairs."""
     buf = _Buffer()
     nodes: list[dict] = []
     meshes: list[dict] = []
     materials: list[dict] = []
     root_children: list[int] = []
-    # mesh every part first: its triangles (one C++ call per part) give the face meshes AND tight face boxes
-    chunks_by_part: dict[str, list | None] = {}
-    boxes_by_part: dict[str, list] = {}
-    for p in parts:
-        BRepMesh_IncrementalMesh(p.shape.wrapped, lin, False, ang, True)
-        try:
-            from .fastmesh import face_triangles
-            chunks = face_triangles(p.shape)
-        except Exception:
-            chunks = None
-        chunks_by_part[p.name] = chunks
-        if chunks is not None:
-            boxes_by_part[p.name] = [None if c is None or not len(c) else
-                                     [round(float(v), 3) for v in (*c.reshape(-1, 3).min(axis=0), *c.reshape(-1, 3).max(axis=0))]
-                                     for c in chunks]
-    topo = topology(parts, holes_by_part, boxes_by_part)
-
-    for pi, p in enumerate(parts):
-        shape = p.shape
-        rgb = _hex_rgb(p.color)
+    t_faces, t_edges, t_holes, t_verts, t_parts = [], [], [], [], []
+    for p, data in entries:
+        f_info, e_info, h_info, v_info = data["topo"]
+        t_faces += f_info
+        t_edges += e_info
+        t_holes += h_info
+        t_verts += v_info
         op = float(getattr(p, "opacity", 1.0) or 1.0)
+        t_parts.append(PartInfo(name=p.name, color=p.color, volume=data["volume"], bbox=data["bbox"],
+                                faces=len(f_info), edges=len(e_info), opacity=op))
+        rgb = _hex_rgb(p.color)
         materials.append({"name": p.name, "pbrMetallicRoughness": {"baseColorFactor": rgb + [op], "metallicFactor": 0.05, "roughnessFactor": 0.65},
                           **({"alphaMode": "BLEND"} if op < 0.999 else {}),
                           "doubleSided": True})
@@ -497,14 +600,7 @@ def write_view_glb(parts: Parts, glb_path: str | Path, topo_path: str | Path | N
         nodes.append(part_node)
         part_idx = len(nodes) - 1
         root_children.append(part_idx)
-        faces = shape.faces()
-        chunks = chunks_by_part.get(p.name)
-        from .fastmesh import indexed
-        for fi, face in enumerate(faces):
-            if chunks is not None:
-                fm = indexed(chunks[fi]) if chunks[fi] is not None and len(chunks[fi]) else None
-            else:
-                fm = face_mesh(face)
+        for fi, fm in enumerate(data["faces"]):
             if fm is None:
                 continue
             pos, nrm, idx = fm
@@ -522,16 +618,20 @@ def write_view_glb(parts: Parts, glb_path: str | Path, topo_path: str | Path | N
             meshes.append({"name": f"{p.name}:f{fi}", "primitives": [{"attributes": {"POSITION": a_pos, "NORMAL": a_nrm}, "indices": a_idx, "material": fmat, "mode": 4}]})
             nodes.append({"name": f"{p.name}:f{fi}", "mesh": len(meshes) - 1, "extras": {"kind": "face", "part": p.name, "index": fi, "id": f"{p.name}:f{fi}"}})
             part_node["children"].append(len(nodes) - 1)
-        for ei, edge in enumerate(shape.edges()):
-            pl = edge_polyline(edge, ang, max(diag * 0.002 / quality, 1e-3))
+        for ei, pl in enumerate(data["edges"]):
             if pl is None or len(pl) < 2:
                 continue
             a_pos = buf.add(pl, 34962, 5126, "VEC3", minmax=True)
             seg = np.array([[i, i + 1] for i in range(len(pl) - 1)], dtype=np.uint32).reshape(-1)
             a_idx = buf.add(seg, 34963, 5125, "SCALAR")
-            meshes.append({"name": f"{p.name}:e{ei}", "primitives": [{"attributes": {"POSITION": a_pos}, "indices": a_idx, "material": len(materials), "mode": 1}]})
+            meshes.append({"name": f"{p.name}:e{ei}", "primitives": [{"attributes": {"POSITION": a_pos}, "indices": a_idx, "material": -1, "mode": 1}]})
             nodes.append({"name": f"{p.name}:e{ei}", "mesh": len(meshes) - 1, "extras": {"kind": "edge", "part": p.name, "index": ei, "id": f"{p.name}:e{ei}"}})
             part_node["children"].append(len(nodes) - 1)
+    edge_mat = len(materials)
+    for m in meshes:                                          # edges use the shared edge material, appended last
+        prim = m["primitives"][0]
+        if prim["material"] == -1:
+            prim["material"] = edge_mat
     materials.append({"name": "edges", "pbrMetallicRoughness": {"baseColorFactor": [0.16, 0.17, 0.2, 1.0], "metallicFactor": 0.0, "roughnessFactor": 1.0}})
     nodes.append({"name": "model", "children": root_children, "extras": {"kind": "root"}})
     root = len(nodes) - 1
@@ -551,7 +651,40 @@ def write_view_glb(parts: Parts, glb_path: str | Path, topo_path: str | Path | N
     out += struct.pack("<III", 0x46546C67, 2, total)
     out += struct.pack("<II", len(js), 0x4E4F534A) + js
     out += struct.pack("<II", len(binary), 0x004E4942) + binary
-    Path(glb_path).write_bytes(bytes(out))
+    topo = Topology(parts=t_parts, faces=t_faces, edges=t_edges, holes=t_holes, bbox=bbox, vertices=t_verts)
+    return bytes(out), topo
+
+
+def write_view_glb(parts: Parts, glb_path: str | Path, topo_path: str | Path | None = None,
+                   quality: float = 1.0, holes_by_part: dict[str, list] | None = None,
+                   fingerprints: dict[str, str | None] | None = None, progress=None, on_partial=None,
+                   partial_every: float = 0.35) -> Topology:
+    """Write the pickable GLB (one node per face and edge, mm, Z-up) and topology.json.
+
+    `fingerprints` (part name -> eitri.report.fingerprint) reuses the view data of parts whose geometry is
+    unchanged since an earlier call in this process. `progress(message)` hears which part is being meshed, and
+    `on_partial(glb_bytes, topology, done, total)` receives the parts meshed so far every `partial_every` seconds
+    (the page shows an assembly appearing part by part)."""
+    import time as _time
+    diag = max(parts.bbox.diagonal, 1e-6) if len(parts) else 1.0
+    lin = max(diag * 0.0012 / quality, 1e-3)
+    ang = 0.25 / quality
+    edge_dev = max(diag * 0.002 / quality, 1e-3)
+    bbox = _bbox(parts.bbox) if len(parts) else [0] * 6
+    fps = fingerprints or {}
+    plist = list(parts)
+    entries = []
+    last = _time.time()
+    for k, p in enumerate(plist, 1):
+        if progress is not None and len(plist) > 1:
+            progress(f"meshing {p.name} ({k}/{len(plist)})")
+        entries.append((p, _part_view(p, lin, ang, edge_dev, (holes_by_part or {}).get(p.name), fps.get(p.name))))
+        if on_partial is not None and k < len(plist) and _time.time() - last >= partial_every:
+            glb, topo = _assemble(entries, bbox)
+            on_partial(glb, topo, k, len(plist))
+            last = _time.time()
+    glb, topo = _assemble(entries, bbox)
+    Path(glb_path).write_bytes(glb)
     if topo_path is not None:
         Path(topo_path).write_text(json.dumps(topo.to_dict()), encoding="utf-8")
     return topo

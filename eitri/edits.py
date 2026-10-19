@@ -1971,6 +1971,8 @@ def apply_edits(parts: Parts, edits: Sequence[dict]) -> tuple[Parts, list[EditNo
                 notes.append(EditNote(op, name, True, (mat or "none") + (f", colour {edit['color']}" if edit.get("color") else "")))
             else:
                 notes.append(EditNote(str(op), name, False, "unknown operation"))
+        except ValueError as exc:                # the edit code's own explanations, written for people
+            notes.append(EditNote(str(op), str(name), False, str(exc)))
         except Exception as exc:
             notes.append(EditNote(str(op), str(name), False, f"{type(exc).__name__}: {exc}"))
     for pname, entries in appearances.items():                 # face colours: resolved on the finished part

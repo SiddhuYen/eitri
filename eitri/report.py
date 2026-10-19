@@ -7,7 +7,11 @@ volume, holes, thinnest wall, interferences between parts and the model's own
 """
 from __future__ import annotations
 
+import copy
+import hashlib
+import io
 import time
+from collections import OrderedDict
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -185,6 +189,43 @@ def analyze_part(name: str, color: str, shape: bd.Shape, wall_samples: int = 600
     )
 
 
+# ---------------------------------------------------------------------------- reuse between builds
+# A direct edit usually changes one part of an assembly, yet every build re-measures every part and every close
+# pair. Results are kept per exact geometry: the fingerprint is a hash of the part's B-rep (without meshes), so a
+# part (or a pair) whose geometry is byte-for-byte the same as before reuses its measurements; anything that
+# changed, even slightly, is measured again. Lives as long as the process (the warm build worker).
+_PART_CACHE: "OrderedDict[tuple, PartReport]" = OrderedDict()
+_PAIR_CACHE: "OrderedDict[tuple, tuple[float, float]]" = OrderedDict()
+_PART_CACHE_MAX, _PAIR_CACHE_MAX = 3000, 30000
+cache_stats = {"part_hits": 0, "part_misses": 0, "pair_hits": 0, "pair_misses": 0}
+
+
+def fingerprint(shape: bd.Shape) -> str | None:
+    """A hash of the shape's exact geometry and placement (B-rep text without triangulation), or None."""
+    try:
+        from OCP.BRepTools import BRepTools
+        from OCP.TopTools import TopTools_FormatVersion
+        buf = io.BytesIO()
+        BRepTools.Write_s(shape.wrapped, buf, False, False, TopTools_FormatVersion.TopTools_FormatVersion_VERSION_1)
+        return hashlib.sha1(buf.getvalue()).hexdigest()
+    except Exception:
+        return None
+
+
+def _cache_get(cache: OrderedDict, key):
+    if key in cache:
+        cache.move_to_end(key)
+        return cache[key]
+    return None
+
+
+def _cache_put(cache: OrderedDict, key, value, limit: int) -> None:
+    cache[key] = value
+    cache.move_to_end(key)
+    while len(cache) > limit:
+        cache.popitem(last=False)
+
+
 def _box_gap(a: bd.BoundBox, b: bd.BoundBox) -> float:
     """Distance between two boxes (0 when they touch or overlap): a lower bound of the parts' distance."""
     d = [max(0.0, a.min.X - b.max.X, b.min.X - a.max.X), max(0.0, a.min.Y - b.max.Y, b.min.Y - a.max.Y),
@@ -193,10 +234,13 @@ def _box_gap(a: bd.BoundBox, b: bd.BoundBox) -> float:
 
 
 def analyze(parts: Parts, checker: Checker | None = None, wall_samples: int = 600,
-            pair_limit: int = 800, progress=None) -> Report:
-    """The build report. `progress(message)` is told what is being measured (the page shows it)."""
+            pair_limit: int = 800, progress=None, fingerprints: dict[str, str | None] | None = None) -> Report:
+    """The build report. `progress(message)` is told what is being measured (the page shows it).
+    `fingerprints` (part name -> fingerprint(), taken before the parts were meshed) lets unchanged parts and
+    pairs reuse their measurements from an earlier build in this process."""
     t0 = time.time()
     say = progress or (lambda message: None)
+    fps = fingerprints or {}
     part_reports = []
     plist = list(parts)
     samples = [wall_samples] * len(plist)
@@ -204,12 +248,25 @@ def analyze(parts: Parts, checker: Checker | None = None, wall_samples: int = 60
         try:
             areas = [max(float(p.shape.area), 1e-9) for p in plist]
             budget = wall_samples + 100 * (len(plist) - 1)
-            samples = [max(100, min(wall_samples, round(budget * a / sum(areas)))) for a in areas]
+            # in steps of 50 rays, so resizing one part does not shift every other part's share (and its cache)
+            samples = [max(100, min(wall_samples, 50 * round(budget * a / sum(areas) / 50))) for a in areas]
         except Exception:
             pass
     for k, (p, n) in enumerate(zip(plist, samples), 1):
+        material = getattr(p, "material", None)
+        fp = fps.get(p.name)
+        key = (fp, p.name, p.color, n, material) if fp else None
+        hit = _cache_get(_PART_CACHE, key) if key else None
+        if hit is not None:
+            cache_stats["part_hits"] += 1
+            part_reports.append(copy.deepcopy(hit))
+            continue
         say(f"measuring {p.name}" + (f" ({k} of {len(plist)})" if len(plist) > 1 else "") + ": walls, holes")
-        part_reports.append(analyze_part(p.name, p.color, p.shape, n, getattr(p, "material", None)))
+        pr = analyze_part(p.name, p.color, p.shape, n, material)
+        if key:
+            cache_stats["part_misses"] += 1
+            _cache_put(_PART_CACHE, key, copy.deepcopy(pr), _PART_CACHE_MAX)
+        part_reports.append(pr)
     for pr, p in zip(part_reports, parts):
         pr.group = getattr(p, "group", None)
         if pr.material in measure.DENSITY and pr.solids:
@@ -233,12 +290,22 @@ def analyze(parts: Parts, checker: Checker | None = None, wall_samples: int = 60
         far_pairs = len(plist) * (len(plist) - 1) // 2 - len(near)
         for k, (i, j) in enumerate(near, 1):
             a, b = plist[i], plist[j]
-            say(f"checking clearances: {a.name} and {b.name} ({k} of {len(near)})")
-            try:
-                ov = measure.overlap_volume(a.shape, b.shape)
-                dist = 0.0 if ov > 1e-9 else measure.min_distance(a.shape, b.shape)
-            except Exception:
-                continue
+            fa, fb = fps.get(a.name), fps.get(b.name)
+            pkey = (fa, fb) if fa and fb else None
+            got = _cache_get(_PAIR_CACHE, pkey) if pkey else None
+            if got is not None:
+                cache_stats["pair_hits"] += 1
+                ov, dist = got
+            else:
+                say(f"checking clearances: {a.name} and {b.name} ({k} of {len(near)})")
+                try:
+                    ov = measure.overlap_volume(a.shape, b.shape)
+                    dist = 0.0 if ov > 1e-9 else measure.min_distance(a.shape, b.shape)
+                except Exception:
+                    continue
+                if pkey:
+                    cache_stats["pair_misses"] += 1
+                    _cache_put(_PAIR_CACHE, pkey, (ov, dist), _PAIR_CACHE_MAX)
             pairs.append(PairInfo(a.name, b.name, round(ov, 4), round(dist, 4)))
             if ov > 1e-6:
                 issues.append(f"INTERFERENCE: {a.name} and {b.name} overlap by {ov:.3f} mm^3")

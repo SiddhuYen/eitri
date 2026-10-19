@@ -377,7 +377,7 @@ def test_live_progress_prewarm_preview_and_timings(tmp_path):
         glb = next(out.glob("*.view.glb"))
         (out / "preview.json").write_text(json.dumps({"glb": glb.name, "topology": glb.name.replace(".view.glb", ".topology.json"), "ts": time.time() + 3600}))
         pv = _js(url, f"/p/{pid}/state.json")["preview"]
-        assert pv and pv["glb"].startswith("preview.glb?t=")
+        assert pv and pv["glb"].startswith("preview.glb?f=") and "&t=" in pv["glb"]          # names its exact files
         assert _call(url, f"/p/{pid}/" + pv["glb"])[2][:4] == b"glTF" and _js(url, f"/p/{pid}/" + pv["topology"])["parts"] is not None
         (out / "preview.json").unlink()
 
