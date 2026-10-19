@@ -155,8 +155,9 @@ class Workspace:
                         "url": f"/p/{pid}/"})
         return out
 
-    def replay(self, pid: str) -> dict:
-        """Play the demo's recorded Claude session in its chat, stepping the model through its revisions."""
+    def replay(self, pid: str, speed: float = 1.0) -> dict:
+        """Play the demo's recorded Claude session in its chat, stepping the model through its revisions.
+        `speed` scales the (already compressed) pauses: 2 plays twice as fast; clamped to 0.25-8."""
         from ..agent.replay import ReplaySession, model_code
         from ..demos import demo_folder, install, is_modified, load_demo, reveal
         meta = self.demos.get(pid)
@@ -176,7 +177,7 @@ class Workspace:
         app.hub._record("divider", {"text": f"Replay of a recorded session ({minutes:.0f} min, played compressed) · "
                                             "no API calls are made", "replay": True}, source="system")
         session = ReplaySession(demo, app.hub._on_event, on_revision=lambda n: reveal(project, n),
-                                code_of=model_code(folder, demo["model"]))
+                                code_of=model_code(folder, demo["model"]), speed=min(max(float(speed), 0.25), 8.0))
         app.hub.send_async(demo["prompt"], source="replay", session=session)
         return {"ok": True, "replaying": True}
 
@@ -524,8 +525,13 @@ def make_web_handler(ws: Workspace):
             if m and unquote(m.group(1)) in ws.demos:      # demo actions: the workspace owns the demo folders
                 try:
                     pid = unquote(m.group(1))
-                    self._json(ws.replay(pid) if m.group(2) == "replay" else ws.reset_demo(pid))
-                except (KeyError, ValueError) as exc:
+                    if m.group(2) == "replay":
+                        n = int(self.headers.get("Content-Length", "0") or 0)
+                        body = json.loads(self.rfile.read(n) or b"{}") if n else {}
+                        self._json(ws.replay(pid, speed=float(body.get("speed") or 1.0)))
+                    else:
+                        self._json(ws.reset_demo(pid))
+                except (KeyError, ValueError, TypeError) as exc:
                     self._json({"ok": False, "error": str(exc)}, 400)
                 return
             if path.startswith("/p/"):

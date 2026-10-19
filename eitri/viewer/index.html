@@ -3055,7 +3055,7 @@ async function poll() {
     renderParams(); renderEdits(); renderJoints(); renderBom(); renderBends(); renderMfgParts();
     renderDemo(); renderKeyNote(); renderEngine(); renderHosted();
     if (!s.ok_revision || !(s.parts || []).length) hideLoading();
-    if (!autoReplay && s.demo) { autoReplay = true; if (new URLSearchParams(location.search).get('replay') === '1') { history.replaceState(null, '', location.pathname); if (!s.busy) startReplay(); } }
+    if (!autoReplay && s.demo) { autoReplay = true; const q = new URLSearchParams(location.search); if (q.get('replay') === '1') { history.replaceState(null, '', location.pathname); if (!s.busy) startReplay(parseFloat(q.get('speed')) || 1); } }
   } catch (e) { /* server restarting */ }
   setTimeout(poll, agentBusy ? 400 : 1200);
 }
@@ -3137,13 +3137,13 @@ function renderDemo() {
   $('replaybtn').style.display = rep ? 'none' : ''; $('replaystop').style.display = rep ? '' : 'none';
   $('replaybtn').disabled = !!state.busy;
 }
-async function startReplay() {
+async function startReplay(speed = 1) {
   $('replaybtn').disabled = true;
-  const r = await fetch('replay', { method: 'POST', body: '{}' }).then(r => r.json()).catch(e => ({ ok: false, error: String(e) }));
+  const r = await fetch('replay', { method: 'POST', body: JSON.stringify({ speed }) }).then(r => r.json()).catch(e => ({ ok: false, error: String(e) }));
   if (!r.ok) { $('replaybtn').disabled = false; hint(r.error || 'the replay could not start'); return; }
   schedulePoll(100);
 }
-$('replaybtn').onclick = startReplay;
+$('replaybtn').onclick = () => startReplay();
 $('replaystop').onclick = () => $('stop').onclick();
 $('demoreset').onclick = async () => {
   if (!confirm('Put this demo back exactly as it shipped? Changes you made in it are discarded.')) return;
