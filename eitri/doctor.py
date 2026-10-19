@@ -78,7 +78,7 @@ def run_doctor(online: bool = False, as_json: bool = False) -> int:
             version = subprocess.run([binary, "--version"], capture_output=True, text=True, timeout=30).stdout.strip()
         except Exception:  # noqa: BLE001
             version = "?"
-        where = "bundled with claude-agent-sdk" if binary == bundled_claude_binary() else binary
+        where = "from Anthropic's claude-agent-sdk package" if binary == bundled_claude_binary() else binary
         add("ok", "Claude Code binary", f"{version or '?'} ({where}); API-key-only mode (--bare) supported"
             if supports_bare(binary) else f"{version} ({where})")
     else:

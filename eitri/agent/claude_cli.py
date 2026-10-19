@@ -88,7 +88,7 @@ def supports_thinking_display(binary: str) -> bool:
 
 
 def find_claude_binary() -> str | None:
-    """Locate the Claude Code CLI: EITRI_CLAUDE_BIN, the one bundled with claude-agent-sdk, then PATH and
+    """Locate the Claude Code CLI: EITRI_CLAUDE_BIN, the one inside Anthropic's claude-agent-sdk package, then PATH and
     the editor extensions. Only builds with --bare qualify (see the module docstring)."""
     env = os.environ.get("EITRI_CLAUDE_BIN")
     if env and Path(env).exists():

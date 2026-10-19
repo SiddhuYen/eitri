@@ -8,16 +8,16 @@ Fusion-style 3D editor in your browser, by hand or by chat: both edit the same m
 [eitri.io](https://eitri.io) · [Install](#quickstart) · [Limitations](#limitations) · [License](#license)
 
 <!--
-  DEMO GIF / SCREENSHOTS TO RECORD (replace the placeholder below):
-  1. red-check-fix-green: the Wall racket holder demo's replay, from "thinnest wall 0.1 mm (expected >= 2)" failing
-     to the checks card turning green with "fixed: thinnest wall".
-  2. manual-drag-then-agent-continues: push/pull a face in the editor, then ask Claude in the chat to continue
+  STILL TO RECORD (the hero GIF below is done):
+  1. manual-drag-then-agent-continues: push/pull a face in the editor, then ask Claude in the chat to continue
      from it (the timeline shows your edit and Claude's change with different badges).
-  3. V8 exploded view: the V8 engine kit demo with the explode slider (Display section) dragged open.
-  4. print-export dialog: the V8 engine kit's "Export for 3D printing" dialog ("V8 engine kit -> 43 printable
+  2. V8 exploded view: the V8 engine kit demo with the explode slider (Display section) dragged open.
+  3. print-export dialog: the V8 engine kit's "Export for 3D printing" dialog ("V8 engine kit -> 43 printable
      parts, 2 plates") with a part hovered on the plate.
 -->
-![eitri: a part checked, fixed and turning green](docs/editor-checks.png)
+![A recorded eitri session, replayed: the thinnest-wall check fails, Claude finds the cause and rebuilds, and all 10 checks turn green](docs/check-fix-green.gif)
+
+<sub>A real recorded session (the Wall racket holder demo, which anyone can replay without a key), with the waits shortened: 3 min 17 s of work shown in about 35 s.</sub>
 
 Every build comes back to the agent as a **geometry report** (bounding box, volume, every hole with diameter,
 depth and through-or-blind, thinnest wall and knife edges, interferences and clearances between parts, the
@@ -32,7 +32,8 @@ eitri
 ```
 
 `install.sh` installs [uv](https://docs.astral.sh/uv/) if needed, installs eitri with Python 3.12, the CAD
-kernel and a bundled Claude Code binary, checks the install (`eitri doctor`) and tells you what to run.
+kernel and Claude Code (the binary inside Anthropic's `claude-agent-sdk` package, downloaded from PyPI at
+install time; eitri does not ship it), checks the install (`eitri doctor`) and tells you what to run.
 `eitri` opens http://127.0.0.1:8765 in your browser. Already have uv?
 `uv tool install --python 3.12 git+https://github.com/SiddhuYen/eitri` does the same in one line.
 The package is named `eitri-cad` (the name `eitri` was taken on PyPI); the command and the Python import
@@ -59,7 +60,7 @@ readable only by you, never in a project). `ANTHROPIC_API_KEY` in the environmen
   logged in on the same machine is never used.
 - **Local only, no telemetry.** The editor, the CAD kernel and your projects stay on this computer; the
   server answers only this machine. The only network calls eitri makes are to Anthropic's API, with your
-  key (the bundled Claude Code runs with its telemetry, error reporting and update checks turned off).
+  key (Claude Code runs with its telemetry, error reporting and update checks turned off).
   Fonts, icons and three.js are bundled; the pages fetch nothing from the internet.
 
 ## Export for 3D printing
@@ -401,6 +402,8 @@ nuts, washers and ball bearings (via bd_warehouse), bearing pockets.
 
 ## What the automatic checks catch
 
+![The checks card after the fix: all 10 checks pass, with the thinnest-wall fix called out](docs/editor-checks.png)
+
 Things that went wrong during development and are now caught by the build, not by
 hoping the agent notices:
 
@@ -474,7 +477,7 @@ evidence, not independent proof.
 - Print orientation tries the six axis-aligned orientations only; plate packing is shelf packing, not a
   nesting optimiser.
 
-## Why it is better than text-to-cad
+## Compared to text-to-cad
 
 [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad) is the best
 open text-to-CAD system we know of; eitri was built by studying it. Where it
@@ -492,13 +495,16 @@ falls short, and what eitri does instead:
 | Revisions | None (git) | Every build is a numbered revision; `/undo`, `/history`, restore from the viewer |
 | Editing geometry directly | Click a face in its viewer to paste a reference like `#o1.f7` into your prompt | Fusion-style direct modeling: push/pull, a constrained sketcher (lines/arcs/circles/ellipses/polygons/slots/splines/text, constraints, driving dimensions, DOF, solve-on-drag, trim/extend/split/offset/mirror/pattern/fillet, projected edges, SVG import) + extrude/cut/revolve/loft/sweep, holes with fastener sizes, primitives, shell, combine, split, mirror, patterns, scale, threads, fillet/chamfer, align/mate, measure, a timeline with edit-feature forms and suppress/reorder, undo, materials and mass, export - all tracked as `EDITS` the agent can read, change and fold into code |
 | Agent instructions | SKILL.md + ~2,600 lines of references | One prompt + a build123d reference whose every snippet is executed by the test suite |
-| Evidence | - | A benchmark of 14 tasks scored by geometry checkers, run against both systems |
+| Evidence | - | A benchmark of 22 tasks scored by geometry checkers, run against both systems |
 
 ## Benchmark
 
-`bench/tasks.py` holds 14 requests (plate, L-bracket, two-part enclosure,
+`bench/tasks.py` holds 22 requests (plate, L-bracket, two-part enclosure,
 flange, spur gear, stepped shaft, phone stand, cable clip, print-in-place hinge,
-knob, threaded bottle cap, heatsink, V pulley, divided tray). Each has a checker
+knob, threaded bottle cap, heatsink, V pulley, divided tray, Raspberry Pi 4 case,
+NEMA 17 motor bracket, Arduino Uno plate, embossed name tag, M8 hex bolt, slotted
+bracket, 608 bearing housing, meshing gear pair); two of them also carry a
+follow-up edit sent in the same session. Each has a checker
 that reads only the produced STEP: dimensions, hole counts/diameters/positions,
 wall thickness, interference, features. `bench/run.py` runs a task through
 eitri or through the baseline (headless Claude Code with the text-to-cad

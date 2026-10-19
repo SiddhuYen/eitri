@@ -29,7 +29,7 @@ eitri doctor
 ```
 
 `install.sh` installs `uv` if it is missing (from `https://astral.sh/uv/install.sh`), installs eitri as a
-command-line tool in its own environment (the CAD kernel and a bundled Claude Code binary: a few hundred MB
+command-line tool in its own environment (the CAD kernel and Claude Code, which comes inside Anthropic's `claude-agent-sdk` package from PyPI: a few hundred MB
 of downloads; the first install takes a few minutes), runs `eitri doctor`, and adds the tool folder to the
 shell `PATH` (set `EITRI_NO_PATH_EDIT=1` to skip that and call eitri by the full path it prints).
 
@@ -55,7 +55,7 @@ eitri doctor
   ok   python: 3.12.x (...)
   ok   CAD kernel: build123d 0.13.0, OCP 8.0.1.1.0
   ok   test build: 20 mm cube, volume 8000 mm^3, STEP + report + review image in 2.0 s
-  ok   Claude Code binary: 2.1.301 (Claude Code) (bundled with claude-agent-sdk); API-key-only mode (--bare) supported
+  ok   Claude Code binary: 2.1.301 (Claude Code) (from Anthropic's claude-agent-sdk package); API-key-only mode (--bare) supported
   warn API key: not set - the editor and the demo projects work without one; ...
   ok   demo projects: V8 engine kit, Wall racket holder, Marble maze
 eitri is ready. Next: run `eitri` - it opens http://127.0.0.1:8765 in your browser.
