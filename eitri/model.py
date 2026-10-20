@@ -400,7 +400,11 @@ def _apply_edits_reusing(path: str, base_key: str | None, parts: "Parts", edits:
     from .edits import apply_edits
     safe = (base_key is not None and os.environ.get("EITRI_REUSE_EDITS", "1") != "0"
             and all(e.get("op") in _PREFIX_SAFE_OPS for e in edits))
-    snaps = _EDITED.get(path) if (safe and reuse) else None
+    if not safe:                                 # joints, sheet metal, forms, surfaces, face colours: state runs
+        _EDITED.pop(path, None)                  # across the list, so it is applied in one pass, from the start
+        out, notes = apply_edits(parts, edits)
+        return out, notes, False
+    snaps = _EDITED.get(path) if reuse else None
     hit = None
     if snaps and snaps[0] == base_key:
         for pre, kept_parts, kept_notes in snaps[1]:        # the longest kept prefix of the current list
@@ -416,24 +420,20 @@ def _apply_edits_reusing(path: str, base_key: str | None, parts: "Parts", edits:
     if len(rest) > 1:
         out, more = apply_edits(out, rest[:-1])
         notes += more
-    if rest and safe:
-        prev = (list(edits[:-1]), _clone_parts(out), list(notes))     # before the last edit
     if rest:
+        prev = (list(edits[:-1]), _clone_parts(out), list(notes))     # before the last edit
         out, more = apply_edits(out, rest[-1:])
         notes += more
-    if safe:
-        if hit is not None or rest:
-            out = _clone_parts(out)              # handed out as a copy either way: byte-identical behaviour
-        kept = [(copy.deepcopy(edits), _clone_parts(out), list(notes))]
-        if prev is not None:
-            kept.append(prev)
-        elif hit is not None and len(hit[0]) == len(edits) - 1:
-            kept.append(hit)                     # the one before the last edit is what we reused
-        elif snaps and snaps[0] == base_key:     # a rebuild of the same list: keep the previous "before last"
-            kept += [k for k in snaps[1] if len(k[0]) == len(edits) - 1][:1]
-        _EDITED[path] = (base_key, kept)
-    else:
-        _EDITED.pop(path, None)
+    if hit is not None or rest:
+        out = _clone_parts(out)                  # handed out as a copy either way: byte-identical behaviour
+    kept = [(copy.deepcopy(edits), _clone_parts(out), list(notes))]
+    if prev is not None:
+        kept.append(prev)
+    elif hit is not None and len(hit[0]) == len(edits) - 1:
+        kept.append(hit)                         # the one before the last edit is what we reused
+    elif snaps and snaps[0] == base_key:         # a rebuild of the same list: keep the previous "before last"
+        kept += [k for k in snaps[1] if len(k[0]) == len(edits) - 1][:1]
+    _EDITED[path] = (base_key, kept)
     return out, notes, hit is not None
 
 

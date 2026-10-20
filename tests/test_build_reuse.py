@@ -173,3 +173,22 @@ def test_a_merged_last_edit_reuses_the_result_before_it(tmp_path, monkeypatch):
     assert sorted(len(k[0]) for k in snaps) == [1, 2]             # kept: after both edits, and after the first alone
     fresh, fresh_notes, _ = _fresh(project, monkeypatch)
     assert reused == fresh and notes == fresh_notes
+
+
+def test_edits_with_shared_state_are_applied_in_one_pass(tmp_path, monkeypatch):
+    """A list with a joint (or sheet metal, a form, a surface) carries state from edit to edit, so it must reach
+    apply_edits as one call with the whole list, never split around the last edit."""
+    from eitri import edits as E
+    project = _project(tmp_path)
+    M._BASE_BUILDS.clear(); M._EDITED.clear()
+    calls = []
+    real = E.apply_edits
+    monkeypatch.setattr(E, "apply_edits", lambda parts, edits: calls.append([e["op"] for e in edits]) or real(parts, edits))
+    project.set_edits([{"op": "move", "part": "lid", "delta": [0, 5, 0]}, {"op": "joint", "part": "lid", "to_part": "post", "type": "rigid"},
+                       {"op": "move", "part": "post", "delta": [1, 0, 0]}])
+    _shapes(project)
+    assert calls == [["move", "joint", "move"]]
+    calls.clear()
+    project.set_edits([{"op": "move", "part": "lid", "delta": [0, 5, 0]}, {"op": "move", "part": "post", "delta": [1, 0, 0]}])
+    _shapes(project)                                              # geometry-only: may be split to keep a snapshot
+    assert [op for c in calls for op in c] == ["move", "move"]
