@@ -8,11 +8,10 @@ Fusion-style 3D editor in your browser, by hand or by chat: both edit the same m
 [eitri.io](https://eitri.io) · [Install](#quickstart) · [Limitations](#limitations) · [License](#license)
 
 <!--
-  STILL TO RECORD (the hero GIF below is done):
+  STILL TO RECORD (the hero GIF and the V8 build GIF are done):
   1. manual-drag-then-agent-continues: push/pull a face in the editor, then ask Claude in the chat to continue
      from it (the timeline shows your edit and Claude's change with different badges).
-  2. V8 exploded view: the V8 engine kit demo with the explode slider (Display section) dragged open.
-  3. print-export dialog: the V8 engine kit's "Export for 3D printing" dialog ("V8 engine kit -> 43 printable
+  2. print-export dialog: the V8 engine kit's "Export for 3D printing" dialog ("V8 engine kit -> 43 printable
      parts, 2 plates") with a part hovered on the plate.
 -->
 ![A recorded eitri session, replayed: the thinnest-wall check fails, Claude finds the cause and rebuilds, and all 10 checks turn green](docs/check-fix-green.gif)
@@ -44,7 +43,7 @@ are both `eitri`.
 **Setting it up with an AI agent?** Point it at [AGENTS.md](AGENTS.md): exact commands and expected output
 for every step.
 
-> **Try it without a key.** The home page opens with three demo projects (a 43-part V8 engine kit, a wall
+> **See it in action without a key.** The home page opens with three demo projects (a 43-part V8 engine kit, a wall
 > racket holder, a marble maze) and the real Claude sessions that made them. "Watch replay" plays a session
 > back in the editor (the chat, every tool call, the model stepping through each revision, the checks going
 > from red to green) with no API calls. Orbit them, edit them, export them: everything but chatting with
@@ -100,6 +99,11 @@ the conversation) or **New chat** to start over; every direct-modeling tool work
 **Import a file…** (STEP, IGES, STL, OBJ, 3MF, PLY or a model .py) and **Open a folder…** start projects
 without a prompt. Each project keeps its conversation, so it is still there after a restart.
 
+![The V8 engine kit demo: the prompt, Claude writing the model, the build, all 43 checks passing](docs/v8-build.gif)
+
+<sub>The 43-part V8 demo: one prompt → Claude writes a 398-line model → all 43 checks pass (a recorded
+23-minute session, replayed and compressed to 16 s).</sub>
+
 You watch Claude work as it happens: its thinking (readable summaries; each finished thought stays as an
 expandable "Thought for N s"), its reply typing out, the model code streaming into a panel over the 3D view,
 each step with a spinner and a timer and, for a build, its stage (building → checking → rendering), and the
@@ -132,6 +136,11 @@ A new project starts as a **blank design**, like Fusion: `eitri ~/parts/thing` o
 an empty grid. Press **S** and click the grid to sketch on the ground plane and extrude
 the first part, drop a **primitive** (B), or describe the part in the chat and let
 eitri write it - every later edit works the same on either.
+
+![A tour of the editor on the V8: combine, mirror, align and mate, form bodies, holes from fastener tables, export](docs/editor-tour.gif)
+
+<sub>Thirteen seconds of the editor on the V8 demo: combine, mirror, align and mate faces, form bodies, holes
+sized from fastener tables, export to STEP / STL / 3MF / drawings / G-code.</sub>
 
 The viewer is a modeling tool, not just a display. Every face, edge and part is
 pickable (hover shows what it is: "flat face, normal (0,0,1), 2361 mm²",
@@ -464,6 +473,23 @@ project):
 Most of a request's time is Claude thinking, not CAD work; the chat streams Claude's thinking and the model
 code as they are written, so the screen is never blank.
 
+Direct edits (push/pull, fillets, moves, primitives, parameter changes) never call the LLM: they go editor →
+`EDITS`/`PARAMS` → kernel. Measured server-side on the 43-part V8 demo, request sent → geometry ready /
+request sent → checks done, before and after the build-reuse and caching work (October 2026):
+
+| Direct edit on the V8 | before | after |
+|---|---|---|
+| Fillet an edge | 8.1 s / 23.2 s | 0.8 s / 3.0 s |
+| Move a face | 7.3 s / 22.4 s | 1.5 s / 3.2 s |
+| Push/pull a face | 6.0 s / 26.1 s | 4.9 s / 7.2 s |
+| Move a part | 7.9 s / 23.2 s | 0.6 s / 2.4 s |
+| Change a parameter | 8.2 s / 23.9 s | 4.9 s / 6.6 s |
+
+The same edits on a one-part plate: 0.3-0.5 s before, 0.2-0.4 s after. In the browser, from the mouse
+release to the new geometry on screen, the V8 went from about 37 s to 5.5-14 s and the plate from 1.1-1.8 s
+to 0.4-0.7 s, measured in a software-rendered headless browser that spends seconds loading the V8's
+3,900-node view; a browser with a GPU is close to the server numbers.
+
 ## Accuracy
 
 - Geometry is exact B-rep (OpenCASCADE), not meshes: dimensions are what the code says.
@@ -490,6 +516,9 @@ evidence, not independent proof.
   (Apple silicon); Linux should work (the same packages exist); Windows is untested.
 - Print orientation tries the six axis-aligned orientations only; plate packing is shelf packing, not a
   nesting optimiser.
+- Direct edits reuse the previous build's geometry when only the `EDITS` list changed. A model whose
+  `build(p)` reads files outside its folder, uses randomness or the clock may be served stale geometry:
+  `EITRI_REUSE_BUILD=0` turns that reuse off (`EITRI_REUSE_EDITS=0` the reuse of earlier edits).
 
 ## Compared to text-to-cad
 
