@@ -87,7 +87,12 @@ def main(argv: list[str] | None = None) -> int:
             _write_atomic(pt, json.dumps(topo.to_dict()).encode())
             _announce_preview(out_dir, pg, pt, parts_done=done, parts_total=total)
 
-        write_view_glb(parts, vg, tj, quality=args.quality, fingerprints=fingerprints, progress=stage, on_partial=partial)
+        # how often a batch of meshed parts is shown while the rest are meshed: EITRI_PREVIEW_EVERY_S seconds
+        # (default 1) or EITRI_PREVIEW_EVERY_PARTS parts (default off), whichever comes first
+        every_s = _env_float("EITRI_PREVIEW_EVERY_S", 1.0)
+        every_parts = int(_env_float("EITRI_PREVIEW_EVERY_PARTS", 0))
+        write_view_glb(parts, vg, tj, quality=args.quality, fingerprints=fingerprints, progress=stage, on_partial=partial,
+                       partial_every=every_s, partial_parts=every_parts)
         result["outputs"]["view_glb"] = str(vg)
         result["outputs"]["topology"] = str(tj)
         _announce_preview(out_dir, vg, tj)
@@ -177,6 +182,13 @@ class _Stages:
             os.replace(tmp, self.out_dir / "progress.json")
         except OSError:
             pass
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, "") or default)
+    except ValueError:
+        return default
 
 
 def _write_atomic(path: Path, data: bytes) -> None:

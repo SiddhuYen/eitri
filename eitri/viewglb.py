@@ -658,13 +658,15 @@ def _assemble(entries: list, bbox: list[float]) -> tuple[bytes, Topology]:
 def write_view_glb(parts: Parts, glb_path: str | Path, topo_path: str | Path | None = None,
                    quality: float = 1.0, holes_by_part: dict[str, list] | None = None,
                    fingerprints: dict[str, str | None] | None = None, progress=None, on_partial=None,
-                   partial_every: float = 0.35) -> Topology:
+                   partial_every: float = 1.0, partial_parts: int = 0) -> Topology:
     """Write the pickable GLB (one node per face and edge, mm, Z-up) and topology.json.
 
     `fingerprints` (part name -> eitri.report.fingerprint) reuses the view data of parts whose geometry is
     unchanged since an earlier call in this process. `progress(message)` hears which part is being meshed, and
-    `on_partial(glb_bytes, topology, done, total)` receives the parts meshed so far every `partial_every` seconds
-    (the page shows an assembly appearing part by part)."""
+    `on_partial(glb_bytes, topology, done, total)` receives the parts meshed so far: a batch goes out once
+    `partial_every` seconds have passed since the last one, or once `partial_parts` more parts were meshed
+    (0: no part rule). Batches are rare on purpose: the page needs about a second to load one of a big
+    assembly, and a batch that lands while the previous one is still loading is skipped."""
     import time as _time
     diag = max(parts.bbox.diagonal, 1e-6) if len(parts) else 1.0
     lin = max(diag * 0.0012 / quality, 1e-3)
@@ -674,15 +676,16 @@ def write_view_glb(parts: Parts, glb_path: str | Path, topo_path: str | Path | N
     fps = fingerprints or {}
     plist = list(parts)
     entries = []
-    last = _time.time()
+    last_t, last_k = _time.time(), 0
     for k, p in enumerate(plist, 1):
         if progress is not None and len(plist) > 1:
             progress(f"meshing {p.name} ({k}/{len(plist)})")
         entries.append((p, _part_view(p, lin, ang, edge_dev, (holes_by_part or {}).get(p.name), fps.get(p.name))))
-        if on_partial is not None and k < len(plist) and _time.time() - last >= partial_every:
+        due = _time.time() - last_t >= partial_every or (partial_parts > 0 and k - last_k >= partial_parts)
+        if on_partial is not None and k < len(plist) and due:
             glb, topo = _assemble(entries, bbox)
             on_partial(glb, topo, k, len(plist))
-            last = _time.time()
+            last_t, last_k = _time.time(), k
     glb, topo = _assemble(entries, bbox)
     Path(glb_path).write_bytes(glb)
     if topo_path is not None:

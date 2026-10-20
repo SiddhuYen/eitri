@@ -128,7 +128,13 @@ def test_view_cache_gives_the_same_files(tmp_path):
     assert seen and seen[-1].startswith("meshing lid")
     partial = []
     viewglb.write_view_glb(parts, tmp_path / "c.glb", None, on_partial=lambda glb, topo, k, n: partial.append((k, n, len(topo.parts))), partial_every=0)
-    assert partial and all(k == len_parts and n == 3 for k, n, len_parts in partial)
+    assert [k for k, n, m in partial] == [1, 2] and all(k == m and n == 3 for k, n, m in partial)   # every part, never the last
+    by_parts = []
+    viewglb.write_view_glb(parts, tmp_path / "d.glb", None, on_partial=lambda glb, topo, k, n: by_parts.append(k), partial_every=3600, partial_parts=2)
+    assert by_parts == [2]                                                                          # a batch every 2 parts
+    none = []
+    viewglb.write_view_glb(parts, tmp_path / "e.glb", None, on_partial=lambda *a: none.append(1), partial_every=3600)
+    assert none == []                                                                               # too quick to be worth a batch
 
 
 def test_an_edit_that_fails_only_on_a_reused_copy_is_rebuilt_from_scratch(tmp_path):
