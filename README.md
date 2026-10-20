@@ -5,7 +5,7 @@
 request**, looks at it, fixes what fails, and hands you STEP / STL / 3MF / GLB files. Then keep going in a
 Fusion-style 3D editor in your browser, by hand or by chat: both edit the same model.
 
-[eitri.io](https://eitri.io) · [Install](#quickstart) · [Limitations](#limitations) · [License](#license)
+[Install](#quickstart) · [Limitations](#limitations) · [License](#license)
 
 <!--
   STILL TO RECORD (the hero GIF and the V8 build GIF are done):
