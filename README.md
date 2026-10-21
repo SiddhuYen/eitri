@@ -8,10 +8,8 @@ Fusion-style 3D editor in your browser, by hand or by chat: both edit the same m
 [Install](#quickstart) · [Limitations](#limitations) · [License](#license)
 
 <!--
-  STILL TO RECORD (the hero GIF and the V8 build GIF are done):
-  1. manual-drag-then-agent-continues: push/pull a face in the editor, then ask Claude in the chat to continue
-     from it (the timeline shows your edit and Claude's change with different badges).
-  2. print-export dialog: the V8 engine kit's "Export for 3D printing" dialog ("V8 engine kit -> 43 printable
+  STILL TO RECORD (the hero, V8 build, editor tour and manual-drag-then-agent-continues GIFs are done):
+  1. print-export dialog: the V8 engine kit's "Export for 3D printing" dialog ("V8 engine kit -> 43 printable
      parts, 2 plates") with a part hovered on the plate.
 -->
 ![A recorded eitri session, replayed: the thinnest-wall check fails, Claude finds the cause and rebuilds, and all 10 checks turn green](docs/check-fix-green.gif)
@@ -378,6 +376,12 @@ list: it can change an edit you selected (`update_edit`), remove one, or - with
 steps (pattern -> `GridLocations`, mirror -> `mirror(...)`, shell -> `offset(...)`,
 revolve -> `revolve(...)`, thread -> `IsoThread`, a dragged corner ->
 `move_vertices(shape, near=[(x, y, z)], delta=...)` from the library, ...).
+
+![Stretch the plate by hand and tell Claude to continue: it reads the edit, adds the holes, then builds a hook on the circle you sketched and writes checks for it](docs/edit-agent-loop.gif)
+
+<sub>Stretch the plate by hand, tell Claude to continue: it reads your edits, adds the holes, then builds a hook
+on the circle you sketched and writes new checks for it ($0.61 of API usage, a real session;
+[MP4](docs/edit-agent-loop.mp4)).</sub>
 
 For anything else, click the geometry and type in the chat box ("make this hole
 M5 and counterbore it", "this wall is too thin, 3 mm please"): the message goes
