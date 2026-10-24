@@ -433,3 +433,6 @@ body.domain #canvas { cursor: default; }
 #hedit .hpaper g.hl.link line, #hedit .hpaper g.hl.tube path, #hedit .hpaper g.hl.tube polyline { stroke: #d92d20; }
 #hedit .hcode { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--r1); padding: 8px; font: 400 11px/1.4 var(--font-mono); max-height: 50vh; overflow: auto; white-space: pre; }
 #hedit .hnr.pneu { grid-template-columns: 56px 1fr 40px; }
+#hedit .hph.fw, #hedit .hpr.fw { grid-template-columns: 70px 1fr 1fr 18px; }
+#hedit .hpr.fw b.bad { color: var(--bad); }
+body.firmware #hedit .hinspector { width: 420px; }
