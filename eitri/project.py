@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -454,7 +455,8 @@ class Project:
             "\nexcept Exception:\n    traceback.print_exc()\n    sys.exit(1)\n"
         try:
             proc = subprocess.run([sys.executable, "-c", script], cwd=str(self.folder), capture_output=True,
-                                  text=True, timeout=timeout)
+                                  text=True, encoding="utf-8", errors="replace", timeout=timeout,
+                                  env={**os.environ, "PYTHONIOENCODING": "utf-8"})     # domain output has · and Ø; never the locale's codec
         except subprocess.TimeoutExpired:
             return False, f"timed out after {timeout:g} s"
         out = proc.stdout

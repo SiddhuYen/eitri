@@ -80,7 +80,7 @@ def compile_sketch(sketch_dir: Path, fqbn: str, core: str, build_dir: Path, cach
     cmd = [cli, "compile", "--fqbn", fqbn, "--build-path", str(build_dir), "--warnings", "default", str(sketch_dir)]
     t0 = time.time()
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
     except subprocess.TimeoutExpired:
         return CompileResult(True, False, f"arduino-cli did not finish within {timeout:g} s", seconds=round(time.time() - t0, 1), command=cmd)
     except OSError as exc:
