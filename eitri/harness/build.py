@@ -2,6 +2,7 @@
 build(p) returned a Harness (the harness counterpart of the geometry pipeline)."""
 from __future__ import annotations
 
+import json
 import time
 import traceback
 from pathlib import Path
@@ -42,7 +43,8 @@ def scene_json(scene: diagram.Scene) -> dict:
             "wires": {k: {"pts": [list(p) for p in v["pts"]], "t": v["t"], "sides": v["sides"], "label": list(v["label"])} for k, v in scene.wires.items()}}
 
 
-def run(model, h: Harness, model_path: Path, out_dir: Path, result: dict, stage, clean_traceback, render: bool = True) -> None:
+def run(model, h: Harness, model_path: Path, out_dir: Path, result: dict, stage, clean_traceback, render: bool = True,
+        guards: dict | None = None) -> None:
     """Fill `result` (the runner's result.json) for a built harness."""
     timings = result.setdefault("timings", {})
     result["kind"] = "harness"
@@ -59,6 +61,8 @@ def run(model, h: Harness, model_path: Path, out_dir: Path, result: dict, stage,
     t = time.time()
     try:
         rep = analyze(h, checker)
+        from .._runner import _run_extensions                # registered build extensions (eitri.extensions)
+        _run_extensions(result, rep, "harness", model, h, model_path, out_dir, json.dumps(guards) if guards else "", stage)
         for note in model.edit_notes:
             if not note.ok:
                 rep.issues.append(f"direct edit failed: {note.line()}")

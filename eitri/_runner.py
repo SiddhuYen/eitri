@@ -24,6 +24,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--wall-samples", type=int, default=600)
     ap.add_argument("--no-render", action="store_true")
     ap.add_argument("--set", action="append", default=[], help="param=value override")
+    ap.add_argument("--guards", default="", help="JSON: what the project remembers for this model's extensions (eitri.extensions)")
     ap.add_argument("--max-parts", type=int, default=0, help="refuse a model with more parts than this (0: no limit)")
     args = ap.parse_args(argv)
 
@@ -63,7 +64,8 @@ def main(argv: list[str] | None = None) -> int:
         result["build_seconds"] = round(time.time() - t0, 2)
         result["timings"] = {"build": result["build_seconds"]}
         from .harness import build as harness_build
-        harness_build.run(model, parts, model_path, out_dir, result, stage, _clean_traceback, render=not args.no_render)
+        harness_build.run(model, parts, model_path, out_dir, result, stage, _clean_traceback, render=not args.no_render,
+                          guards=json.loads(args.guards) if args.guards else {})
         result["ok"] = result["error"] is None
         return finish(0 if result["ok"] else 1)
     if args.max_parts and len(parts) > args.max_parts:
@@ -137,6 +139,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         from .report import analyze, summarize
         report = analyze(parts, checker, wall_samples=args.wall_samples, progress=stage, fingerprints=fingerprints)
+        _run_extensions(result, report, "cad", model, parts, model_path, out_dir, args.guards, stage)
         if export_note:
             report.issues.append(export_note) if "LOST" in export_note else None
         for note in model.edit_notes:
@@ -172,6 +175,23 @@ def main(argv: list[str] | None = None) -> int:
 
     result["ok"] = result["error"] is None
     return finish(0 if result["ok"] else 1)
+
+
+def _run_extensions(result: dict, report, kind: str, model, built, model_path: Path, out_dir: Path, guards_json: str, stage) -> None:
+    """Registered build extensions (eitri.extensions): their checks join the report; their data and guards go in the result."""
+    from . import extensions
+    try:
+        ctx = extensions.BuildContext(model_path, out_dir, kind, model.module, dict(model.params), built, report, result,
+                                      json.loads(guards_json) if guards_json else {}, stage)
+        checks, data, guards = extensions.run(ctx)
+    except Exception:
+        report.issues.append("build extensions failed to run: " + _clean_traceback(traceback.format_exc(), model_path, short=True))
+        return
+    report.checks.extend(checks)
+    if data:
+        result["extensions"] = data
+    if guards:
+        result["guards"] = guards
 
 
 class _Stages:

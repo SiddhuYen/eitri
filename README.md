@@ -641,6 +641,7 @@ eitri/
   viewer/       the editor: local HTTP server + three.js page (three.js vendored)
   web/          the local website (home page, projects, demos, API-key setup) and the shared assets
   printexport.py  3D-print export: decompose, orient, plate, verified STL/3MF
+  extensions.py the plugin point: registered hooks add checks to every build (and guard what a model declared)
   harness/      wire harnesses: the typed model, checks, report, diagram (SVG + PNG), BOM / cut list / WireViz YAML
   demos/        the bundled demo projects and their recorded sessions (agent/replay.py plays them)
   config.py     the API key (user config folder)
@@ -649,6 +650,13 @@ eitri/
 bench/          tasks, runner, results
 tests/          everything above, including every snippet of the build123d reference
 ```
+
+**Extensions.** Extra checks can be plugged into every build without changing eitri: a function registered with
+`eitri.extensions.register(name, fn)`, named in `EITRI_EXTENSIONS=module[,module:setup...]`, or published as an
+`eitri.extensions` entry point gets a `BuildContext` (the model module, what it built, the report so far) after each
+build and returns checks that join the report beside `verify()`; it can also return data for `result.json` and a
+`guard`, a dict of counts the project remembers per model file and fails a later build for if they shrink (only
+`Project.release_guard(name)` lowers it). See `eitri/extensions.py`.
 
 Development: `uv venv --python 3.12 && uv pip install -e '.[dev]' && pytest`. The demos are rebuilt
 from recorded projects with `scripts/make_demos.py`.

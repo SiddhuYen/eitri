@@ -144,10 +144,40 @@ class Project:
         per build."""
         self.last_build_stderr = ""
         result = build_model(self.model_path, self.out_dir, params=params, render=render, formats=formats,
-                             timeout=timeout, **kw)
+                             timeout=timeout, guards=self.guards() or None, **kw)
         self.last_result = result
+        self._remember_guards(result)
         self._record(result, note)
         return result
+
+    # -- guards: what build extensions saw this model declare (eitri.extensions) ---------------------------
+    def guards(self) -> dict[str, dict]:
+        """{extension name: what earlier builds of the current model file declared}; handed to the next build."""
+        return {k: dict(v) for k, v in ((self.state.get("guards") or {}).get(self.model_path.name) or {}).items()}
+
+    def _remember_guards(self, result: BuildResult) -> None:
+        if not result.ok or not result.guards:
+            return
+        from .extensions import merge_guard
+        self.reload()
+        all_guards = dict(self.state.get("guards") or {})
+        mine = {k: dict(v) for k, v in (all_guards.get(self.model_path.name) or {}).items()}
+        for name, declared in result.guards.items():
+            mine[name] = merge_guard(mine.get(name), declared) or {}
+        all_guards[self.model_path.name] = mine
+        self.state["guards"] = all_guards
+        self._save()
+
+    def release_guard(self, name: str) -> None:
+        """Forget what the extension `name` saw this model declare: for a person who means to remove a declared
+        check (the agent has no tool for this; the next build starts the guard afresh)."""
+        self.reload()
+        g = dict(self.state.get("guards") or {})
+        mine = dict(g.get(self.model_path.name) or {})
+        mine.pop(name, None)
+        g[self.model_path.name] = mine
+        self.state["guards"] = g
+        self._save()
 
     def _record(self, result: BuildResult, note: str) -> None:
         self.reload()

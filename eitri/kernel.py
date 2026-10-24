@@ -35,6 +35,8 @@ class BuildResult:
     kind: str = "cad"                      # "cad" or "harness"
     harness_report: dict | None = None     # a harness build's report (checks, nets) as data; report stays None
     harness: dict | None = None            # a harness build's connectors / wires / nets / layout, for the editor
+    extensions: dict = field(default_factory=dict)    # data returned by build extensions, by name (eitri.extensions)
+    guards: dict = field(default_factory=dict)        # what the extensions declared this build, for the project to remember
 
     @property
     def image(self) -> str | None:
@@ -44,7 +46,7 @@ class BuildResult:
 def build_model(model_path: str | Path, out_dir: str | Path, params: Mapping[str, str] | None = None,
                 formats: tuple[str, ...] = ("step", "glb"), render: bool = True, timeout: float = 240.0,
                 views: tuple[str, ...] = ("iso", "front", "top", "right"), quality: float = 1.0,
-                wall_samples: int = 600) -> BuildResult:
+                wall_samples: int = 600, guards: Mapping | None = None) -> BuildResult:
     model_path = Path(model_path).resolve()
     out_dir = Path(out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -57,6 +59,8 @@ def build_model(model_path: str | Path, out_dir: str | Path, params: Mapping[str
            "--wall-samples", str(wall_samples)]
     if not render:
         cmd.append("--no-render")
+    if guards:
+        cmd += ["--guards", json.dumps(guards)]
     for k, v in (params or {}).items():
         cmd += ["--set", f"{k}={v}"]
     env = dict(os.environ)
@@ -103,6 +107,7 @@ def build_model(model_path: str | Path, out_dir: str | Path, params: Mapping[str
             seconds=seconds, build_seconds=data.get("build_seconds", 0.0), edit_notes=data.get("edit_notes", []),
             kind="harness" if is_harness else "cad", harness_report=data.get("report") if is_harness else None,
             harness=data.get("harness") if is_harness else None,
+            extensions=data.get("extensions") or {}, guards=data.get("guards") or {},
         )
     # the runner died before writing a result (crash, import error)
     tail = (stderr or stdout).strip().splitlines()[-25:]
@@ -212,7 +217,7 @@ def _report_from_dict(d: dict) -> Report:
     return Report(
         parts=parts, bbox_min=tuple(d["bbox_min"]), bbox_max=tuple(d["bbox_max"]), size=tuple(d["size"]),
         volume=d["volume"], pairs=[PairInfo(**x) for x in d.get("pairs", [])],
-        checks=[CheckResult(**c) for c in d.get("checks", [])], issues=list(d.get("issues", [])),
+        checks=[CheckResult(**{k: v for k, v in c.items() if k in ("name", "ok", "measured", "expected")}) for c in d.get("checks", [])], issues=list(d.get("issues", [])),
         analysis_seconds=d.get("analysis_seconds", 0.0), far_pairs=d.get("far_pairs", 0), near_gap=d.get("near_gap", 0.0),
     )
 
