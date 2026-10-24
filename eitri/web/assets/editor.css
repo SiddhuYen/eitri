@@ -432,3 +432,4 @@ body.domain #canvas { cursor: default; }
 #hedit .hpaper g.hl.joint circle, #hedit .hpaper g.hl.target line, #hedit .hpaper g.hl.component rect, #hedit .hpaper g.hl.pin rect { stroke: #d92d20; stroke-width: 3; }
 #hedit .hpaper g.hl.link line, #hedit .hpaper g.hl.tube path, #hedit .hpaper g.hl.tube polyline { stroke: #d92d20; }
 #hedit .hcode { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--r1); padding: 8px; font: 400 11px/1.4 var(--font-mono); max-height: 50vh; overflow: auto; white-space: pre; }
+#hedit .hnr.pneu { grid-template-columns: 56px 1fr 40px; }
