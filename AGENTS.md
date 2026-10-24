@@ -118,12 +118,19 @@ replays a real Claude session in the editor) and a box to describe a part when a
 ```sh
 eitri build path/to/model.py            # build a model file and print its geometry report
 eitri print path/to/project             # 3D-print export: parts, orientations, plates, STL + 3MF + zip
+eitri bom path/to/harness-project       # wire harnesses: bill of materials (--cutlist, --csv)
 eitri chat path/to/project              # the terminal REPL (needs a key)
 eitri --help
 ```
 
 Projects are folders under `~/eitri-projects` (change with `eitri web <folder>`). Each holds a
 plain Python model file (`PARAMS`, `build(p)`, `verify()`).
+
+A project is either mechanical CAD (`from eitri import *`, `build(p)` returns build123d geometry) or a **wire
+harness** (`from eitri.harness import *`, `build(p)` returns a `Harness`). `eitri build model.py` works on both:
+for a harness it prints the connectivity / ampacity / voltage-drop checks and writes the diagram (SVG + PNG), BOM,
+cut list and WireViz YAML to `out/`. `eitri build eitri/demos/quad-power/quad_power.py` is a quick harness smoke test
+(it should report `32 pass, 0 warn, 0 FAIL`). No extra install or system package is needed for harnesses.
 
 ## Troubleshooting
 

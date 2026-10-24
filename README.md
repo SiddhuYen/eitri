@@ -119,6 +119,7 @@ eitri build knob.py --set diameter=35           # rebuild + report, no LLM
 eitri view knob.py --section XZ:0               # extra renders, no LLM
 eitri build vendor_part.step                    # report + review image of any existing STEP
 eitri print ~/parts/knob --bed 250x210          # 3D-print export, no LLM
+eitri bom ~/eitri-projects/quad                 # a wire-harness project's BOM and cut list, no LLM
 eitri serve ~/parts/knob                        # just the viewer, no chat
 eitri doctor                                    # check the install
 ```
@@ -127,6 +128,52 @@ In the REPL, talk to it like Claude Code. Follow-ups edit the same model ("make 
 Slash commands: `/show` (browser viewer), `/set width=45` (change a parameter and rebuild, no LLM), `/undo`,
 `/history`, `/params`, `/export stl 3mf`, `/view section XZ:10`, `/image sketch.png` (attach a reference image
 to your next message), `/model`, `/notes`.
+
+## Wire harnesses (a second domain)
+
+eitri also designs **wire harnesses and cable assemblies**, with the same loop: Claude writes a parametric Python
+model file, a deterministic kernel builds it, and every build returns a report of pass / warn / fail checks and a
+review image that Claude has to fix its work against. Mechanical CAD is untouched; a project is a harness project when its
+model file builds a `Harness` (it starts with `from eitri.harness import *`). Nothing extra to install: the kernel,
+the diagram layout and the rasteriser are our own code (no WireViz, no Graphviz), in plain Python with Pillow.
+
+```python
+from eitri.harness import *
+
+PARAMS = dict(arm_mm=180)
+
+def build(p):
+    h = Harness("Quad power")
+    batt = h.add(Connector("BATT", "XT60", pins=["+", "-"]))
+    esc = h.add(Connector("ESC1", "XT30", pins=["+", "-"]))
+    h.net("VBAT", current_A=20, voltage_V=14.8)                      # what the checks grade the wires against
+    h.connect(batt["+"], esc["+"], Wire(14, "RD", p.arm_mm), net="VBAT")
+    h.connect(esc["-"], batt["-"], Wire(14, "BK", p.arm_mm))
+    return h
+```
+
+Every build computes: **connectivity** (unconnected pins unless declared NC, several wires on one pin, duplicate wires,
+dangling splices, nets shorted at a splice), **ampacity** (each wire against a chassis-wiring AWG table, FAIL over the limit,
+WARN within 20%; each connector pin against its catalog rating), **voltage drop** (`V = 2*K*I*L/CM`, K = 10.75, per net against
+`max_drop_pct`, summed along the worst source-to-load path) and **consistency** (one gauge and one colour per net, shields
+terminated), plus the model's own `verify()`. It writes a wire-harness diagram (SVG, and the PNG review image with the failing
+wires outlined red), a **BOM** (connectors with part numbers, crimp terminals inferred from connector type x populated pins,
+wire by gauge and colour with a 10% service loop, splices, labels), a **cut list** (cut length, strip lengths and terminations
+at both ends of every wire) and a WireViz-compatible YAML (interop only), all in `out/`.
+
+In the browser a harness project opens a **harness editor** instead of the 3D view: click a wire to change its gauge, colour,
+length or net; click a connector to rename pins, change its type from the catalog, add or remove pins; drag connectors around;
+click a failing check and the wires it is about light up. Changes are direct edits (`EDITS` in the model file, the same path as CAD
+edits) and positions are `LAYOUT` hints, so Claude sees your changes and carries on from them. A demo to start from:
+`eitri build eitri/demos/quad-power/quad_power.py` (battery XT60 -> distribution splice -> 4 ESCs at 20 A + a flight controller).
+
+```bash
+eitri build harness.py                  # the checks, the diagram, BOM and cut list (no LLM)
+eitri bom ~/eitri-projects/quad         # the bill of materials; --cutlist adds the cut list, --csv prints CSV
+```
+
+The API, the connector catalog and three worked examples are in `eitri/agent/harness_ref.md`; the agent reads them as its
+reference when a project is a harness (and calls `harness_reference()` when a blank project turns out to be one).
 
 ## Direct modeling in the viewer (Fusion-style)
 
@@ -589,11 +636,12 @@ eitri/
   report.py     the automatic report + text summary
   render.py     numpy rasterizer: contact sheets, sections, exploded views
   lib/          the feature library (fasteners, features, enclosure, bearings, parts)
-  agent/        tools.py (the tool set), prompt.md, build123d_ref.md, claude_cli.py (headless
+  agent/        tools.py (the tool set), prompt.md, build123d_ref.md, harness_ref.md, claude_cli.py (headless
                 Claude Code backend over MCP), api_backend.py (Messages API backend)
   viewer/       the editor: local HTTP server + three.js page (three.js vendored)
   web/          the local website (home page, projects, demos, API-key setup) and the shared assets
   printexport.py  3D-print export: decompose, orient, plate, verified STL/3MF
+  harness/      wire harnesses: the typed model, checks, report, diagram (SVG + PNG), BOM / cut list / WireViz YAML
   demos/        the bundled demo projects and their recorded sessions (agent/replay.py plays them)
   config.py     the API key (user config folder)
   doctor.py     `eitri doctor` and `eitri key`
