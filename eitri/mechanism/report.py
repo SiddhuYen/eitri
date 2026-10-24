@@ -1,5 +1,4 @@
-"""The mechanism report produced after every build: summary text for the agent, structured data for the page (mirrors
-eitri/harness/report.py)."""
+"""The mechanism report produced after every build: summary text for the agent, structured data for the page."""
 from __future__ import annotations
 
 import time

@@ -1,5 +1,5 @@
 """Direct edits of a mechanism: the editor's inspector changes, kept in the model file's EDITS list and applied after build(p)
-(the same mechanism as harness direct edits, eitri/harness/edits.py)."""
+(the shared direct-edit path of eitri/edits.py)."""
 from __future__ import annotations
 
 from .model import Actuator, Mechanism, MechanismError, _unit, _vec
