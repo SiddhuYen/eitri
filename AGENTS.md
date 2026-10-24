@@ -118,7 +118,7 @@ replays a real Claude session in the editor) and a box to describe a part when a
 ```sh
 eitri build path/to/model.py            # build a model file and print its geometry report
 eitri print path/to/project             # 3D-print export: parts, orientations, plates, STL + 3MF + zip
-eitri bom path/to/harness-project       # wire harnesses: bill of materials (--cutlist, --csv)
+eitri bom path/to/project               # harness or pneumatics: bill of materials (--cutlist for harnesses, --csv)
 eitri chat path/to/project              # the terminal REPL (needs a key)
 eitri --help
 ```
@@ -132,6 +132,34 @@ for a harness it prints the connectivity / ampacity / voltage-drop checks and wr
 cut list and WireViz YAML to `out/`. `eitri build eitri/demos/quad-power/quad_power.py` is a quick harness smoke test
 (it should report `32 pass, 0 warn, 0 FAIL`). No extra install or system package is needed for harnesses.
 
+Three more domains work the same way, each chosen by its model file's import: **mechanism** (`from eitri.mechanism import *`:
+links, joints, actuators, targets; reach, worst-pose torque, speed, limits, mass), **pneumatics** (`from eitri.pneumatics import *`:
+ISO 1219 circuits; force, ISO 6358 flow, air consumption, pressure drop, circuit validity) and **firmware**
+(`from eitri.firmware import *`: board, pinout, peripherals, sources; pin checks and an arduino-cli compile). Smoke tests:
+
+```sh
+eitri build eitri/demos/pan-tilt/pan_tilt.py         # 11 pass, 0 warn, 0 FAIL
+eitri build eitri/demos/air-clamp/air_clamp.py       # 20 pass, 1 warn, 0 FAIL (the warning is intended: estimated flow data)
+eitri build eitri/demos/servo-sweep/servo_sweep.py   # 11 pass, 0 warn, 0 FAIL once arduino-cli is installed (below)
+```
+
+Mechanism and pneumatics need nothing extra. **Firmware needs arduino-cli** (a system program, not a Python package). Install it
+only if the person wants firmware. Without it, firmware builds still run and report one failed check,
+`compiles (arduino-cli)`, saying "compiler unavailable". eitri never uploads to a board, and you must not either.
+
+```sh
+brew install arduino-cli          # or: curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
+arduino-cli core update-index
+arduino-cli core install arduino:avr     # Uno and Nano
+arduino-cli lib install Servo
+# ESP32, only if needed:
+arduino-cli config init          # skip if it says the config file already exists
+arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+arduino-cli core update-index && arduino-cli core install esp32:esp32 && arduino-cli lib install ESP32Servo
+```
+
+If arduino-cli is not on `PATH`, set `EITRI_ARDUINO_CLI` to its full path in the environment eitri is started from.
+
 ## Troubleshooting
 
 | Symptom | Fix |
@@ -141,6 +169,7 @@ cut list and WireViz YAML to `out/`. `eitri build eitri/demos/quad-power/quad_po
 | `FAIL Claude Code binary` | the `claude-agent-sdk` wheel is missing for this platform; reinstall, or set `EITRI_CLAUDE_BIN` to a recent `claude` that supports `--bare` |
 | `uv` will not install | install it by hand (https://docs.astral.sh/uv/getting-started/installation/), then `./install.sh` again |
 | the page says it could not start three.js / WebGL | use a current Chrome, Edge, Firefox or Safari with hardware acceleration on |
+| firmware check `compiles (arduino-cli)` says "compiler unavailable" | install arduino-cli and the board core (commands above), or set `EITRI_ARDUINO_CLI`; then rebuild |
 | chat says `Invalid API key` | `eitri key set` with a valid key (or fix `ANTHROPIC_API_KEY`) |
 
 Network: eitri itself contacts nothing but Anthropic's API (with the key). The installer downloads

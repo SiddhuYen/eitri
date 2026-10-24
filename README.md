@@ -129,7 +129,7 @@ Slash commands: `/show` (browser viewer), `/set width=45` (change a parameter an
 `/history`, `/params`, `/export stl 3mf`, `/view section XZ:10`, `/image sketch.png` (attach a reference image
 to your next message), `/model`, `/notes`.
 
-## Wire harnesses (a second domain)
+## Wire harnesses
 
 eitri also designs **wire harnesses and cable assemblies**, with the same loop: Claude writes a parametric Python
 model file, a deterministic kernel builds it, and every build returns a report of pass / warn / fail checks and a
@@ -174,6 +174,98 @@ eitri bom ~/eitri-projects/quad         # the bill of materials; --cutlist adds 
 
 The API, the connector catalog and three worked examples are in `eitri/agent/harness_ref.md`; the agent reads them as its
 reference when a project is a harness (and calls `harness_reference()` when a blank project turns out to be one).
+
+## Mechanisms, pneumatics and firmware
+
+Three more domains work the same way as harnesses. Claude writes a parametric model file, a deterministic kernel checks every
+build, and the browser opens a domain editor instead of the 3D view. A project's domain comes from its model file's import
+(`from eitri.mechanism import *`, `from eitri.pneumatics import *`, `from eitri.firmware import *`). Each domain knows only its own
+model. The agent reads that domain's reference (`eitri/agent/<domain>_ref.md`) and rules, and gets a `<domain>_reference()` tool for
+a blank project that turns out to be one. Edits made in the editor are `EDITS` and positions are `LAYOUT` hints, as for CAD and harnesses.
+
+**Mechanisms** are links, joints (revolute or prismatic, with limits), actuators (stall torque, speed, travel, mass), point masses
+and targets. Every build checks:
+
+- **Reach.** Each target is reachable within the joint limits (bounded inverse kinematics), to the target's tolerance.
+- **Torque.** The static gravity load on each joint at its worst sampled pose is graded against the actuator's rated torque. The
+  rated torque is estimated as half the stall torque when the datasheet gives none.
+- **Speed and limits.** Required joint speeds are within the actuator's, and the joint limits fit inside its travel.
+- **Mass.** A mass rollup per link and in total.
+
+It writes a joint/torque table, a mass table and a kinematic diagram (SVG and PNG). The editor has a parameter panel and the
+kinematic diagram, where you click a joint to edit its limits or actuator. The demo is a pan-tilt camera mount. Its `heavy`
+configuration fails the tilt torque check on purpose. The reference has a 3-DOF arm and the pan-tilt.
+
+```python
+from eitri.mechanism import *
+
+def build(p):
+    m = Mechanism("Pan-tilt")
+    m.link("base", fixed=True)
+    m.link("yoke", length_mm=30, mass_g=12, direction=(0, 0, 1))
+    m.link("cradle", length_mm=35, mass_g=10)
+    servo = Actuator("SG90", stall_kgcm=1.8, speed_deg_s=500, travel_deg=180, mass_g=9)
+    m.joint("pan", "base", "yoke", axis=(0, 0, 1), at=(0, 0, 0), limit_deg=(-90, 90), actuator=servo)
+    m.joint("tilt", "yoke", "cradle", axis=(0, -1, 0), limit_deg=(-30, 60), actuator=servo)
+    m.mass("camera", "cradle", 90, at=(35, 0, 0))
+    m.target("ahead", (35, 0, 30))
+    return m
+```
+
+**Pneumatics** are ISO 1219 circuits: supply, FRL, valves (3/2, 5/2, 5/3), flow controls, cylinders (single- or double-acting),
+tubes and silencers, connected port to port. Every build checks:
+
+- **Force.** Cylinder force at the pressure that reaches it, after a 10% friction allowance, against the load in both directions.
+- **Speed and flow.** ISO 6358 flow (`C`, `b`) through the whole supply and exhaust path of every stroke, against the required speed.
+- **Air.** Consumption per cycle and per minute, including dead volume in the tubes, against the supply.
+- **Pressure drop.** The drop across each tube and component on every stroke's path, at the flow that stroke needs.
+- **Circuit validity.** A supply exists, every cylinder chamber is fed from it through a valve and can exhaust in some valve
+  position, every valve has P supplied and its work ports connected, and no line is dead-headed.
+
+A component or tube without datasheet `C`/`b` is graded with a conservative estimate and the check warns. It writes a BOM
+(Markdown and CSV), a cylinder table and an ISO 1219-style schematic (SVG and PNG). The editor shows the component list and the
+schematic: edit a cylinder, valve or tube, and drag components around. The demo is a double-acting clamp with meter-out speed
+control. It reports one warning on purpose, because its tubes carry no datasheet flow figures. The reference has a single-acting
+clamp and a double-acting cylinder with speed control.
+
+**Firmware** is a board (Arduino Uno, Arduino Nano, ESP32), a pinout (each pin with a direction, a role and a name), peripherals
+(servo, PWM motor driver, limit switch, serial) and the source files Claude writes. Every build generates `eitri_pins.h` from the
+pinout, so the sketch uses `PIN_<NAME>` constants instead of numbers. Then it checks:
+
+- **Compile.** The sketch is compiled headless with arduino-cli for the board. A compile error is a failed check at its file and line.
+- **Pinout.** Every pin exists on the board and can do its role (PWM, ADC, interrupt, input-only, forbidden ESP32 flash pins,
+  ADC2 with Wi-Fi). No pin is assigned twice, and the Serial pins stay free while Serial is in use.
+- **Usage.** The sources use each pin exactly as declared (`pinMode`, `digitalWrite`, `analogRead`, `analogWrite`, servo `attach`),
+  and use no pin that is not declared.
+
+It writes the pinout table (CSV and Markdown), a pinout diagram, the header, the sketch folder and the compile log. The editor
+has a pinout table you can edit (pin, direction, role, name, board), read-only code panes and the compile result. **eitri never
+uploads to a board.** You flash it yourself from the sketch folder in `out/`. The demo and the reference example are a servo sweep.
+
+**arduino-cli is a system dependency of the firmware domain only.** Without it, every firmware build has a failed
+`compiles (arduino-cli)` check that says "compiler unavailable" and how to install it; the other checks still run. Install it once:
+
+```sh
+brew install arduino-cli          # or: curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
+arduino-cli core update-index
+arduino-cli core install arduino:avr             # Uno and Nano
+arduino-cli lib install Servo                    # if a sketch uses <Servo.h>
+# ESP32 (optional):
+arduino-cli config init                          # once, if there is no arduino-cli.yaml yet
+arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+arduino-cli core update-index
+arduino-cli core install esp32:esp32
+arduino-cli lib install ESP32Servo               # if an ESP32 sketch drives a servo
+```
+
+eitri finds `arduino-cli` on `PATH`, or at the path in `EITRI_ARDUINO_CLI`.
+
+```bash
+eitri build eitri/demos/pan-tilt/pan_tilt.py         # 11 pass, 0 warn, 0 FAIL
+eitri build eitri/demos/air-clamp/air_clamp.py       # 20 pass, 1 warn, 0 FAIL
+eitri build eitri/demos/servo-sweep/servo_sweep.py   # 11 pass, 0 warn, 0 FAIL with arduino-cli and arduino:avr installed
+eitri bom ~/eitri-projects/clamp                     # pneumatics: the bill of materials (--csv)
+```
 
 ## Direct modeling in the viewer (Fusion-style)
 
@@ -636,13 +728,17 @@ eitri/
   report.py     the automatic report + text summary
   render.py     numpy rasterizer: contact sheets, sections, exploded views
   lib/          the feature library (fasteners, features, enclosure, bearings, parts)
-  agent/        tools.py (the tool set), prompt.md, build123d_ref.md, harness_ref.md, claude_cli.py (headless
+  agent/        tools.py (the tool set), prompt.md, build123d_ref.md, <domain>_prompt.md / <domain>_ref.md, claude_cli.py (headless
                 Claude Code backend over MCP), api_backend.py (Messages API backend)
   viewer/       the editor: local HTTP server + three.js page (three.js vendored)
   web/          the local website (home page, projects, demos, API-key setup) and the shared assets
   printexport.py  3D-print export: decompose, orient, plate, verified STL/3MF
   extensions.py the plugin point: registered hooks add checks to every build (and guard what a model declared)
   harness/      wire harnesses: the typed model, checks, report, diagram (SVG + PNG), BOM / cut list / WireViz YAML
+  mechanism/    mechanisms: links, joints, actuators; reach (IK), worst-pose torque, speed, limits, mass; kinematic diagram
+  pneumatics/   ISO 1219 circuits: force, ISO 6358 flow, air consumption, pressure drop, validity; schematic, BOM
+  firmware/     board, pinout, peripherals, sources; pin checks, arduino-cli compile (never uploads); pinout diagram
+  domains.py    the registry of non-CAD domains (one `domain.py` per package); checks.py and diagram.py are shared by them
   demos/        the bundled demo projects and their recorded sessions (agent/replay.py plays them)
   config.py     the API key (user config folder)
   doctor.py     `eitri doctor` and `eitri key`
