@@ -13,28 +13,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ..model import CheckResult
+from ..checks import Check, check
+from ..model import CheckResult  # noqa: F401
 from .catalog import voltage_drop
 from .model import Endpoint, Harness, Link, PinRef, SpliceRef
 
 WARN_FRACTION = 0.8          # within 20 % of the limit: a warning
 
 
-@dataclass
-class HCheck(CheckResult):
-    severity: str = "pass"                       # pass | warn | fail
-    category: str = ""
-    refs: list[str] = field(default_factory=list)      # wire ids, connector names and splice names the check is about
-
-    def line(self) -> str:
-        mark = {"pass": "PASS", "warn": "WARN", "fail": "FAIL"}[self.severity]
-        exp = f" (expected {self.expected})" if self.expected else ""
-        return f"[{mark}] {self.name}: {self.measured}{exp}"
+HCheck = Check                                   # the harness's checks are the shared structured Check (eitri.checks)
 
 
 def _check(category: str, name: str, severity: str, measured: str, expected: str = "", refs=()) -> HCheck:
-    return HCheck(name=name, ok=severity != "fail", measured=measured, expected=expected, severity=severity,
-                  category=category, refs=list(dict.fromkeys(refs)))
+    return check(category, name, severity, measured, expected, refs)
 
 
 def _fmt_a(x: float) -> str:

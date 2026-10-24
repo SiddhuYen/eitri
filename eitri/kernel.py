@@ -35,6 +35,8 @@ class BuildResult:
     kind: str = "cad"                      # "cad" or "harness"
     harness_report: dict | None = None     # a harness build's report (checks, nets) as data; report stays None
     harness: dict | None = None            # a harness build's connectors / wires / nets / layout, for the editor
+    domain_report: dict | None = None      # any non-CAD domain's report as data (the same as harness_report for a harness)
+    domain: dict | None = None             # any non-CAD domain's editor data (result[kind])
     extensions: dict = field(default_factory=dict)    # data returned by build extensions, by name (eitri.extensions)
     guards: dict = field(default_factory=dict)        # what the extensions declared this build, for the project to remember
 
@@ -98,15 +100,17 @@ def build_model(model_path: str | Path, out_dir: str | Path, params: Mapping[str
     seconds = time.time() - t0
     if result_file.exists() and result_file.stat().st_mtime_ns != before:
         data = json.loads(result_file.read_text(encoding="utf-8"))
-        is_harness = data.get("kind") == "harness"
-        report = _report_from_dict(data["report"]) if data.get("report") and not is_harness else None
+        kind = data.get("kind") or "cad"
+        is_harness = kind == "harness"
+        report = _report_from_dict(data["report"]) if data.get("report") and kind == "cad" else None
         return BuildResult(
             ok=bool(data.get("ok")), model_path=str(model_path), out_dir=str(out_dir),
             params=data.get("params", {}), outputs=data.get("outputs", {}), report=report,
             summary=data.get("summary", ""), error=data.get("error"), stdout=stdout, stderr=stderr,
             seconds=seconds, build_seconds=data.get("build_seconds", 0.0), edit_notes=data.get("edit_notes", []),
-            kind="harness" if is_harness else "cad", harness_report=data.get("report") if is_harness else None,
+            kind=kind, harness_report=data.get("report") if is_harness else None,
             harness=data.get("harness") if is_harness else None,
+            domain_report=data.get("report") if kind != "cad" else None, domain=data.get(kind) if kind != "cad" else None,
             extensions=data.get("extensions") or {}, guards=data.get("guards") or {},
         )
     # the runner died before writing a result (crash, import error)

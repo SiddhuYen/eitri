@@ -312,14 +312,15 @@ class AgentHub:
         """Prepend the viewer selection (resolved against the latest topology) to a message."""
         if not selection:
             return text
-        if self.project.kind == "harness":                  # wire:W3 / conn:J2 / splice:PDB from the harness editor
-            from ..harness.report import describe_selection as describe_harness_selection
+        kind = self.project.kind
+        if kind != "cad":                                   # wire:W3 / conn:J2 / joint:elbow ... from a domain editor
+            from ..domains import module as domain_module
             try:
                 result = json.loads((self.project.out_dir / "result.json").read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 result = {}
             rev = self.project.last_ok_revision()
-            lines = describe_harness_selection(result.get("harness") or {}, [str(x) for x in selection], (result.get("report") or {}).get("checks"))
+            lines = domain_module(kind).describe_selection(result.get(kind) or {}, [str(x) for x in selection], (result.get("report") or {}).get("checks"))
             return f"Selected in the editor (revision {rev.number if rev else '?'}):\n{lines}\n\n{text}"
         rev = self.project.last_ok_revision()
         topo = None

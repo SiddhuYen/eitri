@@ -797,9 +797,10 @@ def _transformed(shape: bd.Shape, loc) -> bd.Shape:
 
 def merge_edit(prev: dict, new: dict) -> dict | None:
     """Combine a new edit into the previous one when it continues the same gesture."""
-    from .harness.edits import HARNESS_OPS, merge_edit as merge_harness
-    if prev.get("op") in HARNESS_OPS:
-        return merge_harness(prev, new)
+    from .domains import module as domain_module, op_owner
+    owner = op_owner(prev.get("op"))
+    if owner:                                          # another domain's edit (harness, mechanism, ...)
+        return domain_module(owner).merge_edit(prev, new)
     if prev.get("op") != new.get("op") or prev.get("part") != new.get("part") or prev.get("suppressed") or new.get("suppressed"):
         return None
     op = new["op"]
@@ -2013,9 +2014,10 @@ def describe(edit: dict) -> str:
     op = edit.get("op")
     sup = " (suppressed)" if edit.get("suppressed") else ""
     try:
-        from .harness.edits import HARNESS_OPS, describe as describe_harness
-        if op in HARNESS_OPS:
-            return describe_harness(edit) + sup
+        from .domains import module as domain_module, op_owner
+        owner = op_owner(op)
+        if owner:
+            return domain_module(owner).describe_edit(edit) + sup
         return _describe(edit, op) + sup
     except Exception:
         return str(edit) + sup

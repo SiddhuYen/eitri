@@ -507,11 +507,13 @@ class LoadedModel:
             parts, reused = _clone_parts(cached[1]), True
         else:
             result = self.module.build(self.params)
-            from .harness.model import Harness
-            if isinstance(result, Harness):         # the other domain: a wire harness, with its own direct edits
-                from .harness.edits import apply_edits as apply_harness_edits
-                result.apply_layout(getattr(self.module, "LAYOUT", None))
-                return result, apply_harness_edits(result, self.edits), False
+            from .domains import kind_of_object, module as domain_module
+            kind = kind_of_object(result)
+            if kind:                                  # another domain (harness, mechanism, ...), with its own direct edits
+                dom = domain_module(kind)
+                if hasattr(dom, "apply_layout"):
+                    dom.apply_layout(result, getattr(self.module, "LAYOUT", None))
+                return result, dom.apply_edits(result, self.edits), False
             parts = result if isinstance(result, Parts) else normalize_result(result, self.path.stem)
             if key:                                   # the kept copy is never handed out
                 _BASE_BUILDS[str(self.path)] = (key, _clone_parts(parts))

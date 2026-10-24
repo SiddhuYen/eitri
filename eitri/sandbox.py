@@ -53,10 +53,10 @@ def _python_job(model: Path, code: str, out: Path) -> int:
         try:
             m = load_model(model)
             built = m.build()
-            from eitri.harness.model import Harness
-            if isinstance(built, Harness):
-                from eitri.harness.inspect import harness_scope
-                scope.update(harness_scope(built, m.params))
+            from eitri.domains import kind_of_object, module as domain_module
+            kind = kind_of_object(built)
+            if kind:
+                scope.update(domain_module(kind).inspect_scope(built, m.params))
             else:
                 scope.update(p=m.params, parts=built, model=built.compound, eitri=eitri)
             exec(compile(code, "<inspect>", "exec"), scope)

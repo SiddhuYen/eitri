@@ -492,17 +492,22 @@ def bom_main(args) -> int:
     if not res.ok:
         print("BUILD FAILED\n" + (res.error or ""), file=sys.stderr)
         return 1
-    if res.kind != "harness":
-        print(f"{project.model_path.name} is a CAD model; `eitri bom` is for wire-harness projects "
+    if res.kind == "cad":
+        print(f"{project.model_path.name} is a CAD model; `eitri bom` is for wire-harness, pneumatic and mechanism projects "
               "(for a CAD assembly's parts list, use `eitri build` and read the report)", file=sys.stderr)
         return 2
-    keys = ["csv"] if args.csv else ["bom_md"]
-    if args.cutlist:
-        keys += ["cutlist_csv"] if args.csv else ["cutlist_md"]
+    from .domains import label, module as domain_module
+    km = domain_module(res.kind).BOM_KEYS
+    if not km:
+        print(f"a {label(res.kind)} has no bill of materials; `eitri build` prints its report", file=sys.stderr)
+        return 2
+    keys = [km["csv"] if args.csv else km["md"]]
+    if args.cutlist and "cutlist_md" in km:
+        keys += [km["cutlist_csv"] if args.csv else km["cutlist_md"]]
     for k in keys:
         print(Path(res.outputs[k]).read_text(encoding="utf-8"))
-    print(_c("dim", "files: " + ", ".join(f"{k}: {v}" for k, v in res.outputs.items() if k in ("bom_md", "csv", "cutlist_md", "cutlist_csv", "wireviz"))))
-    failed = [c for c in (res.harness_report or {}).get("checks", []) if c.get("severity") == "fail"]
+    print(_c("dim", "files: " + ", ".join(f"{k}: {v}" for k, v in res.outputs.items() if k in km["files"])))
+    failed = [c for c in (res.domain_report or {}).get("checks", []) if c.get("severity") == "fail"]
     if failed:
         print(_c("yellow", f"note: {len(failed)} check(s) fail; this BOM is for a design that does not pass its checks (eitri build shows them)"))
     return 0
@@ -536,7 +541,7 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--out", default=None)
     b.add_argument("--open", action="store_true", help="open the review image")
 
-    bm = sub.add_parser("bom", help="the bill of materials (and cut list) of a wire-harness project (no LLM)")
+    bm = sub.add_parser("bom", help="the bill of materials of a wire-harness or pneumatic project (a mechanism: its mass rollup), no LLM")
     bm.add_argument("project", nargs="?", default=".", help="project folder or harness model file (default: current directory)")
     bm.add_argument("--csv", action="store_true", help="print CSV instead of markdown")
     bm.add_argument("--cutlist", action="store_true", help="also print the cut list")

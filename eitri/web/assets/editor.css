@@ -355,11 +355,11 @@ body.readonly .sec[data-sec=manufacture], body.readonly .sec[data-sec=drawing], 
 /* ---------------------------------------------------------------- the wire-harness editor (assets/harness.js)
    A harness project replaces the 3D view with the diagram; the side panel keeps the checks, chat, parameters,
    direct edits, revisions and report, and drops what only makes sense for geometry. */
-body.harness #tools, body.harness .viewcube-wrap, body.harness #views, body.harness #hover, body.harness #band, body.harness #labels,
-body.harness #selpanel, body.harness #timeline, body.harness #canvas > canvas { display: none !important; }
-body.harness [data-sec="parts"], body.harness [data-sec="manufacture"], body.harness [data-sec="drawing"], body.harness [data-sec="display"],
-body.harness [data-sec="keys"], body.harness #jointsec, body.harness #bomsec { display: none !important; }
-body.harness #canvas { cursor: default; }
+body.domain #tools, body.domain .viewcube-wrap, body.domain #views, body.domain #hover, body.domain #band, body.domain #labels,
+body.domain #selpanel, body.domain #timeline, body.domain #canvas > canvas { display: none !important; }
+body.domain [data-sec="parts"], body.domain [data-sec="manufacture"], body.domain [data-sec="drawing"], body.domain [data-sec="display"],
+body.domain [data-sec="keys"], body.domain #jointsec, body.domain #bomsec { display: none !important; }
+body.domain #canvas { cursor: default; }
 .check.warn .ic { color: var(--warn); } .check.changed.warn { background: var(--warn-soft); }
 .check.pickable { cursor: pointer; } .check.pickable:hover { background: var(--raised-2); }
 .check.hl { background: var(--accent-soft); outline: 1px solid var(--accent); }

@@ -25,7 +25,6 @@ from typing import Any, Mapping
 from .kernel import BuildResult, build_model
 
 STATE_FILE = "eitri.json"
-_HARNESS_IMPORT = re.compile(r"^\s*(from\s+eitri\.harness\b|import\s+eitri\.harness\b)", re.M)
 
 
 @dataclass
@@ -71,9 +70,9 @@ class Project:
     # -- paths -------------------------------------------------------------
     @property
     def kind(self) -> str:
-        """"harness" when the model file builds a wire harness (it imports eitri.harness), else "cad"."""
-        code = self.read_model()
-        return "harness" if code and _HARNESS_IMPORT.search(code) else "cad"
+        """The model file's domain from its import: "cad", or "harness", "mechanism", "pneumatics", "firmware" (eitri.domains)."""
+        from .domains import kind_of_source
+        return kind_of_source(self.read_model())
 
     @property
     def model_path(self) -> Path:
@@ -229,10 +228,10 @@ class Project:
         diff = "".join(difflib.unified_diff(src_a.splitlines(keepends=True), src_b.splitlines(keepends=True), f"revision {ra.number}", f"revision {rb.number}"))
         def fp(rev):
             parts = load_model(self.folder / rev.model).build()
-            from .harness.model import Harness
-            if isinstance(parts, Harness):               # a harness: what each wire / connector is, not its geometry
-                from .harness.edits import describe_state
-                return describe_state(parts)
+            from .domains import kind_of_object, module as domain_module
+            dk = kind_of_object(parts)
+            if dk:                                       # another domain: what each thing is, not geometry
+                return domain_module(dk).describe_state(parts)
             out = {}
             for p in parts:
                 bb = p.shape.bounding_box()
@@ -240,13 +239,13 @@ class Project:
             return out
         pa, pb = fp(ra), fp(rb)
         rows = []
-        if self.kind == "harness":
+        if self.kind != "cad":
             for name in list(pa) + [n for n in pb if n not in pa]:
                 x, y = pa.get(name), pb.get(name)
                 status = "removed" if x and not y else "added" if y and not x else "changed" if x != y else "same"
                 rows.append({"name": name, "status": status, "before": x, "after": y})
             changed = [r for r in rows if r["status"] != "same"]
-            lines = [f"revision {ra.number} -> {rb.number}: {len(changed)} wire(s)/connector(s) differ"
+            lines = [f"revision {ra.number} -> {rb.number}: {len(changed)} item(s) differ"
                      + (f" ({', '.join(r['name'] + ' ' + r['status'] for r in changed)})" if changed else "")]
             for r in changed:
                 lines.append(f"  {r['name']}: {r['status']}" + (f": {r['before']} -> {r['after']}" if r["status"] == "changed" else f": {r['before'] or r['after']}"))
@@ -431,13 +430,14 @@ class Project:
             out = res.files.get("stdout.txt", b"").decode("utf-8", errors="replace")
             return res.code == 0, (out + ("" if res.code == 0 else "\n" + res.stderr[-3000:])).strip()
         require_local_exec("inspect")
-        if self.kind == "harness":                       # the harness scope: h, nets(), wires(), drop(a, b), ...
+        kind = self.kind
+        if kind != "cad":                                # the domain's scope (a harness: h, nets(), wires(), drop(a, b), ...)
             preamble = (
                 "import sys, traceback\n"
                 "from eitri.model import load_model\n"
-                "from eitri.harness.inspect import harness_scope\n"
+                "from eitri.domains import module as _domain_module\n"
                 f"_m = load_model({str(self.model_path)!r})\n"
-                "globals().update(harness_scope(_m.build(), _m.params))\n"
+                f"globals().update(_domain_module({kind!r}).inspect_scope(_m.build(), _m.params))\n"
             )
         else:
             preamble = (

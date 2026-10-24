@@ -116,10 +116,40 @@ class Tools:
         from .prompt import harness_reference_text
         return ToolResult(harness_reference_text())
 
+    def mechanism_reference(self) -> ToolResult:
+        """The mechanism reference: the Mechanism / Link / Joint / Actuator / Transmission API (serial chains and simple
+        linkages: revolute and prismatic joints with limits, actuators with stall and rated torque, speed and gear
+        ratio), the checks every build runs (reachability of stated targets, static torque margin per joint under
+        payload and self-weight at the worst pose, joint speed, joint-limit feasibility, mass rollup) and worked
+        examples (a 3-DOF arm, a pan-tilt). Read it before designing anything that moves under its own actuators
+        (a model file that starts `from eitri.mechanism import *`)."""
+        from ..domains import module
+        return ToolResult(module("mechanism").reference_text())
+
+    def pneumatics_reference(self) -> ToolResult:
+        """The pneumatics reference: the Circuit API (supply, FRL / regulator, valves by ISO 1219 class such as 3/2 and
+        5/2, cylinders, flow controls, tubing runs, named nodes), the closed-form checks every build runs (cylinder
+        force vs load, air consumption, ISO 6358 sonic-conductance flow sizing against the required speed, pressure
+        drop on long runs, circuit validity) and worked examples (a single-acting clamp, a double-acting cylinder with
+        speed control). Read it before designing an air circuit (a model file that starts `from eitri.pneumatics import *`)."""
+        from ..domains import module
+        return ToolResult(module("pneumatics").reference_text())
+
+    def firmware_reference(self) -> ToolResult:
+        """The firmware reference: the Firmware API (a target board - uno, nano, esp32 - a pinout table of pin,
+        direction, role and net, peripherals such as servos, PWM motor drivers, limit switches and serial, and the
+        source files you write), the checks every build runs (every declared pin used exactly as declared, no pin
+        double-assignment, pin capability vs role, and a real headless compile with arduino-cli whose errors are
+        failed checks) and a worked example (a servo sweep from a pinout). Read it before writing microcontroller
+        firmware (a model file that starts `from eitri.firmware import *`)."""
+        from ..domains import module
+        return ToolResult(module("firmware").reference_text())
+
     def _cad_only(self, what: str) -> ToolResult | None:
-        if self.project.kind == "harness":
-            return ToolResult(f"{what} works on 3D geometry; this project is a wire harness. Its outputs (diagram, BOM, cut list, "
-                              "WireViz YAML) are written by every build; see `export`.", is_error=True)
+        if self.project.kind != "cad":
+            from ..domains import module
+            dom = module(self.project.kind)
+            return ToolResult(f"{what} works on 3D geometry; this project is a {dom.LABEL}. {dom.EXPORT_DOC}", is_error=True)
         return None
 
     # ---------------------------------------------------------------- inspect
@@ -140,6 +170,12 @@ class Tools:
         colour, length, current, ampacity used, drop per wire), connectors() (what is on each pin),
         drop("BATT.+", "ESC1.+") (volts and % lost along the wires between two endpoints), lengths()
         (wire to buy by gauge and colour) and report() (the text report again).
+        A mechanism project: `m`, `p`, joints() (limits, actuator, required and available torque and
+        speed), links() (length, mass, CG), fk(**angles) (every joint position and the tip at a pose),
+        torque(**angles) (holding torque per joint at a pose), reach(target) (the closest the tip gets).
+        A pneumatics project: `c`, `p`, cylinders() (force, consumption, achievable speed), paths()
+        (the conductance of every fill and exhaust path), flow(C, b, p1, p2) (ISO 6358). A firmware
+        project: `fw`, `p`, pins(), board(), sources(), compile_log().
         """
         ok, out = self.project.run_python(code)
         text = out or "(no output)"
@@ -159,7 +195,7 @@ class Tools:
         """
         if self.project.last_ok_revision() is None and not self.project.model_path.exists():
             return ToolResult("Nothing built yet.", is_error=True)
-        if self.project.kind == "harness":                # one drawing: the diagram the build wrote
+        if self.project.kind != "cad":                    # one drawing: the diagram the build wrote
             res = self.project.build(note="view", render=True)
             return ToolResult(res.summary if res.ok else (res.error or "build failed"), images=[res.image] if res.image else [], is_error=not res.ok)
         args: list[str] = []
@@ -196,10 +232,10 @@ class Tools:
         return ToolResult(describe(query))
 
     def export(self, formats: list[str]) -> ToolResult:
-        """Export the current model to additional formats: any of step, stl, 3mf, glb. A wire harness has no
-        geometry: every build already writes its diagram (svg), BOM (md + csv), cut list (md + csv) and
-        WireViz YAML, and this returns their paths."""
-        if self.project.kind == "harness":
+        """Export the current model to additional formats: any of step, stl, 3mf, glb. A harness, mechanism,
+        pneumatic or firmware project has no geometry: every build already writes its outputs (diagram, tables,
+        BOM, code...), and this returns their paths."""
+        if self.project.kind != "cad":
             res = self.project.build(note="export", render=False)
             if not res.ok:
                 return ToolResult(f"export failed: {res.error}", is_error=True)
@@ -458,8 +494,8 @@ class Tools:
         self.on_event("build_end", {"ok": res.ok, "seconds": res.seconds, "revision": self.project.revision,
                                     "outputs": res.outputs, "error": res.error})
         header = f"[revision {self.project.revision}] "
-        if res.kind == "harness":
-            return self._harness_report(res, header)
+        if res.kind != "cad":
+            return self._domain_report(res, header)
         if not res.ok:
             text = header + "BUILD FAILED\n" + (res.error or "unknown error")
             if res.summary:
@@ -476,20 +512,22 @@ class Tools:
         text += "\n\nThe image shows iso / front / top / right views. Check it against the request before finishing."
         return ToolResult(_truncate(text), images=[res.image] if res.image else [])
 
-    def _harness_report(self, res, header: str) -> ToolResult:
+    def _domain_report(self, res, header: str) -> ToolResult:
+        from ..domains import module
+        dom = module(res.kind)
         if not res.ok:
             text = header + "BUILD FAILED\n" + (res.error or "unknown error")
             if res.summary:
                 text += "\n\n" + res.summary
             return ToolResult(_truncate(text), images=[res.image] if res.image else [], is_error=True)
         text = header + f"built in {res.build_seconds:.1f}s; files: " + ", ".join(Path(v).name for k, v in res.outputs.items() if k != "png") + "\n" + res.summary
-        checks = (res.harness_report or {}).get("checks", [])
+        checks = (res.domain_report or {}).get("checks", [])
         failed = [c for c in checks if c.get("severity") == "fail"]
         warned = [c for c in checks if c.get("severity") == "warn"]
         if failed or warned:
             text += "\n\nATTENTION: " + (f"{len(failed)} check(s) FAILED" if failed else "") + (("; " if failed else "") + f"{len(warned)} warning(s)" if warned else "") + \
-                ". Fix the design (gauge, length, splices, nets); never delete or loosen a check to make it pass."
-        text += "\n\nThe image is the harness diagram: failing wires and connectors are outlined red, warnings amber, and the failing checks are listed under it. Check it against the request before finishing."
+                ". " + dom.ATTENTION_HINT
+        text += "\n\n" + dom.REVIEW_HINT
         return ToolResult(_truncate(text), images=[res.image] if res.image else [])
 
     def _run_render(self, out_png: Path, args: list[str]) -> tuple[bool, str]:
@@ -553,4 +591,4 @@ def _truncate(text: str, limit: int = MAX_TEXT) -> str:
 
 
 TOOL_NAMES = ["build_model", "edit_model", "set_params", "read_model", "inspect", "view", "library", "export",
-              "design_notes", "harness_reference"]
+              "design_notes", "harness_reference", "mechanism_reference", "pneumatics_reference", "firmware_reference"]

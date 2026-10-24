@@ -9,6 +9,19 @@ from ..project import Project
 _HERE = Path(__file__).parent
 
 
+def domain_prompt_text(kind: str) -> str:
+    """The behaviour prompt of a non-CAD domain (<kind>_prompt.md)."""
+    return (_HERE / f"{kind}_prompt.md").read_text(encoding="utf-8").strip()
+
+
+def domain_reference_text(kind: str, fill: dict[str, str] | None = None) -> str:
+    """A domain's reference (<kind>_ref.md), with {{PLACEHOLDER}} tables filled in from the code so they cannot drift."""
+    text = (_HERE / f"{kind}_ref.md").read_text(encoding="utf-8")
+    for key, value in (fill or {}).items():
+        text = text.replace("{{" + key + "}}", value)
+    return text.strip()
+
+
 def harness_reference_text() -> str:
     """The wire-harness reference (the connector catalog filled in from the code, so it cannot drift)."""
     from ..harness.catalog import catalog_table
@@ -18,10 +31,12 @@ def harness_reference_text() -> str:
 def system_prompt(project: Project | None = None, include_reference: bool = True) -> str:
     from .library_docs import catalog
 
-    if project is not None and project.kind == "harness":      # the other domain: no CAD reference, the harness one instead
-        parts = [(_HERE / "harness_prompt.md").read_text(encoding="utf-8").strip()]
+    if project is not None and project.kind != "cad":          # another domain: no CAD reference, its own prompt and reference
+        from ..domains import module
+        dom = module(project.kind)
+        parts = [dom.prompt_text()]
         if include_reference:
-            parts.append(harness_reference_text())
+            parts.append(dom.reference_text())
         notes = project.design_notes_path
         if notes.exists() and notes.read_text(encoding="utf-8").strip():
             parts.append("# Project design notes (DESIGN.md)\n\n" + notes.read_text(encoding="utf-8").strip())

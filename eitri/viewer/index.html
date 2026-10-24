@@ -221,6 +221,7 @@ const overlay = new THREE.Group(); scene.add(overlay);         // ghosts, sketch
 let grid = null, model = null, bbox = null, centre = new THREE.Vector3(), radius = 50, clipPlane = null;
 let faceObjs = [], edgeObjs = [], partOf = new Map(), partMeshes = {}, partNodes = {}, hidden = new Set();
 let topo = null, state = {}, currentRev = -1, loadedRev = -1, lastEvent = 0, shownPreview = 0;
+const isDomain = () => !!(state && state.kind && state.kind !== 'cad');    // a harness / mechanism / pneumatics / firmware project: its editor replaces the 3D view
 let editsInFlight = 0, buildStage = '', deferredLoad = null, lastHint = '', previewBusy = false;   // one preview load at a time: newer ones wait, never cancel it
 const pendingGroup = new THREE.Group(); scene.add(pendingGroup);   // ghosts of edits applied on screen, rebuilding
 const selected = new Set();
@@ -2597,7 +2598,7 @@ window.addEventListener('keydown', ev => {
     return;
   }
   if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 'z') { ev.preventDefault(); if (ev.shiftKey) doRedo(); else doUndo(); return; }
-  if (state && state.kind === 'harness') return;                    // a wire harness: the CAD tool keys do nothing (the harness editor has its own)
+  if (isDomain()) return;                                           // another domain: the CAD tool keys do nothing (its editor has its own)
   if (ev.key === 'Escape') {
     if (cageMode) { if (cageMode.sel.size) { cageMode.sel.clear(); endCageGizmo(); drawCage(); renderSelection(); } else endCage(); return; }
     if (sketch) {
@@ -3106,8 +3107,8 @@ function renderEdits() {
     const row = document.createElement('div'); row.className = 'edit';
     row.innerHTML = `<span class="${note && !note.ok ? 'bad' : ''}" style="flex:1">${e.index + 1}. ${e.description}${note && !note.ok ? ' — ' + escHtml(plainError(note.detail)) : ''}</span>`;
     row.style.cursor = 'pointer'; row.title = 'click: select in the timeline · double-click: edit';
-    row.firstChild.onclick = () => { if (state.kind === 'harness') { if (harnessEd) harnessEd.selectTarget((state.edits_full || [])[e.index] || {}); return; } selected.clear(); selected.add('edit:' + e.index); formOpen = null; refreshMaterials(); renderSelection(); renderTimeline(); };
-    row.firstChild.ondblclick = () => { if (state.kind === 'harness') return; selected.clear(); selected.add('edit:' + e.index); openFeatureForm(e.index); };
+    row.firstChild.onclick = () => { if (isDomain()) { if (harnessEd && harnessEd.selectTarget) harnessEd.selectTarget((state.edits_full || [])[e.index] || {}); return; } selected.clear(); selected.add('edit:' + e.index); formOpen = null; refreshMaterials(); renderSelection(); renderTimeline(); };
+    row.firstChild.ondblclick = () => { if (isDomain()) return; selected.clear(); selected.add('edit:' + e.index); openFeatureForm(e.index); };
     const b = document.createElement('button'); b.className = 'small'; b.textContent = '✕'; b.title = 'remove this edit';
     b.onclick = () => rebuildCall('edits/remove', { index: e.index }).then(r => { if (!r.ok) failNotice(r.error, 'Please remove direct edit ' + (e.index + 1)); });
     row.appendChild(b); el.appendChild(row);
@@ -3129,7 +3130,7 @@ function renderReport() {
     const changed = base && (base[c.name] === undefined || base[c.name] !== !!c.ok);
     const sev = c.severity || (c.ok ? 'pass' : 'fail');
     d.className = 'check ' + (sev === 'fail' ? 'bad' : sev === 'warn' ? 'warn' : 'ok') + (changed ? ' changed' : '');
-    if (state.kind === 'harness' && (c.refs || []).length) {      // click: highlight the wires and connectors it is about
+    if (isDomain() && (c.refs || []).length) {                    // click: highlight what the check is about
       d.classList.add('pickable'); d.title = 'click: show which wires this is about';
       d.onclick = () => { const on = harnessEd && harnessEd.highlight(c); ch.querySelectorAll('.check.hl').forEach(x => x.classList.remove('hl')); if (on) d.classList.add('hl'); };
     }
@@ -3146,7 +3147,7 @@ function renderReport() {
   $('checktitle').textContent = verdict === 'none' ? 'Checks' : fails ? `${fails} of ${checks.length} check${checks.length === 1 ? '' : 's'} failing`
     : checks.length ? `All ${checks.length} check${checks.length === 1 ? '' : 's'} pass` : 'No checks in this model';
   $('checksub').textContent = verdict === 'none' ? (state.ok_revision ? 'this model has no verify() checks yet' : 'no build yet')
-    : state.kind === 'harness' ? (warns ? `${warns} warning${warns === 1 ? '' : 's'}` : 'no warnings') + (state.ok_revision ? ` · revision ${state.ok_revision}` : '')
+    : isDomain() ? (warns ? `${warns} warning${warns === 1 ? '' : 's'}` : 'no warnings') + (state.ok_revision ? ` · revision ${state.ok_revision}` : '')
     : (issues.length ? `${issues.length} warning${issues.length === 1 ? '' : 's'} from the geometry report` : 'no warnings from the geometry report') + (state.ok_revision ? ` · revision ${state.ok_revision}` : '');
   const diff = $('checkdiff'); diff.innerHTML = '';
   if (base) {
@@ -3263,7 +3264,7 @@ async function sendChat(text, selection) {
   if (!state.has_agent) { addMsg('err', 'no agent here: start eitri with `eitri web` (or `eitri <project>`), not `eitri serve`'); return false; }
   if (agentBusy) { addMsg('err', 'Claude is still working on the previous message'); return false; }
   const images = pendingImages.map(a => a.path);
-  const sel = selection || (state.kind === 'harness' && harnessEd ? harnessEd.selectionIds() : [...selected]);
+  const sel = selection || (isDomain() && harnessEd && harnessEd.selectionIds ? harnessEd.selectionIds() : [...selected]);
   // feedback at once: your message, "getting started", Stop - before the request even returns
   pendingUser = addMsg('you', text + (sel.length ? `\n[${sel.join(', ')}]` : ''));
   agentBusy = true; lcHiddenTurn = false;
@@ -3540,19 +3541,19 @@ async function poll() {
   const again = pollAgain; pollAgain = false;
   pollSoon(again ? 50 : (agentBusy || editsInFlight ? 300 : 1200));
 }
-// ---------------------------------------------------------------- a wire-harness project: the harness editor replaces the 3D view
+// ---------------------------------------------------------------- a non-CAD project (harness, mechanism, pneumatics, firmware): its editor replaces the 3D view
 let harnessEd = null, harnessLoading = false;
 async function harnessTick(s) {
-  document.body.classList.add('harness');
+  document.body.classList.add('domain', s.kind);
   if (!harnessEd && !harnessLoading) {
     harnessLoading = true;
     try {
       const host = document.createElement('div'); host.id = 'hostharness'; $('canvas').appendChild(host);
-      const m = await import('./assets/harness.js');
-      harnessEd = m.createHarnessEditor(host, { send: e => sendEdit(e), call: (path, body) => rebuildCall(path, body), hint: t => hint(t) });
-      window.__harness = harnessEd;
+      const m = await import(`./assets/${s.kind}.js`);
+      harnessEd = (m.createHarnessEditor || m.createEditor)(host, { send: e => sendEdit(e), call: (path, body) => rebuildCall(path, body), hint: t => hint(t) });
+      window.__harness = harnessEd; window.__domain = harnessEd;
       hideLoading();
-    } catch (e) { window.__eitriProblem('the harness editor could not start: ' + e.message); }
+    } catch (e) { window.__eitriProblem('the ' + s.kind + ' editor could not start: ' + e.message); }
     harnessLoading = false;
   }
   if (harnessEd) harnessEd.update(s);
@@ -3574,7 +3575,7 @@ async function pollOnce() {
     const pv = s.preview, building = agentBusy || editsInFlight > 0;
     const stage = s.building ? s.building.stage : '';
     if (stage !== buildStage) { buildStage = stage; renderPending(); }
-    if (s.kind === 'harness') {
+    if (s.kind && s.kind !== 'cad') {
       harnessTick(s);
     } else if (pv && building && pv.ts !== shownPreview && !previewBusy) {   // new geometry from a build still being checked
       shownPreview = pv.ts;                                    // (an assembly: the parts meshed so far)
