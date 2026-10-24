@@ -4,6 +4,7 @@ inspector, connectors are dragged, a failing check highlights its wires, and eve
 from __future__ import annotations
 
 import json
+import time
 
 import pytest
 
@@ -35,7 +36,11 @@ def _state(page):
 
 def _until(page, predicate: str):
     """Wait until the server's state satisfies a JS predicate on it (`s => ...`), then let the page's poll redraw."""
-    page.wait_for_function(f"() => fetch('/state.json').then(r => r.json()).then(s => !!({predicate})(s))", timeout=60000)
+    # poll with evaluate (it awaits the fetch); wait_for_function would take the returned Promise itself as truthy
+    deadline = time.time() + 60
+    while not page.evaluate(f"() => fetch('/state.json').then(r => r.json()).then(s => !!({predicate})(s))"):
+        assert time.time() < deadline, f"the state never satisfied {predicate}"
+        page.wait_for_timeout(150)
     page.wait_for_timeout(900)
     return _state(page)
 

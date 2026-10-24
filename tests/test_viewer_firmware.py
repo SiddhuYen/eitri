@@ -3,6 +3,7 @@ board is switched from the pinout table, the code panes are read-only, and a fai
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -20,7 +21,11 @@ def _state(page):
 
 
 def _until(page, predicate: str):
-    page.wait_for_function(f"() => fetch('/state.json').then(r => r.json()).then(s => !!({predicate})(s))", timeout=90000)
+    # poll with evaluate (it awaits the fetch); wait_for_function would take the returned Promise itself as truthy
+    deadline = time.time() + 90
+    while not page.evaluate(f"() => fetch('/state.json').then(r => r.json()).then(s => !!({predicate})(s))"):
+        assert time.time() < deadline, f"the state never satisfied {predicate}"
+        page.wait_for_timeout(150)
     page.wait_for_timeout(900)
     return _state(page)
 
