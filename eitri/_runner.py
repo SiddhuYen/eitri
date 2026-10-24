@@ -58,6 +58,14 @@ def main(argv: list[str] | None = None) -> int:
     except Exception:
         result["error"] = _clean_traceback(traceback.format_exc(), model_path)
         return finish(1)
+    from .harness.model import Harness
+    if isinstance(parts, Harness):                      # the other domain: a wire harness has no geometry
+        result["build_seconds"] = round(time.time() - t0, 2)
+        result["timings"] = {"build": result["build_seconds"]}
+        from .harness import build as harness_build
+        harness_build.run(model, parts, model_path, out_dir, result, stage, _clean_traceback, render=not args.no_render)
+        result["ok"] = result["error"] is None
+        return finish(0 if result["ok"] else 1)
     if args.max_parts and len(parts) > args.max_parts:
         result["error"] = (f"the model has {len(parts)} parts; this deployment allows at most {args.max_parts} per assembly "
                            "(combine parts, or build the assembly in smaller projects)")

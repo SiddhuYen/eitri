@@ -32,6 +32,9 @@ class BuildResult:
     seconds: float = 0.0
     build_seconds: float = 0.0
     edit_notes: list = field(default_factory=list)
+    kind: str = "cad"                      # "cad" or "harness"
+    harness_report: dict | None = None     # a harness build's report (checks, nets) as data; report stays None
+    harness: dict | None = None            # a harness build's connectors / wires / nets / layout, for the editor
 
     @property
     def image(self) -> str | None:
@@ -91,12 +94,15 @@ def build_model(model_path: str | Path, out_dir: str | Path, params: Mapping[str
     seconds = time.time() - t0
     if result_file.exists() and result_file.stat().st_mtime_ns != before:
         data = json.loads(result_file.read_text(encoding="utf-8"))
-        report = _report_from_dict(data["report"]) if data.get("report") else None
+        is_harness = data.get("kind") == "harness"
+        report = _report_from_dict(data["report"]) if data.get("report") and not is_harness else None
         return BuildResult(
             ok=bool(data.get("ok")), model_path=str(model_path), out_dir=str(out_dir),
             params=data.get("params", {}), outputs=data.get("outputs", {}), report=report,
             summary=data.get("summary", ""), error=data.get("error"), stdout=stdout, stderr=stderr,
             seconds=seconds, build_seconds=data.get("build_seconds", 0.0), edit_notes=data.get("edit_notes", []),
+            kind="harness" if is_harness else "cad", harness_report=data.get("report") if is_harness else None,
+            harness=data.get("harness") if is_harness else None,
         )
     # the runner died before writing a result (crash, import error)
     tail = (stderr or stdout).strip().splitlines()[-25:]

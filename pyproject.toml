@@ -9,7 +9,7 @@ description = "A local AI CAD agent: describe a part, Claude models it in build1
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
 license = { file = "LICENSE.md" }
-keywords = ["cad", "build123d", "opencascade", "claude", "3d-printing", "step"]
+keywords = ["cad", "build123d", "opencascade", "claude", "3d-printing", "step", "wire-harness"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Topic :: Scientific/Engineering :: Computer Aided Design",
@@ -47,7 +47,7 @@ eitri = [
   "viewer/*.html", "viewer/*.js", "viewer/vendor/**/*",
   "web/*.html", "web/*.css", "web/*.js", "web/assets/**/*",
   "agent/*.md", "lib/*.md",
-  "demos/*/demo.json", "demos/*/project.tar.xz",
+  "demos/*/demo.json", "demos/*/project.tar.xz", "demos/*/*.py",
 ]
 
 [tool.pytest.ini_options]

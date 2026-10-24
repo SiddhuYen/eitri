@@ -52,7 +52,13 @@ def _python_job(model: Path, code: str, out: Path) -> int:
     with contextlib.redirect_stdout(buf):
         try:
             m = load_model(model)
-            scope.update(p=m.params, parts=(parts := m.build()), model=parts.compound, eitri=eitri)
+            built = m.build()
+            from eitri.harness.model import Harness
+            if isinstance(built, Harness):
+                from eitri.harness.inspect import harness_scope
+                scope.update(harness_scope(built, m.params))
+            else:
+                scope.update(p=m.params, parts=built, model=built.compound, eitri=eitri)
             exec(compile(code, "<inspect>", "exec"), scope)
         except Exception:
             traceback.print_exc(file=buf)
