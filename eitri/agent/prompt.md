@@ -217,4 +217,12 @@ not `from eitri import *`), the connector catalog and worked examples. The model
 `build(p)`, `verify`), but `build(p)` returns a `Harness`, and every build returns connectivity / ampacity / voltage-drop
 checks and a diagram as the review image instead of a geometry report.
 
+**Three more domains, each its own model file and reference.** A *mechanism* (an arm, a pan-tilt, a gripper: links, joints,
+actuators, targets, graded for torque, speed, limits and reach): call `mechanism_reference()` first; the file starts
+`from eitri.mechanism import *`. A *pneumatic circuit* (cylinders, valves, FRL, tubing, graded for force, air consumption, ISO 6358
+flow sizing, pressure drop and circuit validity): `pneumatics_reference()`, `from eitri.pneumatics import *`. *Firmware* for a
+microcontroller (a board, a pinout table, peripherals and the source files, checked statically and compiled headless with
+arduino-cli): `firmware_reference()`, `from eitri.firmware import *`. Each has the same contract (`PARAMS`, `build(p)`, `verify`),
+its own checks in place of the geometry report, and its own review image.
+
 Work efficiently: one good build beats five sloppy ones. Two hard rules: never finish with failing checks, and never finish without having looked at the latest build's review image (Read it when the result gives a path) - the report cannot see a feature on the wrong face, a floating body or a shape that is simply not what was asked.

@@ -179,6 +179,8 @@ def _flatten(pts, n: int = 28) -> list[tuple[float, float]]:
 
 
 def _hex_rgb(h: str, alpha: float = 1.0, bg=(255, 255, 255)):
+    if not h or h == "none":
+        return None
     h = h.lstrip("#")
     c = tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
     return tuple(round(c[i] * alpha + bg[i] * (1 - alpha)) for i in range(3))
@@ -204,7 +206,7 @@ def scene_to_png(scene: Scene, path) -> str:
                 continue
             box = [it["x"] * SS, it["y"] * SS, (it["x"] + it["w"]) * SS, (it["y"] + it["h"]) * SS]
             fill = _hex_rgb(it["fill"], it.get("alpha_fill", 1.0))
-            outline = None if it["stroke"] == "none" else _hex_rgb(it["stroke"])
+            outline = _hex_rgb(it["stroke"])
             if it.get("rx", 0) > 0:
                 d.rounded_rectangle(box, radius=it["rx"] * SS, fill=fill, outline=outline, width=max(1, round(it["sw"] * SS)))
             else:
@@ -212,14 +214,21 @@ def scene_to_png(scene: Scene, path) -> str:
         elif t == "text":
             f = font(it["size"], it.get("weight") == "700")
             anchor = {"middle": "ms", "end": "rs"}.get(it.get("anchor"), "ls")
-            d.text((it["x"] * SS, it["y"] * SS), str(it["s"]), font=f, fill=_hex_rgb(it["fill"]), anchor=anchor,
+            d.text((it["x"] * SS, it["y"] * SS), str(it["s"]), font=f, fill=_hex_rgb(it["fill"]) or (0, 0, 0), anchor=anchor,
                    stroke_width=1 if it.get("weight") == "700" and SS >= 3 else 0)
         elif t == "line":
-            _line(d, [(it["x1"] * SS, it["y1"] * SS), (it["x2"] * SS, it["y2"] * SS)], _hex_rgb(it["stroke"]), it["sw"] * SS, it.get("dash"))
+            if _hex_rgb(it["stroke"]):
+                _line(d, [(it["x1"] * SS, it["y1"] * SS), (it["x2"] * SS, it["y2"] * SS)], _hex_rgb(it["stroke"]), it["sw"] * SS, it.get("dash"))
         elif t == "circle":
             r = it["r"] * SS
-            d.ellipse([it["cx"] * SS - r, it["cy"] * SS - r, it["cx"] * SS + r, it["cy"] * SS + r], fill=_hex_rgb(it["fill"]),
-                      outline=_hex_rgb(it["stroke"]), width=max(1, round(it["sw"] * SS)))
+            box = [it["cx"] * SS - r, it["cy"] * SS - r, it["cx"] * SS + r, it["cy"] * SS + r]
+            if it.get("dash") and _hex_rgb(it["stroke"]):                     # a dashed circle: short arcs
+                for k in range(0, 360, 20):
+                    d.arc(box, k, k + 10, fill=_hex_rgb(it["stroke"]), width=max(1, round(it["sw"] * SS)))
+                if _hex_rgb(it["fill"]):
+                    d.ellipse(box, fill=_hex_rgb(it["fill"]))
+            else:
+                d.ellipse(box, fill=_hex_rgb(it["fill"]), outline=_hex_rgb(it["stroke"]), width=max(1, round(it["sw"] * SS)))
         elif t == "polyline":
             pts = [(x * SS, y * SS) for x, y in it["pts"]]
             if it.get("fill") and it["fill"] != "none":
@@ -232,7 +241,8 @@ def scene_to_png(scene: Scene, path) -> str:
             if it.get("alpha", 1.0) == 0.0:
                 continue
             col = _hex_rgb(it["stroke"], it.get("alpha", 1.0))
-            _line(d, [(x * SS, y * SS) for x, y in _flatten(it["pts"])], col, it["sw"] * SS, it.get("dash"))
+            if col:
+                _line(d, [(x * SS, y * SS) for x, y in _flatten(it["pts"])], col, it["sw"] * SS, it.get("dash"))
     img = img.resize((round(scene.width * OUT), round(scene.height * OUT)), Image.LANCZOS)
     img.save(str(path), "PNG")
     return str(path)

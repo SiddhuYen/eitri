@@ -44,6 +44,9 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                       "required": ["formats"]}},
     {"name": "harness_reference", "description": Tools.harness_reference.__doc__,
      "input_schema": {"type": "object", "properties": {}}},
+    {"name": "mechanism_reference", "description": Tools.mechanism_reference.__doc__, "input_schema": {"type": "object", "properties": {}}},
+    {"name": "pneumatics_reference", "description": Tools.pneumatics_reference.__doc__, "input_schema": {"type": "object", "properties": {}}},
+    {"name": "firmware_reference", "description": Tools.firmware_reference.__doc__, "input_schema": {"type": "object", "properties": {}}},
     {"name": "design_notes", "description": Tools.design_notes.__doc__,
      "input_schema": {"type": "object", "properties": {"content": {"type": "string"}}, "required": ["content"]}},
 ]

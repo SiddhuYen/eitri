@@ -57,7 +57,14 @@ def available() -> tuple[str, ...]:
     """The domains whose package is installed (a build must not fail because one is missing)."""
     global _AVAILABLE
     if _AVAILABLE is None:
-        _AVAILABLE = tuple(k for k in KINDS if importlib.util.find_spec(f"eitri.{k}") is not None)
+        found = []
+        for k in KINDS:
+            try:
+                if importlib.util.find_spec(f"eitri.{k}.domain") is not None:
+                    found.append(k)
+            except (ImportError, ValueError):            # a folder that is not a package (a domain being written)
+                continue
+        _AVAILABLE = tuple(found)
     return _AVAILABLE
 
 

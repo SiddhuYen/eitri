@@ -80,6 +80,18 @@ def make_server(project: Project, quality: float = 1.0) -> MCPServer:
     def harness_reference() -> str:
         return tools.harness_reference().text
 
+    @server.tool(description=Tools.mechanism_reference.__doc__)
+    def mechanism_reference() -> str:
+        return tools.mechanism_reference().text
+
+    @server.tool(description=Tools.pneumatics_reference.__doc__)
+    def pneumatics_reference() -> str:
+        return tools.pneumatics_reference().text
+
+    @server.tool(description=Tools.firmware_reference.__doc__)
+    def firmware_reference() -> str:
+        return tools.firmware_reference().text
+
     @server.tool(description=Tools.cam.__doc__)
     def cam(ops: list | str | None = None, part: str | None = None, post: str = "grbl", material: str | None = None, safe_z: float = 5.0) -> list[Any]:
         return _content(tools.cam(ops, part, post, material, safe_z))
