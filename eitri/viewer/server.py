@@ -49,6 +49,7 @@ def _state(project: Project, hub=None, home: str | None = None) -> dict:
     report = None
     edit_notes: list = []
     joints: list = []
+    harness: dict | None = None
     groups: dict = {}
     sheets: dict = {}
     flats: dict = {}
@@ -66,6 +67,7 @@ def _state(project: Project, hub=None, home: str | None = None) -> dict:
                 sheets = data.get("sheets", {}) or {}
                 flats = data.get("flats", {}) or {}
                 forms = data.get("forms", {}) or {}
+                harness = data.get("harness") if data.get("kind") == "harness" else None
             except Exception:
                 report = None
         if report:
@@ -76,6 +78,9 @@ def _state(project: Project, hub=None, home: str | None = None) -> dict:
     edits = project.edits()
     return {
         "name": project.name,
+        "kind": project.kind,
+        "harness": harness,
+        "net_stats": (report or {}).get("nets", []) if harness else [],
         "revision": revision,
         "ok_revision": rev.number if rev else 0,
         "last_ok": bool(last and last.ok),
@@ -113,6 +118,14 @@ def _state(project: Project, hub=None, home: str | None = None) -> dict:
         "replaying": bool(hub is not None and getattr(hub, "_guest", None) is not None),
         "last_event": hub.last_event_id if hub is not None else 0,
     }
+
+
+HARNESS_DOWNLOADS = {                      # /download?fmt=...: a harness build's shop outputs
+    "svg": ("svg", "image/svg+xml", ".harness.svg"), "png": ("png", "image/png", ".png"),
+    "bom": ("csv", "text/csv", ".bom.csv"), "bom_md": ("bom_md", "text/markdown", ".bom.md"),
+    "cutlist": ("cutlist_csv", "text/csv", ".cutlist.csv"), "cutlist_md": ("cutlist_md", "text/markdown", ".cutlist.md"),
+    "wireviz": ("wireviz", "text/yaml", ".wireviz.yaml"),
+}
 
 
 def _bearings() -> list[str]:
@@ -226,8 +239,18 @@ def make_handler(project: Project, lock: threading.Lock, hub=None, home: str | N
                 self._file_from_rev("glb", "model/gltf-binary")
             elif path == "/image.png":
                 self._file_from_rev("png", "image/png")
+            elif path == "/harness.svg":                       # the wire-harness diagram the editor draws
+                self._file_from_rev("svg", "image/svg+xml")
             elif path == "/model.py":
                 self._send(200, (project.read_model() or "").encode(), "text/plain; charset=utf-8")
+            elif path == "/download" and project.kind == "harness" and (params.get("fmt") or "").lower() in HARNESS_DOWNLOADS:
+                key, ctype, suffix = HARNESS_DOWNLOADS[(params.get("fmt") or "").lower()]
+                rev = project.last_ok_revision()
+                f = Path(rev.outputs[key]) if rev and rev.outputs.get(key) else None
+                if f and f.is_file():
+                    self._send(200, f.read_bytes(), ctype, filename=f"{project.name}{suffix}")
+                else:
+                    self._send(404, b"not built yet", "text/plain")
             elif path == "/download":
                 fmt = (params.get("fmt") or "step").lower()
                 if fmt in ("gcode", "cut", "bed"):                  # manufacturing outputs written by /cam, cut files, the print plate
@@ -447,6 +470,15 @@ def make_handler(project: Project, lock: threading.Lock, hub=None, home: str | N
                         old = project.edits()
                         new = project.add_edit(edit)
                         self._json(self._build_edits(old, "viewer: " + describe(edit), len(new) - 1))
+                elif path == "/harness/layout":                   # connectors dragged in the harness editor: layout hints
+                    positions = payload.get("positions") or {}
+                    if not isinstance(positions, dict) or not positions:
+                        self._json({"ok": False, "error": "send positions: {name: [x, y]}"}, 400)
+                        return
+                    with lock:
+                        project.set_layout(positions)
+                        res = project.build(note="viewer: move " + ", ".join(positions), render=False)
+                    self._json({"ok": res.ok, "error": res.error, "state": _st()})
                 elif path == "/edits/update":
                     from ..edits import describe
                     index, edit = int(payload["index"]), dict(payload["edit"])

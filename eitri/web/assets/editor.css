@@ -351,3 +351,73 @@ body.readonly .sec[data-sec=manufacture], body.readonly .sec[data-sec=drawing], 
 .vpick.compact { gap: 1px; padding: 2px; }
 .vpick.compact .vp { width: 26px; height: 26px; }
 .vpick.compact .vp-ic { width: 18px; height: 18px; }
+
+/* ---------------------------------------------------------------- the wire-harness editor (assets/harness.js)
+   A harness project replaces the 3D view with the diagram; the side panel keeps the checks, chat, parameters,
+   direct edits, revisions and report, and drops what only makes sense for geometry. */
+body.harness #tools, body.harness .viewcube-wrap, body.harness #views, body.harness #hover, body.harness #band, body.harness #labels,
+body.harness #selpanel, body.harness #timeline, body.harness #canvas > canvas { display: none !important; }
+body.harness [data-sec="parts"], body.harness [data-sec="manufacture"], body.harness [data-sec="drawing"], body.harness [data-sec="display"],
+body.harness [data-sec="keys"], body.harness #jointsec, body.harness #bomsec { display: none !important; }
+body.harness #canvas { cursor: default; }
+.check.warn .ic { color: var(--warn); } .check.changed.warn { background: var(--warn-soft); }
+.check.pickable { cursor: pointer; } .check.pickable:hover { background: var(--raised-2); }
+.check.hl { background: var(--accent-soft); outline: 1px solid var(--accent); }
+
+#hostharness { position: absolute; inset: 0; z-index: 6; }
+#hedit { position: absolute; inset: 0; display: flex; flex-direction: column; background: var(--bg); }
+#hedit .htools { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--panel); flex: none; }
+#hedit .hhint { color: var(--muted); font-size: var(--t-xs); margin-left: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#hedit .hdl { color: var(--muted); font-size: var(--t-xs); white-space: nowrap; }
+#hedit .hdl a { color: var(--fg-2); margin-left: 8px; }
+#hedit .hstage { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; cursor: grab;
+  background: radial-gradient(ellipse at 50% 40%, #1a2029 0%, #12161c 60%, #0b0e12 100%); }
+:root[data-theme="light"] #hedit .hstage { background: #e9ecf0; }
+#hedit .hstage.wiring { cursor: crosshair; }
+#hedit .hpaper { position: absolute; left: 0; top: 0; transform-origin: 0 0; box-shadow: var(--shadow-2); border-radius: 6px; overflow: hidden; background: #fff; user-select: none; }
+#hedit .hpaper svg { display: block; }
+#hedit .hempty { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; color: var(--muted); }
+#hedit .hpaper g[data-kind="conn"], #hedit .hpaper g[data-kind="splice"] { cursor: move; }
+#hedit .hpaper g[data-kind="wire"] { cursor: pointer; }
+#hedit .hstage.wiring .hpaper g { cursor: crosshair; }
+#hedit .hpaper path.hit { pointer-events: stroke; }
+#hedit .hpaper .pinhit { pointer-events: all; }
+#hedit .hstage.wiring .pinhit:hover, #hedit .pinhit.pick { fill: #ff8a3d; fill-opacity: .25; }
+#hedit .hpaper g.pick .box { stroke: #ff8a3d; stroke-width: 2.4; }
+#hedit .hpaper g.wire:hover .edge { stroke: #2563eb; }
+#hedit .hpaper g.sel.wire .edge { stroke: #2563eb; stroke-width: 7; }
+#hedit .hpaper g.sel.conn .box { stroke: #2563eb; stroke-width: 2.6; }
+#hedit .hpaper g.sel.splice circle { stroke: #2563eb; stroke-width: 3; }
+#hedit .hpaper svg.dimmed g[data-kind] { opacity: .2; transition: opacity .15s; }
+#hedit .hpaper svg.dimmed g.hl { opacity: 1; }
+#hedit .hpaper g.hl.wire .edge { stroke: #d92d20; stroke-width: 8; }
+#hedit .hpaper g.hl.conn .box { stroke: #d92d20; stroke-width: 3; }
+#hedit .hpaper g.hl.splice circle { stroke: #d92d20; stroke-width: 4; }
+
+#hedit .hinspector { position: absolute; right: 12px; top: 52px; width: 292px; max-height: calc(100% - 68px); overflow: auto; z-index: 3; }
+#hedit .hinspector:empty { display: none; }
+#hedit .hp { background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r2); box-shadow: var(--shadow-2); padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 7px; font-size: var(--t-sm); }
+#hedit .hh { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+#hedit .hh b { font-size: var(--t-md); color: var(--fg); }
+#hedit .hsub { color: var(--muted); font-size: var(--t-xs); line-height: 1.4; }
+#hedit .hf { display: grid; grid-template-columns: 92px 1fr; align-items: center; gap: 8px; }
+#hedit .hf > span { color: var(--muted); font-size: var(--t-xs); }
+#hedit .hf input, #hedit .hf select { width: 100%; min-width: 0; }
+#hedit .hrow { display: flex; gap: 4px; align-items: center; min-width: 0; } #hedit .hrow select { flex: 1; min-width: 0; padding: 0 2px; }
+#hedit .hsw { flex: none; width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--line-2); }
+#hedit .hchecks { display: flex; flex-direction: column; gap: 4px; }
+#hedit .hc { font-size: var(--t-xs); border-radius: var(--r1); padding: 4px 6px; line-height: 1.35; }
+#hedit .hc span { color: var(--muted); font-family: var(--font-mono); }
+#hedit .hc.fail { background: var(--bad-soft); } #hedit .hc.fail b { color: var(--bad); }
+#hedit .hc.warn { background: var(--warn-soft); } #hedit .hc.warn b { color: var(--warn); }
+#hedit .hc.pass b { color: var(--ok); }
+#hedit button.danger { color: var(--bad); border-color: var(--bad-soft); align-self: flex-start; }
+#hedit .hpins { display: flex; flex-direction: column; gap: 3px; }
+#hedit .hph, #hedit .hpr { display: grid; grid-template-columns: 56px 1fr 26px 26px; gap: 5px; align-items: center; }
+#hedit .hph { color: var(--muted); font-size: var(--t-xs); }
+#hedit .hpr input[type=text] { height: 24px; width: 100%; min-width: 0; padding: 0 5px; }
+#hedit .hnets { display: flex; flex-direction: column; gap: 4px; }
+#hedit .hnh, #hedit .hnr { display: grid; grid-template-columns: 1fr 50px 50px 56px 52px; gap: 4px; align-items: center; }
+#hedit .hnh { color: var(--muted); font-size: var(--t-xs); }
+#hedit .hnr input { height: 24px; width: 100%; padding: 0 4px; min-width: 0; }
+#hedit .hdrop { font-family: var(--font-mono); font-size: var(--t-xs); } #hedit .hdrop.pass { color: var(--ok); } #hedit .hdrop.fail { color: var(--bad); }

@@ -2597,6 +2597,7 @@ window.addEventListener('keydown', ev => {
     return;
   }
   if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 'z') { ev.preventDefault(); if (ev.shiftKey) doRedo(); else doUndo(); return; }
+  if (state && state.kind === 'harness') return;                    // a wire harness: the CAD tool keys do nothing (the harness editor has its own)
   if (ev.key === 'Escape') {
     if (cageMode) { if (cageMode.sel.size) { cageMode.sel.clear(); endCageGizmo(); drawCage(); renderSelection(); } else endCage(); return; }
     if (sketch) {
@@ -2845,6 +2846,15 @@ function describeEditIntent(e) {
     case 'hole': return `add a hole${on}`;
     case 'move': return `move ${e.part || 'the part'} by ${v(e.delta)}`;
     case 'delete_faces': return `remove the selected feature${on}`;
+    case 'set_wire': return `change wire ${e.wire}: ` + ['gauge', 'color', 'length_mm', 'net', 'current_A', 'label'].filter(k => k in e).map(k => `${k} = ${e[k]}`).join(', ');
+    case 'set_connector': return `change connector ${e.connector}: ` + ['name', 'type', 'part_number', 'gender', 'rating_a'].filter(k => k in e).map(k => `${k} = ${e[k]}`).join(', ');
+    case 'rename_pin': return `rename pin ${e.connector}.${e.pin} to ${e.to || e.pin}`;
+    case 'add_pin': return `add pin ${e.pin} to ${e.connector}`;
+    case 'remove_pin': return `remove pin ${e.pin} from ${e.connector}`;
+    case 'add_wire': return `add a wire from ${e.a} to ${e.b}`;
+    case 'remove_wire': return `remove wire ${e.wire}`;
+    case 'set_net': return `change net ${e.net}`;
+    case 'nc': return `mark ${e.pin} ${e.nc === false ? 'connected' : 'not connected'}`;
     default: return `apply a ${String(e.op || 'direct').replace(/_/g, ' ')} edit${on}`;
   }
 }
@@ -3096,8 +3106,8 @@ function renderEdits() {
     const row = document.createElement('div'); row.className = 'edit';
     row.innerHTML = `<span class="${note && !note.ok ? 'bad' : ''}" style="flex:1">${e.index + 1}. ${e.description}${note && !note.ok ? ' — ' + escHtml(plainError(note.detail)) : ''}</span>`;
     row.style.cursor = 'pointer'; row.title = 'click: select in the timeline · double-click: edit';
-    row.firstChild.onclick = () => { selected.clear(); selected.add('edit:' + e.index); formOpen = null; refreshMaterials(); renderSelection(); renderTimeline(); };
-    row.firstChild.ondblclick = () => { selected.clear(); selected.add('edit:' + e.index); openFeatureForm(e.index); };
+    row.firstChild.onclick = () => { if (state.kind === 'harness') { if (harnessEd) harnessEd.selectTarget((state.edits_full || [])[e.index] || {}); return; } selected.clear(); selected.add('edit:' + e.index); formOpen = null; refreshMaterials(); renderSelection(); renderTimeline(); };
+    row.firstChild.ondblclick = () => { if (state.kind === 'harness') return; selected.clear(); selected.add('edit:' + e.index); openFeatureForm(e.index); };
     const b = document.createElement('button'); b.className = 'small'; b.textContent = '✕'; b.title = 'remove this edit';
     b.onclick = () => rebuildCall('edits/remove', { index: e.index }).then(r => { if (!r.ok) failNotice(r.error, 'Please remove direct edit ' + (e.index + 1)); });
     row.appendChild(b); el.appendChild(row);
@@ -3117,20 +3127,26 @@ function renderReport() {
   for (const c of checks) {
     const d = document.createElement('div');
     const changed = base && (base[c.name] === undefined || base[c.name] !== !!c.ok);
-    d.className = 'check ' + (c.ok ? 'ok' : 'bad') + (changed ? ' changed' : '');
-    d.innerHTML = `<span class="ic">${icon(c.ok ? 'circle-check' : 'circle-x', 'sm')}</span><span><span class="nm">${escHtml(c.name)}</span><br><span class="vl">${escHtml(String(c.measured ?? ''))}${c.expected ? ' · expected ' + escHtml(String(c.expected)) : ''}</span></span>`;
+    const sev = c.severity || (c.ok ? 'pass' : 'fail');
+    d.className = 'check ' + (sev === 'fail' ? 'bad' : sev === 'warn' ? 'warn' : 'ok') + (changed ? ' changed' : '');
+    if (state.kind === 'harness' && (c.refs || []).length) {      // click: highlight the wires and connectors it is about
+      d.classList.add('pickable'); d.title = 'click: show which wires this is about';
+      d.onclick = () => { const on = harnessEd && harnessEd.highlight(c); ch.querySelectorAll('.check.hl').forEach(x => x.classList.remove('hl')); if (on) d.classList.add('hl'); };
+    }
+    d.innerHTML = `<span class="ic">${icon(sev === 'warn' ? 'triangle-alert' : c.ok ? 'circle-check' : 'circle-x', 'sm')}</span><span><span class="nm">${escHtml(c.name)}</span><br><span class="vl">${escHtml(String(c.measured ?? ''))}${c.expected ? ' · expected ' + escHtml(String(c.expected)) : ''}</span></span>`;
     d.textContent.length; ch.appendChild(d);
   }
   const is = $('issues'); is.innerHTML = '';
   if (state.last_ok === false && state.last_error) { const d = document.createElement('div'); d.className = 'issue'; d.style.background = 'var(--bad-soft)'; d.innerHTML = `<span class="ic" style="color:var(--bad)">${icon('octagon-alert', 'sm')}</span><span>The latest build failed: ${escHtml(plainError(state.last_error, 'the model code raised an error (Claude can fix it, or see the code panel)'))}</span>`; is.appendChild(d); }
   for (const i of issues) { const d = document.createElement('div'); d.className = 'issue'; d.innerHTML = `<span class="ic">${icon('triangle-alert', 'sm')}</span><span>${escHtml(i)}</span>`; is.appendChild(d); }
-  const fails = checks.filter(c => !c.ok).length, card = $('checkcard');
+  const fails = checks.filter(c => !c.ok).length, warns = checks.filter(c => c.severity === 'warn').length, card = $('checkcard');
   const verdict = !checks.length && !issues.length ? 'none' : (fails || state.last_ok === false) ? 'fail' : 'pass';
   card.classList.remove('pass', 'fail', 'none'); card.classList.add(verdict);
   $('checkicon').innerHTML = icon(verdict === 'pass' ? 'shield-check' : verdict === 'fail' ? 'circle-x' : 'list-checks');
   $('checktitle').textContent = verdict === 'none' ? 'Checks' : fails ? `${fails} of ${checks.length} check${checks.length === 1 ? '' : 's'} failing`
     : checks.length ? `All ${checks.length} check${checks.length === 1 ? '' : 's'} pass` : 'No checks in this model';
   $('checksub').textContent = verdict === 'none' ? (state.ok_revision ? 'this model has no verify() checks yet' : 'no build yet')
+    : state.kind === 'harness' ? (warns ? `${warns} warning${warns === 1 ? '' : 's'}` : 'no warnings') + (state.ok_revision ? ` · revision ${state.ok_revision}` : '')
     : (issues.length ? `${issues.length} warning${issues.length === 1 ? '' : 's'} from the geometry report` : 'no warnings from the geometry report') + (state.ok_revision ? ` · revision ${state.ok_revision}` : '');
   const diff = $('checkdiff'); diff.innerHTML = '';
   if (base) {
@@ -3247,7 +3263,7 @@ async function sendChat(text, selection) {
   if (!state.has_agent) { addMsg('err', 'no agent here: start eitri with `eitri web` (or `eitri <project>`), not `eitri serve`'); return false; }
   if (agentBusy) { addMsg('err', 'Claude is still working on the previous message'); return false; }
   const images = pendingImages.map(a => a.path);
-  const sel = selection || [...selected];
+  const sel = selection || (state.kind === 'harness' && harnessEd ? harnessEd.selectionIds() : [...selected]);
   // feedback at once: your message, "getting started", Stop - before the request even returns
   pendingUser = addMsg('you', text + (sel.length ? `\n[${sel.join(', ')}]` : ''));
   agentBusy = true; lcHiddenTurn = false;
@@ -3524,6 +3540,28 @@ async function poll() {
   const again = pollAgain; pollAgain = false;
   pollSoon(again ? 50 : (agentBusy || editsInFlight ? 300 : 1200));
 }
+// ---------------------------------------------------------------- a wire-harness project: the harness editor replaces the 3D view
+let harnessEd = null, harnessLoading = false;
+async function harnessTick(s) {
+  document.body.classList.add('harness');
+  if (!harnessEd && !harnessLoading) {
+    harnessLoading = true;
+    try {
+      const host = document.createElement('div'); host.id = 'hostharness'; $('canvas').appendChild(host);
+      const m = await import('./assets/harness.js');
+      harnessEd = m.createHarnessEditor(host, { send: e => sendEdit(e), call: (path, body) => rebuildCall(path, body), hint: t => hint(t) });
+      window.__harness = harnessEd;
+      hideLoading();
+    } catch (e) { window.__eitriProblem('the harness editor could not start: ' + e.message); }
+    harnessLoading = false;
+  }
+  if (harnessEd) harnessEd.update(s);
+  if (s.ok_revision && s.ok_revision !== currentRev) {
+    currentRev = s.ok_revision;
+    $('sheet').src = 'image.png?r=' + s.ok_revision;
+    renderReport(); renderRevisions();
+  }
+}
 async function pollOnce() {
   {
     const s = await fetch('state.json').then(r => r.json());
@@ -3536,7 +3574,9 @@ async function pollOnce() {
     const pv = s.preview, building = agentBusy || editsInFlight > 0;
     const stage = s.building ? s.building.stage : '';
     if (stage !== buildStage) { buildStage = stage; renderPending(); }
-    if (pv && building && pv.ts !== shownPreview && !previewBusy) {   // new geometry from a build still being checked
+    if (s.kind === 'harness') {
+      harnessTick(s);
+    } else if (pv && building && pv.ts !== shownPreview && !previewBusy) {   // new geometry from a build still being checked
       shownPreview = pv.ts;                                    // (an assembly: the parts meshed so far)
       const key = 'p' + pv.ts; currentRev = key; previewBusy = true;
       const newTopo = await fetch(pv.topology).then(r => r.json()).catch(() => null);
