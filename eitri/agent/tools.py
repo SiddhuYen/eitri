@@ -109,6 +109,19 @@ class Tools:
             return ToolResult("No model file yet.")
         return ToolResult(code)
 
+    def harness_reference(self) -> ToolResult:
+        """The wire-harness reference: the Harness / Connector / Wire / Cable / Splice / net API, the connector
+        catalog, the checks every build runs, and three worked examples. Read it before designing a wire
+        harness or cable assembly (a model file that starts `from eitri.harness import *`)."""
+        from .prompt import harness_reference_text
+        return ToolResult(harness_reference_text())
+
+    def _cad_only(self, what: str) -> ToolResult | None:
+        if self.project.kind == "harness":
+            return ToolResult(f"{what} works on 3D geometry; this project is a wire harness. Its outputs (diagram, BOM, cut list, "
+                              "WireViz YAML) are written by every build; see `export`.", is_error=True)
+        return None
+
     # ---------------------------------------------------------------- inspect
     def inspect(self, code: str) -> ToolResult:
         """Run Python against the built model for ad-hoc measurements and print the results.
@@ -121,6 +134,12 @@ class Tools:
         faces_with_normal(shape, (0, 0, 1)), planar_faces_at(shape, "Z", 10),
         signed_volume(shape), fillet_radii(shape), mass_grams(shape, "pla").
         Anything you print is returned. The model is rebuilt from the file first.
+
+        In a wire-harness project the scope is different: `h` (the built Harness, also `parts`), `p`,
+        and nets() (every net: voltage, current, computed drop, wires), wires(net=None) (ends, gauge,
+        colour, length, current, ampacity used, drop per wire), connectors() (what is on each pin),
+        drop("BATT.+", "ESC1.+") (volts and % lost along the wires between two endpoints), lengths()
+        (wire to buy by gauge and colour) and report() (the text report again).
         """
         ok, out = self.project.run_python(code)
         text = out or "(no output)"
@@ -140,6 +159,9 @@ class Tools:
         """
         if self.project.last_ok_revision() is None and not self.project.model_path.exists():
             return ToolResult("Nothing built yet.", is_error=True)
+        if self.project.kind == "harness":                # one drawing: the diagram the build wrote
+            res = self.project.build(note="view", render=True)
+            return ToolResult(res.summary if res.ok else (res.error or "build failed"), images=[res.image] if res.image else [], is_error=not res.ok)
         args: list[str] = []
         if views:
             args += ["--views", ",".join(views)]
@@ -174,7 +196,14 @@ class Tools:
         return ToolResult(describe(query))
 
     def export(self, formats: list[str]) -> ToolResult:
-        """Export the current model to additional formats: any of step, stl, 3mf, glb."""
+        """Export the current model to additional formats: any of step, stl, 3mf, glb. A wire harness has no
+        geometry: every build already writes its diagram (svg), BOM (md + csv), cut list (md + csv) and
+        WireViz YAML, and this returns their paths."""
+        if self.project.kind == "harness":
+            res = self.project.build(note="export", render=False)
+            if not res.ok:
+                return ToolResult(f"export failed: {res.error}", is_error=True)
+            return ToolResult("Wrote:\n" + "\n".join(f"- {k}: {v}" for k, v in res.outputs.items()))
         formats = [f.lower().lstrip(".") for f in formats]
         bad = [f for f in formats if f not in ("step", "stl", "3mf", "glb")]
         if bad:
@@ -275,6 +304,8 @@ class Tools:
         vbit_90, facemill_20. post: grbl | linuxcnc. material scales the feeds (defaults to the part's).
         Writes out/<part>.gcode and out/<part>.toolpaths.png (shown) and returns the summary with the
         time estimate."""
+        if (refused := self._cad_only("cam")) is not None:
+            return refused
         from .. import cam as C
         from ..model import load_model
         try:
@@ -299,6 +330,8 @@ class Tools:
         """A 2-D cut file (laser / waterjet / plasma) of a flat part: its outlines at mid-thickness with
         half the kerf added outside and removed inside, as DXF (layers CUT_OUTER/CUT_INNER) or SVG. For a
         sheet-metal part, flat_pattern=true cuts its flat pattern instead. Writes out/<part>.cut.<fmt>."""
+        if (refused := self._cad_only("cut_file")) is not None:
+            return refused
         from .. import cam as C
         from ..model import load_model
         try:
@@ -324,6 +357,8 @@ class Tools:
         """Prepare for 3-D printing: the best of the six axis-aligned orientations per part (overhang
         area, support estimate, height, bed contact), and the parts arranged on the bed; writes the
         arranged plate as out/<name>.bed.stl and out/<name>.bed.3mf."""
+        if (refused := self._cad_only("print_prep")) is not None:
+            return refused
         from .. import additive as A
         from ..kernel import export_parts
         from ..model import Part, Parts, load_model
@@ -375,6 +410,8 @@ class Tools:
         point from the first); u, v are view mm relative to the look-at point like `at`, a negative offset
         puts the dimension below/left. A view with your own dims gets no automatic overall dimensions.
         Look at the preview: view labels sit just under each view, so keep dimensions clear of them."""
+        if (refused := self._cad_only("drawing")) is not None:
+            return refused
         from ..drawing import drawing_dxf, drawing_pdf, drawing_png, drawing_svg
         from ..model import load_model
         views = tuple(views or ("front", "top", "right", "iso"))
@@ -421,6 +458,8 @@ class Tools:
         self.on_event("build_end", {"ok": res.ok, "seconds": res.seconds, "revision": self.project.revision,
                                     "outputs": res.outputs, "error": res.error})
         header = f"[revision {self.project.revision}] "
+        if res.kind == "harness":
+            return self._harness_report(res, header)
         if not res.ok:
             text = header + "BUILD FAILED\n" + (res.error or "unknown error")
             if res.summary:
@@ -435,6 +474,22 @@ class Tools:
             text += "\n\nATTENTION: " + ("; ".join(c.name for c in failed) + " failed verify()" if failed else "") + \
                 (("; " if failed else "") + f"{len(issues)} geometry issue(s) flagged above" if issues else "")
         text += "\n\nThe image shows iso / front / top / right views. Check it against the request before finishing."
+        return ToolResult(_truncate(text), images=[res.image] if res.image else [])
+
+    def _harness_report(self, res, header: str) -> ToolResult:
+        if not res.ok:
+            text = header + "BUILD FAILED\n" + (res.error or "unknown error")
+            if res.summary:
+                text += "\n\n" + res.summary
+            return ToolResult(_truncate(text), images=[res.image] if res.image else [], is_error=True)
+        text = header + f"built in {res.build_seconds:.1f}s; files: " + ", ".join(Path(v).name for k, v in res.outputs.items() if k != "png") + "\n" + res.summary
+        checks = (res.harness_report or {}).get("checks", [])
+        failed = [c for c in checks if c.get("severity") == "fail"]
+        warned = [c for c in checks if c.get("severity") == "warn"]
+        if failed or warned:
+            text += "\n\nATTENTION: " + (f"{len(failed)} check(s) FAILED" if failed else "") + (("; " if failed else "") + f"{len(warned)} warning(s)" if warned else "") + \
+                ". Fix the design (gauge, length, splices, nets); never delete or loosen a check to make it pass."
+        text += "\n\nThe image is the harness diagram: failing wires and connectors are outlined red, warnings amber, and the failing checks are listed under it. Check it against the request before finishing."
         return ToolResult(_truncate(text), images=[res.image] if res.image else [])
 
     def _run_render(self, out_png: Path, args: list[str]) -> tuple[bool, str]:
@@ -498,4 +553,4 @@ def _truncate(text: str, limit: int = MAX_TEXT) -> str:
 
 
 TOOL_NAMES = ["build_model", "edit_model", "set_params", "read_model", "inspect", "view", "library", "export",
-              "design_notes"]
+              "design_notes", "harness_reference"]

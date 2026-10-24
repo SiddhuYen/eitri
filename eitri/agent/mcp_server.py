@@ -76,6 +76,10 @@ def make_server(project: Project, quality: float = 1.0) -> MCPServer:
     def design_notes(content: str) -> str:
         return tools.design_notes(content).text
 
+    @server.tool(description=Tools.harness_reference.__doc__)
+    def harness_reference() -> str:
+        return tools.harness_reference().text
+
     @server.tool(description=Tools.cam.__doc__)
     def cam(ops: list | str | None = None, part: str | None = None, post: str = "grbl", material: str | None = None, safe_z: float = 5.0) -> list[Any]:
         return _content(tools.cam(ops, part, post, material, safe_z))

@@ -25,6 +25,7 @@ from typing import Any, Mapping
 from .kernel import BuildResult, build_model
 
 STATE_FILE = "eitri.json"
+_HARNESS_IMPORT = re.compile(r"^\s*(from\s+eitri\.harness\b|import\s+eitri\.harness\b)", re.M)
 
 
 @dataclass
@@ -68,6 +69,12 @@ class Project:
         self._save()
 
     # -- paths -------------------------------------------------------------
+    @property
+    def kind(self) -> str:
+        """"harness" when the model file builds a wire harness (it imports eitri.harness), else "cad"."""
+        code = self.read_model()
+        return "harness" if code and _HARNESS_IMPORT.search(code) else "cad"
+
     @property
     def model_path(self) -> Path:
         return self.folder / self.state["model"]
@@ -192,6 +199,10 @@ class Project:
         diff = "".join(difflib.unified_diff(src_a.splitlines(keepends=True), src_b.splitlines(keepends=True), f"revision {ra.number}", f"revision {rb.number}"))
         def fp(rev):
             parts = load_model(self.folder / rev.model).build()
+            from .harness.model import Harness
+            if isinstance(parts, Harness):               # a harness: what each wire / connector is, not its geometry
+                from .harness.edits import describe_state
+                return describe_state(parts)
             out = {}
             for p in parts:
                 bb = p.shape.bounding_box()
@@ -199,6 +210,17 @@ class Project:
             return out
         pa, pb = fp(ra), fp(rb)
         rows = []
+        if self.kind == "harness":
+            for name in list(pa) + [n for n in pb if n not in pa]:
+                x, y = pa.get(name), pb.get(name)
+                status = "removed" if x and not y else "added" if y and not x else "changed" if x != y else "same"
+                rows.append({"name": name, "status": status, "before": x, "after": y})
+            changed = [r for r in rows if r["status"] != "same"]
+            lines = [f"revision {ra.number} -> {rb.number}: {len(changed)} wire(s)/connector(s) differ"
+                     + (f" ({', '.join(r['name'] + ' ' + r['status'] for r in changed)})" if changed else "")]
+            for r in changed:
+                lines.append(f"  {r['name']}: {r['status']}" + (f": {r['before']} -> {r['after']}" if r["status"] == "changed" else f": {r['before'] or r['after']}"))
+            return {"a": ra.number, "b": rb.number, "source_diff": diff, "parts": rows, "summary": "\n".join(lines)}
         for name in list(pa) + [n for n in pb if n not in pa]:
             x, y = pa.get(name), pb.get(name)
             if x and not y:
@@ -346,6 +368,27 @@ class Project:
     def clear_edits(self) -> None:
         self.set_edits([])
 
+    # -- layout hints (a harness diagram: where the editor's user dragged the connectors) --------------
+    def layout(self) -> dict[str, list[float]]:
+        code = self.read_model()
+        try:
+            value = _extract_assignment(code or "", "LAYOUT")
+        except Exception:
+            return {}
+        return {str(k): [float(v[0]), float(v[1])] for k, v in (value or {}).items()} if isinstance(value, dict) else {}
+
+    def set_layout(self, positions: Mapping[str, Any]) -> dict[str, list[float]]:
+        """Merge node positions ({name: [x, y]}) into the model file's LAYOUT (layout hints, not geometry)."""
+        code = self.read_model()
+        if code is None:
+            raise FileNotFoundError(self.model_path)
+        layout = self.layout()
+        for k, v in positions.items():
+            layout[str(k)] = [round(float(v[0]), 1), round(float(v[1]), 1)]
+        self.write_model(_replace_assignment(code, "LAYOUT", layout, create=True,
+                                             comment="diagram positions dragged in the editor (layout hints for the drawing, not wiring)"))
+        return layout
+
     # -- scratch python ----------------------------------------------------------
     def run_python(self, code: str, timeout: float = 120.0) -> tuple[bool, str]:
         """Run code with `parts`, `p`, `bd` and the measurement helpers in scope."""
@@ -358,16 +401,25 @@ class Project:
             out = res.files.get("stdout.txt", b"").decode("utf-8", errors="replace")
             return res.code == 0, (out + ("" if res.code == 0 else "\n" + res.stderr[-3000:])).strip()
         require_local_exec("inspect")
-        preamble = (
-            "import sys, traceback\n"
-            "from eitri import *\n"
-            "from eitri import bd\n"
-            "from eitri.model import load_model\n"
-            f"_m = load_model({str(self.model_path)!r})\n"
-            "p = _m.params\n"
-            "parts = _m.build()\n"
-            "model = parts.compound\n"
-        )
+        if self.kind == "harness":                       # the harness scope: h, nets(), wires(), drop(a, b), ...
+            preamble = (
+                "import sys, traceback\n"
+                "from eitri.model import load_model\n"
+                "from eitri.harness.inspect import harness_scope\n"
+                f"_m = load_model({str(self.model_path)!r})\n"
+                "globals().update(harness_scope(_m.build(), _m.params))\n"
+            )
+        else:
+            preamble = (
+                "import sys, traceback\n"
+                "from eitri import *\n"
+                "from eitri import bd\n"
+                "from eitri.model import load_model\n"
+                f"_m = load_model({str(self.model_path)!r})\n"
+                "p = _m.params\n"
+                "parts = _m.build()\n"
+                "model = parts.compound\n"
+            )
         script = preamble + "try:\n" + "\n".join("    " + line for line in code.splitlines()) + \
             "\nexcept Exception:\n    traceback.print_exc()\n    sys.exit(1)\n"
         try:
@@ -420,7 +472,8 @@ def _extract_assignment(code: str, name: str) -> Any:
     return None
 
 
-def _replace_assignment(code: str, name: str, value: Any, create: bool = False) -> str:
+def _replace_assignment(code: str, name: str, value: Any, create: bool = False,
+                        comment: str = "direct edits made in the viewer (applied after build(); fold them into the design when convenient)") -> str:
     """Replace (or append) a top-level `name = <literal>` assignment, pretty-printed."""
     import pprint
     rendered = f"{name} = " + pprint.pformat(value, width=100, sort_dicts=False) + "\n"
@@ -433,7 +486,7 @@ def _replace_assignment(code: str, name: str, value: Any, create: bool = False) 
     if not create:
         raise ValueError(f"no {name} assignment found in the model file")
     sep = "" if code.endswith("\n\n") else ("\n" if code.endswith("\n") else "\n\n")
-    return code + sep + "# direct edits made in the viewer (applied after build(); fold them into the design when convenient)\n" + rendered
+    return code + sep + f"# {comment}\n" + rendered
 
 
 def _replace_params(code: str, params: Mapping[str, Any]) -> str:

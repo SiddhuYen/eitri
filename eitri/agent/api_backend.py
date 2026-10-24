@@ -42,6 +42,8 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
     {"name": "export", "description": Tools.export.__doc__,
      "input_schema": {"type": "object", "properties": {"formats": {"type": "array", "items": {"type": "string"}}},
                       "required": ["formats"]}},
+    {"name": "harness_reference", "description": Tools.harness_reference.__doc__,
+     "input_schema": {"type": "object", "properties": {}}},
     {"name": "design_notes", "description": Tools.design_notes.__doc__,
      "input_schema": {"type": "object", "properties": {"content": {"type": "string"}}, "required": ["content"]}},
 ]

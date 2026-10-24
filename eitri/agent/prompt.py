@@ -9,8 +9,26 @@ from ..project import Project
 _HERE = Path(__file__).parent
 
 
+def harness_reference_text() -> str:
+    """The wire-harness reference (the connector catalog filled in from the code, so it cannot drift)."""
+    from ..harness.catalog import catalog_table
+    return (_HERE / "harness_ref.md").read_text(encoding="utf-8").replace("{{CATALOG}}", catalog_table()).strip()
+
+
 def system_prompt(project: Project | None = None, include_reference: bool = True) -> str:
     from .library_docs import catalog
+
+    if project is not None and project.kind == "harness":      # the other domain: no CAD reference, the harness one instead
+        parts = [(_HERE / "harness_prompt.md").read_text(encoding="utf-8").strip()]
+        if include_reference:
+            parts.append(harness_reference_text())
+        notes = project.design_notes_path
+        if notes.exists() and notes.read_text(encoding="utf-8").strip():
+            parts.append("# Project design notes (DESIGN.md)\n\n" + notes.read_text(encoding="utf-8").strip())
+        code = project.read_model()
+        if code:
+            parts.append(f"# Current model file ({project.model_path.name})\n\n```python\n{code.strip()}\n```")
+        return "\n\n".join(parts)
 
     parts = [(_HERE / "prompt.md").read_text(encoding="utf-8").strip()]
     if include_reference:

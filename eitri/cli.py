@@ -474,6 +474,40 @@ def print_main(args) -> int:
     return 1 if res["problems"] else 0
 
 
+def bom_main(args) -> int:
+    """eitri bom <project>: build a harness project and print its bill of materials (and cut list)."""
+    from .kernel import build_model
+    target = Path(args.project).expanduser().resolve()
+    if target.is_file():
+        project = Project(target.parent, name=target.stem)
+    elif target.is_dir():
+        project = Project(target)
+    else:
+        print(f"no such project or model: {target}", file=sys.stderr)
+        return 2
+    if not project.model_path.exists():
+        print(f"no eitri model in {target}", file=sys.stderr)
+        return 2
+    res = build_model(project.model_path, Path(args.out).expanduser() if args.out else project.out_dir, render=False)
+    if not res.ok:
+        print("BUILD FAILED\n" + (res.error or ""), file=sys.stderr)
+        return 1
+    if res.kind != "harness":
+        print(f"{project.model_path.name} is a CAD model; `eitri bom` is for wire-harness projects "
+              "(for a CAD assembly's parts list, use `eitri build` and read the report)", file=sys.stderr)
+        return 2
+    keys = ["csv"] if args.csv else ["bom_md"]
+    if args.cutlist:
+        keys += ["cutlist_csv"] if args.csv else ["cutlist_md"]
+    for k in keys:
+        print(Path(res.outputs[k]).read_text(encoding="utf-8"))
+    print(_c("dim", "files: " + ", ".join(f"{k}: {v}" for k, v in res.outputs.items() if k in ("bom_md", "csv", "cutlist_md", "cutlist_csv", "wireviz"))))
+    failed = [c for c in (res.harness_report or {}).get("checks", []) if c.get("severity") == "fail"]
+    if failed:
+        print(_c("yellow", f"note: {len(failed)} check(s) fail; this BOM is for a design that does not pass its checks (eitri build shows them)"))
+    return 0
+
+
 # ----------------------------------------------------------------------------- main
 
 def main(argv: list[str] | None = None) -> int:
@@ -501,6 +535,12 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--formats", default="step,glb")
     b.add_argument("--out", default=None)
     b.add_argument("--open", action="store_true", help="open the review image")
+
+    bm = sub.add_parser("bom", help="the bill of materials (and cut list) of a wire-harness project (no LLM)")
+    bm.add_argument("project", nargs="?", default=".", help="project folder or harness model file (default: current directory)")
+    bm.add_argument("--csv", action="store_true", help="print CSV instead of markdown")
+    bm.add_argument("--cutlist", action="store_true", help="also print the cut list")
+    bm.add_argument("--out", default=None, help="output folder (default: <project>/out)")
 
     v = sub.add_parser("view", help="render views of a model file (no LLM)")
     v.add_argument("model")
@@ -584,7 +624,7 @@ def main(argv: list[str] | None = None) -> int:
     k.add_argument("--no-check", action="store_true", help="save without checking it with Anthropic")
 
     argv = list(sys.argv[1:] if argv is None else argv)
-    commands = ("chat", "build", "view", "drawing", "serve", "web", "cam", "cut", "print-prep", "print", "doctor", "key",
+    commands = ("chat", "build", "bom", "view", "drawing", "serve", "web", "cam", "cut", "print-prep", "print", "doctor", "key",
                 "-h", "--help")
     if not argv:
         argv = ["web"]                   # plain `eitri`: the website, in the browser
@@ -622,6 +662,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         print("BUILD FAILED\n" + (res.error or ""), file=sys.stderr)
         return 1
+
+    if args.cmd == "bom":
+        return bom_main(args)
 
     if args.cmd == "view":
         from . import _render_cli

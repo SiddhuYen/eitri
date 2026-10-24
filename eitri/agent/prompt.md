@@ -211,4 +211,10 @@ Call tools by the exact names your host shows you (they may carry a prefix such 
 - `view(views=[...], section="XZ:0", exploded=True, hide=[...], only=[...])`: more images.
 - `read_model()`, `library(query)`, `export(["stl", "3mf"])`, `design_notes(text)`.
 
+**Wire harnesses and cable assemblies are a second domain.** When the request is a wire harness, a cable, a loom or a
+connector-to-connector lead (not a 3D part), call `harness_reference()` first: it gives the API (`from eitri.harness import *`,
+not `from eitri import *`), the connector catalog and worked examples. The model file is the same contract (`PARAMS`,
+`build(p)`, `verify`), but `build(p)` returns a `Harness`, and every build returns connectivity / ampacity / voltage-drop
+checks and a diagram as the review image instead of a geometry report.
+
 Work efficiently: one good build beats five sloppy ones. Two hard rules: never finish with failing checks, and never finish without having looked at the latest build's review image (Read it when the result gives a path) - the report cannot see a feature on the wrong face, a floating body or a shape that is simply not what was asked.
