@@ -245,6 +245,7 @@ def run_checks(fw: Firmware, compiled: CompileResult | None = None) -> tuple[lis
     if unresolved:
         checks.append(_check("usage", "pin calls resolved", "warn", "not followed (a pin held in another variable): " + "; ".join(unresolved[:6]), "PIN_<NET> constants from eitri_pins.h", []))
 
+    checks += _pin_currents(fw)
     checks += _power_budget(fw)
 
     # -- compile
@@ -267,6 +268,30 @@ def run_checks(fw: Firmware, compiled: CompileResult | None = None) -> tuple[lis
             checks.append(_check("compile", "compiles (arduino-cli)", "fail", f"{len(errs)} error(s): " + "; ".join((f"{e['file']}:{e['line']}: " if e.get("file") else "") + e["msg"] for e in errs[:5]),
                                  "no compile errors", sorted({e["file"] for e in errs if e.get("file")})))
     return checks, infos, comp
+
+
+def _pin_currents(fw: Firmware) -> list[Check]:
+    """Outputs declared with current_A (fw.pin(..., current_A=)) against the board's per-pin rating (eitri.power.io_pin_limit)."""
+    out: list[Check] = []
+    driven = [d for d in fw.pins if d.current_A is not None]
+    if not driven:
+        return out
+    lim = _power.io_pin_limit(fw.board_key)
+    src = f" [source: {lim.source}]" if lim.source else ""
+    for d in driven:
+        name = f"pin {d.pin} ({d.net}) current"
+        if lim.limit_A is None:
+            out.append(_check("power", name, "warn", f"{amps(d.current_A)} from {d.pin}; not graded: {lim.basis}", "the board's per-pin rating", [d.pin]))
+            continue
+        sev = _power.grade(d.current_A, lim)
+        if sev == "fail":
+            out.append(_check("power", name, "fail",
+                              f"{amps(d.current_A)} from {d.pin}, but an I/O pin gives at most {amps(lim.limit_A)}. Fix: drive the load through a "
+                              f"transistor or MOSFET (the pin only switches it), or raise the series resistor.{src}", f"<= {amps(lim.limit_A)}", [d.pin]))
+        else:
+            out.append(_check("power", name, sev, f"{amps(d.current_A)} of {amps(lim.limit_A)} from {d.pin}{src}",
+                              f"<= {amps(lim.limit_A)}" + (" (within 20% of the limit)" if sev == "warn" else ""), [d.pin]))
+    return out
 
 
 def _power_budget(fw: Firmware) -> list[Check]:

@@ -43,6 +43,7 @@ class PinDecl:
     peripheral: str = ""             # the peripheral that declared it
     pullup: bool = False
     notes: str = ""
+    current_A: float | None = None   # what an output pin sources or sinks itself (an LED, a buzzer); graded per pin
 
     def __post_init__(self) -> None:
         self.pin = str(self.pin).strip()
@@ -56,6 +57,12 @@ class PinDecl:
             self.net = re.sub(r"[^A-Za-z0-9_]", "_", self.pin.upper())
         if not _NET_RE.match(self.net):
             raise FirmwareError(f"pin {self.pin}: net {self.net!r} must be a C identifier (letters, digits, _)")
+        if self.current_A is not None:
+            if self.direction != "out":
+                raise FirmwareError(f"pin {self.pin}: current_A is what an output drives; {self.pin} is declared {self.direction}")
+            self.current_A = float(self.current_A)
+            if self.current_A < 0:
+                raise FirmwareError(f"pin {self.pin}: current_A must not be negative")
 
     @property
     def symbol(self) -> str:
@@ -105,9 +112,12 @@ class Firmware:
         return find_board(self.board_key)
 
     # -- the pinout -----------------------------------------------------------
-    def pin(self, pin, direction: str = "out", role: str | None = None, net: str = "", pullup: bool = False, notes: str = "", _peripheral: str = "") -> PinDecl:
+    def pin(self, pin, direction: str = "out", role: str | None = None, net: str = "", pullup: bool = False, notes: str = "", _peripheral: str = "",
+            current_A: float | None = None) -> PinDecl:
+        """current_A: for an output that drives a load itself (an LED and its resistor, a buzzer), the current it sources or
+        sinks; graded against the board's per-pin rating. A relay, motor or servo needs a driver, not a pin."""
         role = role or ("digital_out" if direction == "out" else "digital_in")
-        p = PinDecl(str(pin), direction, role, net, _peripheral, pullup, notes)
+        p = PinDecl(str(pin), direction, role, net, _peripheral, pullup, notes, current_A)
         if any(x.net == p.net for x in self.pins):
             raise FirmwareError(f"net {p.net!r} is already used by pin {next(x.pin for x in self.pins if x.net == p.net)}")
         self.pins.append(p)

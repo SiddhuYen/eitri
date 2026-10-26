@@ -19,6 +19,9 @@ SRC_UNO_PINOUT = ("Arduino UNO R3 full pinout, docs.arduino.cc/resources/pinouts
                   "\"MAXIMUM current per +3.3V pin is 50mA\"")
 SRC_NANO_PINOUT = ("Arduino Nano full pinout, docs.arduino.cc/resources/pinouts/A000005-full-pinout.pdf: "
                    "\"MAXIMUM current per +3.3V pin is 50mA\"")
+SRC_UNO_IO = ("Arduino UNO R3 full pinout, docs.arduino.cc/resources/pinouts/A000066-full-pinout.pdf: \"MAXIMUM current per I/O pin is 20mA\" "
+              "(the ATmega328P's absolute maximum is 40 mA; Arduino's figure is the one to design to)")
+SRC_NANO_IO = ("Arduino Nano full pinout, docs.arduino.cc/resources/pinouts/A000005-full-pinout.pdf: \"MAXIMUM current per I/O pin is 20mA\"")
 SRC_UNO_USB = ("Arduino UNO R3 schematic, docs.arduino.cc/resources/schematics/A000066-schematics.pdf: the USB 5V line runs through "
                "a MF-MSMF050-2 500mA resettable polyfuse; Arduino store, UNO Rev3: \"If more than 500 mA is applied to the USB port, "
                "the fuse will automatically break the connection\"")
@@ -66,6 +69,16 @@ def supply_pin_name(pin: str) -> str | None:
     """'5V' / '3V3' from a pin as written ('5V', '+5V', '3.3V', '3V3', '+3V3'), else None."""
     p = str(pin).strip().upper().lstrip("+").replace("3.3V", "3V3")
     return p if p in SUPPLY_PINS else None
+
+
+def io_pin_limit(board: str) -> SupplyLimit:
+    """What one I/O pin may source or sink (an LED, a relay coil, a buzzer driven straight from the pin)."""
+    key = board_key(board)
+    if key == "uno":
+        return SupplyLimit(key, "I/O", "", 0.020, "an I/O pin's rating", SRC_UNO_IO)
+    if key == "nano":
+        return SupplyLimit(key, "I/O", "", 0.020, "an I/O pin's rating", SRC_NANO_IO)
+    return SupplyLimit(str(board), "I/O", "", None, "no per-pin rating recorded for this board", "")
 
 
 def supply_limit(board: str, pin: str, powered: str = "usb", vin_V: float | None = None, ambient_C: float = 25.0) -> SupplyLimit:

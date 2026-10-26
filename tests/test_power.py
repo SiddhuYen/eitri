@@ -156,3 +156,19 @@ def test_small_currents_read_as_people_write_them():
     fw.source("s.ino", "void setup(){}\nvoid loop(){}\n")
     texts = " ".join(it["s"] for it in fw_scene(fw).items if it["t"] == "text")
     assert "50 µA" in texts and "e-05" not in texts
+
+
+def test_an_output_pin_is_graded_against_the_per_pin_rating():
+    def pin_check(amps_, board="uno"):
+        fw = Firmware("led", board=board)
+        fw.pin("D9", "out", "digital_out", net="LED", current_A=amps_)
+        fw.source("l.ino", '#include "eitri_pins.h"\nvoid setup(){ pinMode(PIN_LED, OUTPUT); }\nvoid loop(){ digitalWrite(PIN_LED, HIGH); }\n')
+        return _power_checks(analyze_fw(fw))["pin D9 (LED) current"]
+    assert pin_check(0.010).severity == "pass"                            # an LED at 10 mA
+    assert pin_check(0.018).severity == "warn"                            # within 20 % of 20 mA
+    bad = pin_check(0.070)                                                # a small relay coil straight off the pin
+    assert bad.severity == "fail" and "at most 0.02 A" in bad.measured and "transistor" in bad.measured and "A000066" in bad.measured
+    assert pin_check(0.070, "nano").severity == "fail"
+    assert pin_check(0.070, "esp32").severity == "warn"                   # no per-pin rating recorded: not graded
+    with pytest.raises(FirmwareError, match="current_A is what an output drives"):
+        Firmware("x").pin("D2", "in", "digital_in", current_A=0.01)

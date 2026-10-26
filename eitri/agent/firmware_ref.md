@@ -13,10 +13,12 @@ image is the pinout. eitri never flashes hardware.
 ```
 fw = Firmware("name", board="uno" | "nano" | "esp32", description="", wifi=False, powered="usb" | "vin", vin_V=None)
 
-fw.pin(pin, direction="out" | "in" | "inout", role=None, net="", pullup=False)
+fw.pin(pin, direction="out" | "in" | "inout", role=None, net="", pullup=False, current_A=None)
     pin: "D9", "9", "A0" (Uno/Nano) or "GPIO25", "25" (ESP32); role: digital_in, digital_out, pwm, analog_in, dac, interrupt, servo,
     serial_tx, serial_rx, i2c_sda, i2c_scl (default: digital_out / digital_in by direction); net: the name the code uses as
-    PIN_<net> (default: the pin's name)
+    PIN_<net> (default: the pin's name); current_A: for an output that drives a load itself (an LED
+    through its resistor, a buzzer), the current it sources or sinks: graded against the board's per-pin rating (Uno / Nano:
+    20 mA, Arduino's pinout sheets). A relay coil, motor or servo needs a transistor / driver, never a bare pin
 fw.servo(name, pin, min_us=544, max_us=2400, power=None, current_A=None)   a hobby servo: pin role servo, net = name;
     power: "5V" / "3V3" (from the board's pin) or "external" (its own supply, ground shared with the board), current_A its stall current;
     without power= the build warns (a servo's stall current is more than a board pin gives: say where it is powered from)
