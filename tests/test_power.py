@@ -142,3 +142,15 @@ def test_firmware_loads_add_up_and_unknowns_warn():
         _fw(power="9V", current_A=1)
     with pytest.raises(FirmwareError, match="needs power"):
         _fw(current_A=1)
+
+
+def test_small_currents_read_as_people_write_them():
+    from eitri.firmware import Firmware
+    from eitri.firmware.diagram import build_scene as fw_scene
+    from eitri.power import amps
+    assert [amps(x) for x in (2.5, 0.02, 0.001, 0.00005)] == ["2.5 A", "0.02 A", "0.001 A", "50 µA"]
+    fw = Firmware("sensor", board="nano")
+    fw.load("TMP36", "5V", 0.00005)
+    fw.source("s.ino", "void setup(){}\nvoid loop(){}\n")
+    texts = " ".join(it["s"] for it in fw_scene(fw).items if it["t"] == "text")
+    assert "50 µA" in texts and "e-05" not in texts

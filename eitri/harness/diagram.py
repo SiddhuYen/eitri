@@ -14,6 +14,7 @@ from __future__ import annotations
 from ..diagram import place_labels, text_box  # noqa: E402
 from ..diagram import (BORDER, BOX, FAIL, FONT, HEADER, INK, MUTED, WARN, Scene, _bez, _overlap, _wrap, footer_from,   # noqa: F401
                        scene_to_png, scene_to_svg, status_from, text_w)
+from ..power import amps
 from .catalog import color_hex, stripe_hex
 from .model import Harness, Link, PinRef, SpliceRef
 
@@ -261,7 +262,7 @@ def build_scene(h: Harness, status: dict[str, str] | None = None, footer: list[t
         pts = [(x1, y1), a2, c1, c2, b2, (x2, y2)]
         cur = h.wire_current(l)
         line1 = f"{l.id}  {l.gauge.label}  {l.color}"
-        line2 = f"{l.length_mm:g} mm" + (f" · {cur:g} A" if cur is not None else "") + (f" · {l.net}" if l.net else "")
+        line2 = f"{l.length_mm:g} mm" + (f" · {amps(cur)}" if cur is not None else "") + (f" · {l.net}" if l.net else "")
         t0 = 0.5                                               # where the label would like to sit along the wire
         if isinstance(l.a, SpliceRef) != isinstance(l.b, SpliceRef):    # wires fan out of a splice: label them where they are apart
             t0 = 0.7 if isinstance(l.a, SpliceRef) else 0.3

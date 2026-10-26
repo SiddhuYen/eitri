@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+from ..power import amps
 from .catalog import voltage_drop
 from .checks import link_drop_v, net_stats
 from .model import Harness, PinRef
@@ -22,7 +23,7 @@ def harness_scope(h: Harness, p=None) -> dict:
     def nets():
         for n in net_stats(h).values():
             v = f"{n.voltage_V:g} V" if n.voltage_V is not None else "no voltage"
-            i = f"{n.current_A:g} A" if n.current_A is not None else "no current"
+            i = amps(n.current_A) if n.current_A is not None else "no current"
             d = f"drop {n.drop_V:.4f} V" + (f" = {n.drop_pct:.3f}% of {n.max_drop_pct:g}% allowed" if n.drop_pct is not None else "") if n.drop_V is not None else "drop not computed"
             print(f"{n.name}: {v}, {i}, {d}; {len(n.wires)} wire(s) {', '.join(n.wires)}; {n.length_mm:.0f} mm; worst path: {' + '.join(n.worst_path) or '-'}")
 
@@ -34,7 +35,7 @@ def harness_scope(h: Harness, p=None) -> dict:
             amp = l.gauge.ampacity
             dv = link_drop_v(h, l)
             print(f"{l.id}: {l.a} -> {l.b}  {l.gauge.label} {l.color}  {l.length_mm:g} mm  net={l.net}  "
-                  f"I={'-' if i is None else f'{i:g} A'}  ampacity {amp:.3g} A" + ("" if i is None else f" ({i / amp * 100:.0f}% used)")
+                  f"I={'-' if i is None else amps(i)}  ampacity {amp:.3g} A" + ("" if i is None else f" ({i / amp * 100:.0f}% used)")
                   + ("" if dv is None else f"  drop {dv:.4f} V"))
 
     def connectors():

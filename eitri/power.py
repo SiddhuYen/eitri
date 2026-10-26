@@ -51,6 +51,11 @@ BOARDS = {"uno": "Arduino Uno", "nano": "Arduino Nano"}
 SUPPLY_PINS = ("5V", "3V3")
 
 
+def amps(x: float) -> str:
+    """A current as people write it: "2.5 A", "0.02 A", and below a milliamp "50 µA" (never "5e-05 A")."""
+    return f"{x * 1e6:.3g} µA" if 0 < abs(x) < 1e-3 else f"{x:g} A"
+
+
 def board_key(text: str | None) -> str | None:
     """'uno', 'nano' from a board name or a harness connector type ('Arduino Uno', 'ARDUINO-NANO', 'uno')."""
     t = str(text or "").strip().lower().replace("arduino", "").replace("-", " ").replace("_", " ").strip()

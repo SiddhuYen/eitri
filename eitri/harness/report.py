@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from ..model import Checker, CheckResult
+from ..power import amps
 from .checks import HCheck, NetInfo, run_checks
 from .model import Harness, endpoint_to_json
 
@@ -72,7 +73,7 @@ def summarize(rep: HarnessReport) -> str:
             if n.voltage_V is not None:
                 bits.append(f"{n.voltage_V:g} V")
             if n.current_A is not None:
-                bits.append(f"{n.current_A:g} A")
+                bits.append(amps(n.current_A))
             if n.drop_V is not None:
                 drop = f"drop {n.drop_V:.3f} V" + (f" = {n.drop_pct:.2f}% (limit {n.max_drop_pct:g}%)" if n.drop_pct is not None else "")
                 bits.append(drop + (f" over {' + '.join(n.worst_path)}" if n.worst_path else ""))
@@ -117,7 +118,7 @@ def describe_selection(data: dict, ids: list[str], checks: list[dict] | None = N
         if kind == "wire" and name in wires:
             w = wires[name]
             lines.append(f"- wire {name}: {ref(w['a'])} -> {ref(w['b'])}, {w['gauge_label']} {w['color']}, {w['length_mm']:g} mm"
-                         + (f", net {w['net']}" if w.get("net") else ", no net") + (f", {w['current_A']:g} A" if w.get("current_A") is not None else "")
+                         + (f", net {w['net']}" if w.get("net") else ", no net") + (f", {amps(w['current_A'])}" if w.get("current_A") is not None else "")
                          + (f" (core {w['core']} of cable {w['cable']})" if w.get("cable") else ""))
         elif kind == "conn" and name in conns:
             c = conns[name]

@@ -20,6 +20,7 @@ import re
 from dataclasses import dataclass, field
 
 from .. import power as _power
+from ..power import amps
 from ..checks import Check, check as _check
 from .boards import Board, PinCap
 from .compile import CompileResult
@@ -271,7 +272,7 @@ def _power_budget(fw: Firmware) -> list[Check]:
     ext = [p for p in fw.peripherals if p.params.get("power") == "external"]
     if ext:
         out.append(_check("power", "loads on their own supply", "pass",
-                          ", ".join(p.name + (f" ({p.params['current_A']:g} A)" if p.params.get("current_A") is not None else "") for p in ext)
+                          ", ".join(p.name + (f" ({amps(p.params['current_A'])})" if p.params.get("current_A") is not None else "") for p in ext)
                           + ": not on the board's supply pins; their supply's ground must be wired to the board's GND (a shared ground)",
                           "a common ground with the board", [p.name for p in ext]))
     for pin, pers in by_pin.items():
@@ -286,18 +287,18 @@ def _power_budget(fw: Firmware) -> list[Check]:
         draw = sum(p.params["current_A"] for p in pers)
         lim = _power.supply_limit(fw.board_key, pin, fw.powered, fw.vin_V)
         src = f" [source: {lim.source}]" if lim.source else ""
-        parts = ", ".join(f"{p.name} {p.params['current_A']:g} A" for p in pers)
+        parts = ", ".join(f"{p.name} {amps(p.params['current_A'])}" for p in pers)
         if lim.limit_A is None:
-            out.append(_check("power", name, "warn", f"{draw:g} A drawn ({parts}); not graded: {lim.basis}{src}",
+            out.append(_check("power", name, "warn", f"{amps(draw)} drawn ({parts}); not graded: {lim.basis}{src}",
                               "the board's supply limit, or power=\"external\" with a shared ground", names))
             continue
         sev = _power.grade(draw, lim)
         if sev == "fail":
             out.append(_check("power", name, "fail",
-                              f"{draw:g} A drawn ({parts}), but the {pin} pin can supply {lim.limit_A:g} A, limited by {lim.basis}. "
-                              f"Fix: {_power.advice(pin)}; declare it power=\"external\".{src}", f"<= {lim.limit_A:g} A", names))
+                              f"{amps(draw)} drawn ({parts}), but the {pin} pin can supply {amps(lim.limit_A)}, limited by {lim.basis}. "
+                              f"Fix: {_power.advice(pin)}; declare it power=\"external\".{src}", f"<= {amps(lim.limit_A)}", names))
         else:
-            out.append(_check("power", name, sev, f"{draw:g} A of {lim.limit_A:g} A ({parts}), limited by {lim.basis}"
+            out.append(_check("power", name, sev, f"{amps(draw)} of {amps(lim.limit_A)} ({parts}), limited by {lim.basis}"
                               + ("; the board's own draw shares this budget" if sev == "warn" else "") + src,
-                              f"<= {lim.limit_A:g} A" + (" (within 20% of the limit)" if sev == "warn" else ""), names))
+                              f"<= {amps(lim.limit_A)}" + (" (within 20% of the limit)" if sev == "warn" else ""), names))
     return out

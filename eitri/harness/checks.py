@@ -33,7 +33,7 @@ def _check(category: str, name: str, severity: str, measured: str, expected: str
 
 
 def _fmt_a(x: float) -> str:
-    return f"{x:.3g} A"
+    return f"{x * 1e6:.3g} µA" if 0 < abs(x) < 1e-3 else f"{x:.3g} A"
 
 
 def _pct(x: float) -> str:

@@ -3,6 +3,7 @@ peripherals beside it wired to their pins, the compile verdict underneath. Pins 
 from __future__ import annotations
 
 from ..diagram import FAIL, FONT, INK, MUTED, WARN, Scene, _wrap, footer_from, scene_to_png, scene_to_svg, status_from, text_w   # noqa: F401
+from ..power import amps
 from .model import Firmware
 
 MARGIN = 28
@@ -18,7 +19,7 @@ def _per_lines(per) -> list[str]:
     pw = per.params.get("power")
     if pw:
         cur = per.params.get("current_A")
-        lines.append(("power: own supply, GND shared" if pw == "external" else f"power: board {pw} pin") + (f", {cur:g} A" if cur is not None else ""))
+        lines.append(("power: own supply, GND shared" if pw == "external" else f"power: board {pw} pin") + (f", {amps(cur)}" if cur is not None else ""))
     return lines
 
 
