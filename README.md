@@ -163,7 +163,7 @@ def build(p):
 
 Every build computes: **connectivity** (unconnected pins unless declared NC, several wires on one pin, duplicate wires,
 dangling splices, nets shorted at a splice), **ampacity** (each wire against a chassis-wiring AWG table, FAIL over the limit,
-WARN within 20%; each connector pin against its catalog rating), **voltage drop** (`V = 2*K*I*L/CM`, K = 10.75, per net against
+WARN within 20%; each connector pin against its catalog rating), **voltage drop** (`V = 2*K*I*L/CM`, K = 12.9 for copper at 75 °C, per net against
 `max_drop_pct`, summed along the worst source-to-load path) and **consistency** (one gauge and one colour per net, shields
 terminated), plus the model's own `verify()`. It writes a wire-harness diagram (SVG, and the PNG review image with the failing
 wires outlined red), a **BOM** (connectors with part numbers, crimp terminals inferred from connector type x populated pins,

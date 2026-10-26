@@ -144,26 +144,26 @@ def test_wire_is_a_template():
 
 
 def test_voltage_drop_hand_computed():
-    # 10 A over 3 m of 12 AWG (6530 CM): V = 2 * 10.75 * 10 * (3000 / 304.8 ft) / 6530
-    expected = 2 * 10.75 * 10 * (3000 / 304.8) / 6530
-    assert expected == pytest.approx(0.3241, abs=1e-3)
+    # 10 A over 3 m of 12 AWG (6530 CM): V = 2 * 12.9 * 10 * (3000 / 304.8 ft) / 6530 (copper at 75 C)
+    expected = 2 * 12.9 * 10 * (3000 / 304.8) / 6530
+    assert expected == pytest.approx(0.3889, abs=1e-3)
     assert voltage_drop(10, 3000, Gauge.parse(12)) == pytest.approx(expected, rel=2e-3)
     # one way is half of the round trip
     assert voltage_drop(10, 3000, Gauge.parse(12), round_trip=False) == pytest.approx(expected / 2, rel=2e-3)
-    # 2 A over 500 mm of 0.5 mm2 (986.8 CM): 2 * 10.75 * 2 * 1.6404 / 986.8
-    assert voltage_drop(2, 500, Gauge.parse("0.5mm2")) == pytest.approx(2 * 10.75 * 2 * (500 / 304.8) / 986.8, rel=1e-3)
+    # 2 A over 500 mm of 0.5 mm2 (986.8 CM): 2 * 12.9 * 2 * 1.6404 / 986.8
+    assert voltage_drop(2, 500, Gauge.parse("0.5mm2")) == pytest.approx(2 * 12.9 * 2 * (500 / 304.8) / 986.8, rel=1e-3)
 
 
 def test_net_drop_percent_matches_hand_computation():
     h = lead(gauge=20, length=1000, current=2.0, voltage=5.0)
     # 20 AWG: 1021.5 CM (standard); 2 A, 1 m round trip, 5 V
-    volts = 2 * 10.75 * 2.0 * (1000 / 304.8) / 1021.5
+    volts = 2 * 12.9 * 2.0 * (1000 / 304.8) / 1021.5
     st = net_stats(h)
     assert st["V"].drop_V == pytest.approx(volts, rel=3e-3)
-    assert st["V"].drop_pct == pytest.approx(volts / 5.0 * 100, rel=3e-3)       # about 2.76 %
+    assert st["V"].drop_pct == pytest.approx(volts / 5.0 * 100, rel=3e-3)       # about 3.31 % (copper at 75 C)
     assert st["G"].drop_pct == pytest.approx(volts / 2 / 5.0 * 100, rel=3e-3)   # the return net counts one way
     c = check(analyze(h), "voltage drop V ")
-    assert c.severity == "pass" and "2.7" in c.measured
+    assert c.severity == "fail" and "3.3" in c.measured                          # over the 3 % default limit
 
 
 def test_drop_sums_along_a_path_not_across_branches():

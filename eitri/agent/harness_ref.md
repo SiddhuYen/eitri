@@ -72,7 +72,7 @@ minute only); past it, it fails. Spade terminals are rated by the wire crimped i
   and each connector pin's summed current against its rating.
 - terminal fit (FAIL): every wire crimped into a connector is within the sizes that connector family's contacts take
   (JST XH AWG 22-30, JST PH 24-32, Dupont 2.54 22-32, Micro-Fit 3.0 18-30): a 22 AWG wire does not go into a PH contact.
-- voltage drop (FAIL above max_drop_pct): V = 2*K*I*L/CM, K = 10.75, L in feet, CM the conductor's circular mils;
+- voltage drop (FAIL above max_drop_pct): V = 2*K*I*L/CM, K = 12.9 (copper at 75 C, NEC Chapter 9 Table 8), L in feet, CM the conductor's circular mils;
   per net, the worst source-to-load path, reported as % of voltage_V.
 - consistency: one gauge per net (FAIL if a thinner wire carries more than a thicker one of the net, WARN if the gauge
   changes at the same current); one colour per net (WARN); a shielded cable's shield must be terminated (FAIL).

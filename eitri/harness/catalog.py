@@ -169,9 +169,11 @@ _CHASSIS_AMPS = {
     16: 22, 18: 16, 20: 11, 22: 7, 24: 3.5, 26: 2.2, 28: 1.4, 30: 0.86, 32: 0.53, 34: 0.33, 36: 0.21, 38: 0.13, 40: 0.081,
 }
 AWG_MIN, AWG_MAX = -3, 40            # -3 is 4/0
-# ohm-circular-mil per foot, the voltage-drop constant for copper: annealed copper is 10.371 at 20 C (IACS, NBS Handbook 100)
-# and rises 0.393 %/C, so 10.75 is copper near 29 C. A hot wire drops more (NEC practice uses 12.9 at 75 C).
-K_COPPER = 10.75
+# ohm-circular-mil per foot, the voltage-drop constant for copper at a 75 C conductor temperature: NFPA 70 (NEC) Chapter 9
+# Table 8, uncoated stranded copper at 75 C, e.g. 12 AWG 1.98 ohm/kft at 6530 cmil -> 1.98 * 6530 / 1000 = 12.9 (the K used with
+# it in NEC voltage-drop practice). A wire run warm is graded as warm: room-temperature copper (10.371 at 20 C, NBS Handbook 100)
+# would understate the drop by about a fifth.
+K_COPPER = 12.9
 MM2_PER_CM = 0.000506707479          # one circular mil in mm^2
 FT_PER_MM = 1 / 304.8
 
@@ -302,7 +304,7 @@ class Gauge:
 
 
 def voltage_drop(current_a: float, length_mm: float, gauge: Gauge, round_trip: bool = True) -> float:
-    """V = 2 * K * I * L / CM (K = 10.75 for copper, L in feet, CM the conductor's circular mils); the 2 is the
+    """V = 2 * K * I * L / CM (K = 12.9 for copper at 75 C, L in feet, CM the conductor's circular mils); the 2 is the
     round trip (the supply conductor and an equal return conductor)."""
     factor = 2.0 if round_trip else 1.0
     return factor * K_COPPER * current_a * (length_mm * FT_PER_MM) / gauge.circular_mils
