@@ -96,7 +96,7 @@ def test_the_harness_editor_replaces_the_3d_view(tmp_path):
         assert rows.count() == len(st["checks"])
         assert page.locator("#checks .check.ok").count() >= 5
         assert "check" in page.inner_text("#checktitle").lower()
-        assert page.locator("#sheet").get_attribute("src").startswith("image.png")                            # the review image
+        assert page.locator("#sheet").get_attribute("src") is None and not page.is_visible("#sheet")   # built without the review image: none is asked for (it would 404)
         assert not errors, errors
         browser.close()
 
@@ -107,11 +107,11 @@ def test_edit_a_wire_in_the_inspector(tmp_path):
         browser, page, errors = _open(p, url)
         x, y = _wire_point(page, "W1")
         page.mouse.click(x, y)
-        page.wait_for_selector("#hedit .hinspector .hp .hh b:text('Wire W1')")
-        assert "J1.2 → J2.2" in page.inner_text("#hedit .hinspector .hsub")
+        page.wait_for_selector("#domaininsp .hinspector .hp .hh b:text('Wire W1')")
+        assert "J1.2 → J2.2" in page.inner_text("#domaininsp .hinspector .hsub")
 
         # gauge: 24 AWG -> 30 AWG is far too thin for 2 A over 1.5 m: the ampacity and drop checks must turn red
-        gauge = page.locator("#hedit .hinspector input[list='hgauges']")
+        gauge = page.locator("#domaininsp .hinspector input[list='hgauges']")
         gauge.fill("30")
         gauge.press("Enter")
         _until(page, "s => s.harness.wires.find(w => w.id === 'W1').gauge === 30")
@@ -122,12 +122,12 @@ def test_edit_a_wire_in_the_inspector(tmp_path):
         assert any(n.startswith("ampacity W1") for n in bad) or any(n.startswith("voltage drop 5V") for n in bad), bad
         assert page.locator("#checks .check.bad").count() >= 1
         assert "30 AWG" in page.evaluate("() => [...document.querySelectorAll(\"#hedit g[data-kind='wire'][data-id='W1']\")].map(g => g.textContent).join(' ')")   # the diagram redrew
-        assert page.inner_text("#hedit .hinspector .hh b") == "Wire W1"                          # the selection survived the rebuild
+        assert page.inner_text("#domaininsp .hinspector .hh b") == "Wire W1"                          # the selection survived the rebuild
 
         # colour, length and net from the same panel, and each one is merged into the one edit for W1
-        page.locator("#hedit .hinspector select").nth(0).select_option("YE")
+        page.locator("#domaininsp .hinspector select").nth(0).select_option("YE")
         _until(page, "s => s.harness.wires.find(w => w.id === 'W1').color === 'YE'")
-        length = page.locator("#hedit .hinspector input[type=number]").first
+        length = page.locator("#domaininsp .hinspector input[type=number]").first
         length.fill("900")
         length.press("Enter")
         _until(page, "s => s.harness.wires.find(w => w.id === 'W1').length_mm === 900")
@@ -149,17 +149,17 @@ def test_edit_a_connector_pins_and_type(tmp_path):
         browser, page, errors = _open(p, url)
         x, y = _conn_point(page, "J2")
         page.mouse.click(x, y)
-        page.wait_for_selector("#hedit .hinspector .hh b:text('Connector J2')")
+        page.wait_for_selector("#domaininsp .hinspector .hh b:text('Connector J2')")
         # the type, from the catalog
-        typ = page.locator("#hedit .hinspector input[list='htypes']")
+        typ = page.locator("#domaininsp .hinspector input[list='htypes']")
         typ.fill("JST-PH")
         typ.press("Enter")
         _until(page, "s => s.harness.connectors[1].type === 'JST-PH'")
         conns = {c["name"]: c for c in _state(page)["harness"]["connectors"]}
         assert conns["J2"]["type"] == "JST-PH" and conns["J2"]["rating_a"] == 2.0
-        assert "2 A per pin" in page.inner_text("#hedit .hinspector .hsub")
+        assert "2 A per pin" in page.inner_text("#domaininsp .hinspector .hsub")
         # rename pin 2 -> VCC
-        pin2 = page.locator("#hedit .hinspector .hpr input[type=text]").nth(2)     # row 2: [pin, function] x 2 rows
+        pin2 = page.locator("#domaininsp .hinspector .hpr input[type=text]").nth(2)     # row 2: [pin, function] x 2 rows
         pin2.fill("VCC")
         pin2.press("Enter")
         _until(page, "s => s.harness.connectors[1].pins[1] === 'VCC'")
@@ -171,7 +171,7 @@ def test_edit_a_connector_pins_and_type(tmp_path):
         _until(page, "s => s.harness.connectors[1].pins.length === 3")
         assert _state(page)["harness"]["connectors"][1]["pins"] == ["1", "VCC", "3"]
         assert any(c["name"] == "all pins connected or declared NC" and c["severity"] == "fail" for c in _state(page)["checks"])   # the new pin is open
-        page.locator("#hedit .hinspector .hpr input[type=checkbox]").nth(2).check()
+        page.locator("#domaininsp .hinspector .hpr input[type=checkbox]").nth(2).check()
         _until(page, "s => s.harness.connectors[1].nc.includes('3')")
         assert any(c["name"] == "all pins connected or declared NC" and c["severity"] == "pass" for c in _state(page)["checks"])
         ops = [e["op"] for e in project.edits()]
@@ -249,7 +249,7 @@ def test_add_and_remove_a_wire(tmp_path):
         assert added["op"] == "add_wire" and (added["a"], added["b"]) == ("J1.3", "J2.3")
         ids = [w["id"] for w in _state(page)["harness"]["wires"]]
         assert ids == ["W1", "W2", "W3"]
-        page.wait_for_selector("#hedit .hinspector .hh b:text('Wire W3')")              # the new wire is selected for editing
+        page.wait_for_selector("#domaininsp .hinspector .hh b:text('Wire W3')")              # the new wire is selected for editing
         page.get_by_role("button", name="Remove wire").click()
         _until(page, "s => s.harness.wires.length === 2")
         assert [w["id"] for w in _state(page)["harness"]["wires"]] == ["W1", "W2"]

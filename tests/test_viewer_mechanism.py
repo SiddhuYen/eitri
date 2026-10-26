@@ -76,8 +76,8 @@ def test_the_mechanism_editor_replaces_the_3d_view(tmp_path):
         st = _state(page)
         assert st["kind"] == "mechanism" and st["domain"]["joints"][0]["name"] == "j1" and st["params"]["arm_mm"] == 100.0
         assert page.locator("#checks .check").count() == len(st["checks"]) and page.locator("#checks .check.bad").count() == 1        # the far target
-        assert "Joints" in page.inner_text("#hedit .hinspector")                                                 # the summary panel
-        assert page.locator("#sheet").get_attribute("src").startswith("image.png")
+        assert "Joints" in page.inner_text("#domaininsp .hinspector")                                                 # the summary panel
+        assert page.locator("#sheet").get_attribute("src") is None and not page.is_visible("#sheet")   # built without the review image: none is asked for (it would 404)
         assert not errors, errors
         browser.close()
 
@@ -88,17 +88,17 @@ def test_edit_a_joint_and_a_target_in_the_inspector(tmp_path):
         browser, page, errors = _open(p, url)
         x, y = _joint_point(page, "j1")
         page.mouse.click(x, y)
-        page.wait_for_selector("#hedit .hinspector .hh b:text('Joint j1')")
-        assert "MG996R" in page.inner_text("#hedit .hinspector")
-        hi = page.locator("#hedit .hinspector .hrow input").nth(1)
+        page.wait_for_selector("#domaininsp .hinspector .hh b:text('Joint j1')")
+        assert "MG996R" in page.inner_text("#domaininsp .hinspector")
+        hi = page.locator("#domaininsp .hinspector .hrow input").nth(1)
         hi.fill("45")
         hi.press("Enter")
         _until(page, "s => s.domain.joints[0].limit[1] === 45")
         assert project.edits() == [{"op": "set_joint", "joint": "j1", "limit": [-90, 45], "by": project.edits()[0].get("by")}] or project.edits()[0]["limit"] == [-90, 45]
         assert "45 deg" in page.evaluate("() => [...document.querySelectorAll('g[data-kind=\"joint\"][data-id=\"j1\"]')].map(g => g.textContent).join(' ')")
-        assert page.inner_text("#hedit .hinspector .hh b") == "Joint j1"                                           # the selection survived the rebuild
+        assert page.inner_text("#domaininsp .hinspector .hh b") == "Joint j1"                                           # the selection survived the rebuild
         # the stall torque, in the same panel: merged into the joint's actuator edit
-        stall = page.locator("#hedit .hinspector label.hf:has(span:text('stall torque')) input")
+        stall = page.locator("#domaininsp .hinspector label.hf:has(span:text('stall torque')) input")
         stall.fill("12")
         stall.press("Enter")
         _until(page, "s => s.domain.joints[0].actuator.stall_kgcm === 12")
@@ -106,7 +106,7 @@ def test_edit_a_joint_and_a_target_in_the_inspector(tmp_path):
         assert ops == ["set_joint", "set_actuator"]
         # a target: click its cross, change its tolerance, remove it
         page.evaluate("() => window.__domain.select({kind: 'target', id: 'far'})")
-        page.wait_for_selector("#hedit .hinspector .hh b:text('Target far')")
+        page.wait_for_selector("#domaininsp .hinspector .hh b:text('Target far')")
         page.get_by_role("button", name="Remove target").click()
         _until(page, "s => s.domain.targets.length === 1")
         bad = page.locator("#checks .check.bad")                                                            # "up" needs j1 = 90, now outside the 45 limit

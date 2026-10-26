@@ -35,7 +35,7 @@ def test_home_to_project_and_back(tmp_path):
             page.goto(url)
             page.wait_for_selector("text=Claude · API key")
             assert page.is_visible("#empty")
-            page.click(".ex >> nth=0")                                            # an example fills the box
+            page.click("#examples .chip >> nth=0")                                # an example fills the box
             assert "phone stand" in page.input_value("#prompt")
             page.fill("#prompt", "a plate with two holes")
             page.keyboard.press("Meta+Enter" if page.evaluate("navigator.platform").startswith("Mac") else "Control+Enter")
@@ -49,7 +49,7 @@ def test_home_to_project_and_back(tmp_path):
             assert "✓" in page.inner_text("#messages .msg.tool >> nth=0")
             page.wait_for_function("() => window.__eitri_debug && window.__eitri_debug().faces > 0", timeout=60000)
             assert page.title() == "A plate with two holes · eitri" and page.inner_text("#title") == "A plate with two holes"
-            assert page.is_visible("#homelink")
+            assert page.get_attribute("eitri-topbar .crumbs a >> nth=0", "href") == "/"              # the way home: the top bar's crumbs
             page.wait_for_function("() => document.querySelector('#planusage').textContent.includes('$0.12 of API usage')", timeout=10000)
 
             # a long turn shows Stop; stopping keeps the conversation
@@ -92,7 +92,7 @@ def test_home_to_project_and_back(tmp_path):
 
             # the page saved a thumbnail; back home, the card shows it
             page.wait_for_function("() => fetch('/thumb/plate-with-two-holes').then(r => r.status === 200)", timeout=20000)
-            page.click("#homelink")
+            page.click("eitri-rail a[data-tool=projects]")
             page.wait_for_selector(".card", timeout=10000)
             page.wait_for_function("() => { const i = document.querySelector('.card .thumb img'); return i && i.complete && i.naturalWidth === 480; }", timeout=20000)
             card = page.inner_text(".card")

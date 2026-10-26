@@ -63,7 +63,7 @@ def test_sheet_metal_tools(tmp_path):
         page.wait_for_timeout(300)
         cx, cy = page.evaluate("() => window.__eitri_project([0, 0, 0])")
         page.mouse.move(cx, cy)
-        for _ in range(5):                                                   # zoom out: a 120 mm sheet is larger than the blank grid (and clear of the sketch panel)
+        for _ in range(7):                                                   # zoom out: a 120 mm sheet is larger than the blank grid (and clear of the sketch panel)
             page.mouse.wheel(0, 400)
             page.wait_for_timeout(120)
         xs = [page.evaluate(f"() => window.__eitri_project({json.dumps(pt)})") for pt in ([-60, -25, 0], [60, 25, 0])]

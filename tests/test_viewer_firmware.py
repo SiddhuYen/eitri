@@ -53,10 +53,10 @@ def test_edit_a_pin_and_switch_the_board(tmp_path):
     with pw.sync_playwright() as p:
         browser, page, errors = _open(p, url)
         assert page.evaluate("() => document.body.classList.contains('firmware')")
-        ins = "#hedit .hinspector"
+        ins = "#domaininsp .hinspector"
         assert "Pinout" in page.inner_text(ins) and "PIN_PAN" in page.inner_text(ins)
         code = page.locator(f"{ins} pre.hcode")
-        assert "pan.attach(PIN_PAN);" in code.inner_text() and page.evaluate("() => !document.querySelector('#hedit pre.hcode').isContentEditable")
+        assert "pan.attach(PIN_PAN);" in code.inner_text() and page.evaluate("() => !document.querySelector('#domaininsp pre.hcode').isContentEditable")
         page.locator(f"{ins} button.small:text('eitri_pins.h')").click()
         page.wait_for_selector(f"{ins} pre.hcode[data-file='eitri_pins.h']")
         assert "const uint8_t PIN_LED = 13;" in page.inner_text(f"{ins} pre.hcode")
@@ -83,6 +83,6 @@ def test_a_failing_check_highlights_its_pin(tmp_path):
         bad.click()
         page.wait_for_selector("#hedit .hpaper g.hl", state="attached")
         assert "D13" in set(page.eval_on_selector_all("#hedit .hpaper g.hl", "els => els.map(e => e.dataset.id)"))
-        assert page.locator("#hedit .hinspector .hpr.fw b.bad").count() >= 1
+        assert page.locator("#domaininsp .hinspector .hpr.fw b.bad").count() >= 1
         assert not errors, errors
         browser.close()
