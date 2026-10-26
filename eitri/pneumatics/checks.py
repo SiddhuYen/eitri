@@ -261,7 +261,12 @@ def run_checks(c: Circuit) -> tuple[list[Check], list[CylinderInfo], list[Supply
                 checks.append(_check("circuit", f"{cyl.name}.{port} can exhaust", "pass", f"{' -> '.join(exh[port].names) or 'direct'} ({', '.join(f'{v} pos {i + 1}' for v, i in exh[port].valve_positions.items())})",
                                      "", [cyl.name] + exh[port].names))
             else:
-                checks.append(_check("circuit", f"{cyl.name}.{port} can exhaust", "fail", f"{ref} cannot vent in any valve position: the chamber is dead-headed", "a valve position joining the port to an exhaust", [cyl.name]))
+                bare = [str(v.port(e)) for v in c.components.values() if v.kind == "valve" for e in EXHAUST_PORTS if e in v.ports
+                        and v.port(e) not in c.attached and v.port(e) not in c.vents and not c._tubes_at(v.port(e))]
+                why = (f"; {', '.join(bare)} {'has' if len(bare) == 1 else 'have'} nothing on {'it' if len(bare) == 1 else 'them'}, and an "
+                       "undeclared exhaust port counts as plugged: c.silencer(v[\"R\"]) or c.exhaust(v[\"R\"])") if bare else ""
+                checks.append(_check("circuit", f"{cyl.name}.{port} can exhaust", "fail", f"{ref} cannot vent in any valve position: the chamber is dead-headed{why}",
+                                     "a valve position joining the port to an exhaust", [cyl.name]))
         p_cyl = next((f.pressure_bar for f in fed.values() if f.found and f.pressure_bar is not None), None)
         info.pressure_bar = p_cyl
         forces = cylinder_forces(cyl, p_cyl) if p_cyl is not None else None

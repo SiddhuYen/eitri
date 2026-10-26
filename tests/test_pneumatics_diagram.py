@@ -175,3 +175,20 @@ def test_the_frl_symbol_draws_only_what_is_fitted():
     assert n == 2 and any("FR 6 bar" in t for t in titles) and not any("FRL" in t.split("·")[-1] for t in titles)
     n, titles = cells(True)                     # with a lubricator: three, titled FRL
     assert n == 3 and any("FRL 6 bar" in t for t in titles)
+
+
+def test_an_undeclared_exhaust_port_is_named_when_a_chamber_cannot_vent():
+    from eitri.pneumatics import Circuit
+    from eitri.pneumatics.report import analyze
+    c = Circuit("open ports")
+    air = c.supply("AIR", pressure_bar=6, flow_l_min=200)
+    v = c.valve("V1", "5/2", actuation="solenoid", returns="spring")
+    cyl = c.cylinder("C1", bore_mm=25, rod_mm=10, stroke_mm=50, load_N=50, speed_mm_s=100, cycles_per_min=10)
+    c.tube("T1", air["OUT"], v["P"], id_mm=4, length_m=1)
+    c.tube("T2", v["A"], cyl["CAP"], id_mm=4, length_m=1)
+    c.tube("T3", v["B"], cyl["ROD"], id_mm=4, length_m=1)
+    vent = next(x for x in analyze(c).checks if x.name == "C1.CAP can exhaust")
+    assert vent.severity == "fail" and "V1.R, V1.S have nothing on them" in vent.measured and "c.silencer" in vent.measured
+    c.silencer(v["R"])
+    c.silencer(v["S"])
+    assert next(x for x in analyze(c).checks if x.name == "C1.CAP can exhaust").severity == "pass"
