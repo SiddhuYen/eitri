@@ -24,8 +24,41 @@ FAIL = "#d92d20"
 WARN = "#f08c00"
 
 
+_GLYPH_W: dict[str, float] = {}         # per character, at size 1: the wider of IBM Plex Sans (the SVG in the browser) and Pillow's
+_FONTS: list = []                        # built-in font (the PNG review image), so a box sized with text_w holds the text in both
+
+
+def _glyph_fonts() -> list:
+    if not _FONTS:
+        from pathlib import Path
+        from PIL import ImageFont
+        fonts = []
+        plex = Path(__file__).parent / "web" / "assets" / "design" / "fonts" / "ibm-plex-sans-600.woff2"
+        try:
+            fonts.append(ImageFont.truetype(str(plex), 100))
+        except (OSError, ValueError):
+            pass
+        try:
+            fonts.append(ImageFont.load_default(size=100))
+        except TypeError:                                   # Pillow < 10.1
+            pass
+        _FONTS.append(fonts)
+    return _FONTS[0]
+
+
 def text_w(s: str, size: float = FONT) -> float:
-    return len(s) * size * 0.58
+    """The width of a text at a font size, measured (bold-safe: Plex SemiBold), falling back to 0.62 em a character."""
+    fonts = _glyph_fonts()
+    if not fonts:
+        return len(s) * size * 0.62
+    w = 0.0
+    for ch in str(s):
+        g = _GLYPH_W.get(ch)
+        if g is None:
+            g = max(f.getlength(ch) for f in fonts) / 100.0
+            _GLYPH_W[ch] = g
+        w += g
+    return w * size
 
 
 @dataclass
@@ -141,7 +174,11 @@ def _svg_item(it: dict) -> str:
     if t == "text":
         anchor = f' text-anchor="{it["anchor"]}"' if it.get("anchor") else ""
         weight = f' font-weight="{it["weight"]}"' if it.get("weight") else ""
-        return f'<text{cls} x="{it["x"]:.1f}" y="{it["y"]:.1f}" font-size="{it["size"]}" fill="{it["fill"]}"{anchor}{weight}>{escape(str(it["s"]))}</text>'
+        halo = ""
+        if it.get("bg"):
+            x, y, w, h = text_box(it, pad=2)
+            halo = f'<rect class="halo" x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" rx="2" fill="{it["bg"]}" fill-opacity="0.9" stroke="none"/>'
+        return halo + f'<text{cls} x="{it["x"]:.1f}" y="{it["y"]:.1f}" font-size="{it["size"]}" fill="{it["fill"]}"{anchor}{weight}>{escape(str(it["s"]))}</text>'
     if t == "line":
         dash = f' stroke-dasharray="{it["dash"]}"' if it.get("dash") else ""
         return f'<line{cls} x1="{it["x1"]:.1f}" y1="{it["y1"]:.1f}" x2="{it["x2"]:.1f}" y2="{it["y2"]:.1f}" stroke="{it["stroke"]}" stroke-width="{it["sw"]}"{dash}/>'
@@ -212,6 +249,9 @@ def scene_to_png(scene: Scene, path) -> str:
             else:
                 d.rectangle(box, fill=fill, outline=outline, width=max(1, round(it["sw"] * SS)))
         elif t == "text":
+            if it.get("bg"):
+                x, y, w, h = text_box(it, pad=2)
+                d.rounded_rectangle([x * SS, y * SS, (x + w) * SS, (y + h) * SS], radius=2 * SS, fill=_hex_rgb(it["bg"], 0.9))
             f = font(it["size"], it.get("weight") == "700")
             anchor = {"middle": "ms", "end": "rs"}.get(it.get("anchor"), "ls")
             d.text((it["x"] * SS, it["y"] * SS), str(it["s"]), font=f, fill=_hex_rgb(it["fill"]) or (0, 0, 0), anchor=anchor,
@@ -277,3 +317,227 @@ def _line(d, pts, color, width, dash=None) -> None:
                 drawing = not drawing
                 left = on if drawing else off
         cur = nxt
+
+
+# --------------------------------------------------------------------------- labels: geometry, collisions, placement
+#
+# Every text item is checked. A text may sit inside a box (a connector's pin rows, a view's frame): that is content. A text that
+# crosses a line (of any group, its own included: a wire's label never sits on its wire), another text, or the edge of a box of
+# another group collides. A text that carries `cands` (a list of (x, y, anchor) positions, best first) is movable: place_labels()
+# moves it to the first candidate that collides with nothing.
+
+CONTAINERS = {"frame", "view", "paper", "bg", "card", "halo", "board"}       # rect classes that hold content: only their edges are obstacles
+
+
+def text_box(it: dict, pad: float = 0.0) -> tuple[float, float, float, float]:
+    """(x, y, w, h) of a text item: its anchor, the measured width, the font's ascent and descent."""
+    size = float(it.get("size", FONT))
+    w = text_w(str(it["s"]), size)
+    a = it.get("anchor")
+    x = it["x"] - w / 2 if a == "middle" else it["x"] - w if a == "end" else it["x"]
+    y = it["y"] - size * 0.78
+    return x - pad, y - pad, w + 2 * pad, size * 1.0 + 2 * pad
+
+
+def _segments(it: dict) -> list[tuple[float, float, float, float]]:
+    t = it["t"]
+    if t == "line":
+        return [(it["x1"], it["y1"], it["x2"], it["y2"])]
+    if t in ("polyline", "path"):
+        pts = list(it["pts"]) if t == "polyline" else _flatten(it["pts"], 16)
+        if t == "polyline" and it.get("closed") and pts:
+            pts = pts + [pts[0]]
+        return [(a[0], a[1], b[0], b[1]) for a, b in zip(pts, pts[1:])]
+    return []
+
+
+def _seg_hits_box(seg, box) -> bool:
+    """Liang-Barsky: does the segment cross the box (x, y, w, h)?"""
+    x1, y1, x2, y2 = seg
+    bx, by, bw, bh = box
+    dx, dy = x2 - x1, y2 - y1
+    t0, t1 = 0.0, 1.0
+    for p, q in ((-dx, x1 - bx), (dx, bx + bw - x1), (-dy, y1 - by), (dy, by + bh - y1)):
+        if p == 0:
+            if q < 0:
+                return False
+        else:
+            r = q / p
+            if p < 0:
+                t0 = max(t0, r)
+            else:
+                t1 = min(t1, r)
+            if t0 > t1:
+                return False
+    return True
+
+
+def _segs_cross(a, b) -> bool:
+    """Do two segments (x1, y1, x2, y2) intersect?"""
+    def orient(p, q, r):
+        v = (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+        return 0 if abs(v) < 1e-9 else (1 if v > 0 else -1)
+    p1, p2, p3, p4 = (a[0], a[1]), (a[2], a[3]), (b[0], b[1]), (b[2], b[3])
+    o1, o2, o3, o4 = orient(p1, p2, p3), orient(p1, p2, p4), orient(p3, p4, p1), orient(p3, p4, p2)
+    return o1 != o2 and o3 != o4
+
+
+def _inside(inner, outer) -> bool:
+    return inner[0] >= outer[0] and inner[1] >= outer[1] and inner[0] + inner[2] <= outer[0] + outer[2] and inner[1] + inner[3] <= outer[1] + outer[3]
+
+
+def _visible(it: dict) -> bool:
+    if it.get("cls") == "hit" or it.get("alpha", 1.0) == 0.0:
+        return False
+    if it["t"] == "rect":
+        return not (it.get("alpha_fill", 1.0) == 0.0 and (it.get("stroke") in (None, "none") or it.get("sw", 1) == 0))
+    if it["t"] in ("line", "polyline", "path"):
+        return it.get("stroke") not in (None, "none") and it.get("sw", 1) > 0
+    return True
+
+
+def _hits(tb: tuple, text: dict, other: dict) -> bool:
+    """Does the text with box tb collide with another scene item?"""
+    if other is text or not _visible(other):
+        return False
+    t = other["t"]
+    if t == "text":
+        return _overlap(tb, text_box(other), pad=0.5)
+    if t in ("line", "polyline", "path"):
+        half = float(other.get("sw", 1)) / 2                     # the stroke's own width counts
+        tbw = (tb[0] - half, tb[1] - half, tb[2] + 2 * half, tb[3] + 2 * half)
+        bb = _bbox(other)
+        if bb and not _overlap(tbw, bb, pad=0):
+            return False
+        return any(_seg_hits_box(sg, tbw) for sg in _segments(other))
+    if t in ("rect", "circle"):
+        box = (other["x"], other["y"], other["w"], other["h"]) if t == "rect" else \
+              (other["cx"] - other["r"], other["cy"] - other["r"], 2 * other["r"], 2 * other["r"])
+        if not _overlap(tb, box, pad=0):
+            return False
+        own = other.get("g") is not None and other.get("g") == text.get("g")
+        if _inside(tb, box):                                      # content: in its own box, or in a container (a view, a frame)
+            return not own and other.get("cls") not in CONTAINERS
+        return other.get("cls") != "halo"                         # crosses a box's edge (its own symbol's too)
+    return False
+
+
+def _bbox(it: dict):
+    sg = _segments(it)
+    if not sg:
+        return None
+    xs = [v for s in sg for v in (s[0], s[2])]
+    ys = [v for s in sg for v in (s[1], s[3])]
+    return (min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys))
+
+
+def collisions(scene: Scene, only_text: bool = True) -> list[tuple[dict, dict]]:
+    """Every (text, item) pair that collides: what a readable diagram has none of. Footer text is not a diagram label."""
+    texts = [it for it in scene.items if it["t"] == "text" and it.get("g") != "footer"]
+    order = {id(t): i for i, t in enumerate(texts)}
+    others = [it for it in scene.items if it.get("g") != "footer"]
+    out = []
+    for i, t in enumerate(texts):
+        tb = text_box(t)
+        for o in others:
+            if o["t"] == "text" and order.get(id(o), -1) <= i:     # each pair of texts once
+                continue
+            if _hits(tb, t, o):
+                out.append((t, o))
+    return out
+
+
+def tether_crossings(scene: Scene) -> list[tuple[dict, dict]]:
+    """Placed labels whose tether (the short segment from the label to its own line) crosses another group's line: a label that
+    sits next to a different wire than its own."""
+    out = []
+    lines = [o for o in scene.items if o["t"] in ("line", "polyline", "path") and _visible(o) and o.get("g") != "footer"]
+    for it in scene.items:
+        if it["t"] != "text" or not it.get("cands") or "cand_index" not in it:
+            continue
+        c = it["cands"][it["cand_index"]]
+        if len(c) > 4 and c[4]:
+            for o in lines:
+                if o.get("g") != it.get("g") and any(_segs_cross(c[4], sg) for sg in _segments(o)):
+                    out.append((it, o))
+    return out
+
+
+def place_labels(scene: Scene, margin: float = 4.0) -> list[dict]:
+    """Move every text that carries `cands` (and its `follow` texts) to its first candidate position that collides with nothing:
+    the fixed items and the labels placed before it. A label left without a free position gets a repair round: each label it
+    overlaps is re-placed first, and it tries again. Returns the labels that still found no free position (each left at its
+    least-colliding candidate)."""
+    followers = {id(f) for it in scene.items for f in it.get("follow", ())}
+    movable = [x for x in scene.items if x["t"] == "text" and x.get("cands")]
+    fixed = [it for it in scene.items if not (it["t"] == "text" and (it.get("cands") or id(it) in followers)) and it.get("g") != "footer"]
+    top = scene.footer_top if getattr(scene, "footer_top", None) else scene.height
+
+    def members(it):
+        return [it] + list(it.get("follow", ()))
+
+    def score(it, c, others):
+        x, y = c[0], c[1]
+        anchor = c[2] if len(c) > 2 else it.get("anchor")
+        unit = [dict(it, x=x, y=y, anchor=anchor)] + [dict(f, x=x + f["dx"], y=y + f["dy"], anchor=anchor) for f in it.get("follow", ())]
+        n = 0
+        for k, trial in enumerate(unit):
+            tb = text_box(trial, pad=1.0)
+            if tb[0] < margin or tb[1] < margin or tb[0] + tb[2] > scene.width - margin or tb[1] + tb[3] > top - margin:
+                n += 10_000
+                continue
+            me = members(it)[k]
+            n += sum(1 for o in fixed if o is not me and _hits(tb, trial, o)) + sum(1 for o in others if _hits(tb, trial, o))
+        tether = c[4] if len(c) > 4 else None                    # (x1, y1, x2, y2): label edge -> its own line; no other line between
+        if tether:
+            for o in fixed:
+                if o.get("g") != it.get("g") and o["t"] in ("line", "polyline", "path") and _visible(o) and \
+                        any(_segs_cross(tether, sg) for sg in _segments(o)):
+                    n += 1
+        return n, unit
+
+    def put(it, others) -> int:
+        best, best_n, best_i = None, None, 0
+        for i, c in enumerate(it["cands"]):
+            n, unit = score(it, c, others)
+            if best_n is None or n < best_n:
+                best, best_n, best_i = unit, n, i
+            if n == 0:
+                break
+        for member, trial in zip(members(it), best):
+            member["x"], member["y"], member["anchor"] = trial["x"], trial["y"], trial.get("anchor")
+        it["cand_index"] = best_i
+        return best_n
+
+    placed: list[dict] = []
+    stuck = []
+    for it in movable:
+        if put(it, placed):
+            stuck.append(it)
+        placed += members(it)
+    for _round in range(2):                                     # repair: let a stuck label move a neighbour out of its way
+        still = []
+        for it in stuck:
+            mine = members(it)
+            others = [o for o in placed if not any(o is m for m in mine)]
+            if not put(it, others):
+                continue
+            blockers = [o for o in movable if o is not it and any(_hits(text_box(m), m, b) for m in mine for b in members(o))]
+            fixed_now = False
+            for b in blockers:
+                saved = [(m, m["x"], m["y"], m.get("anchor"), b.get("cand_index")) for m in members(b)]
+                rest = [o for o in placed if not any(o is m for m in members(b)) and not any(o is m for m in mine)]
+                # the stuck label first, then the blocker around it
+                if put(it, rest) == 0 and put(b, rest + mine) == 0:
+                    fixed_now = True
+                    break
+                for m, x, y, a, ci in saved:
+                    m["x"], m["y"], m["anchor"] = x, y, a
+                b["cand_index"] = saved[0][4]
+                put(it, others)
+            if not fixed_now:
+                still.append(it)
+        stuck = still
+        if not stuck:
+            break
+    return stuck

@@ -225,6 +225,18 @@ def run_checks(c: Circuit) -> tuple[list[Check], list[CylinderInfo], list[Supply
     if not c.cylinders:
         checks.append(_check("circuit", "an actuator", "warn", "the circuit has no cylinder; nothing to size", "c.cylinder(...)"))
 
+    net = _nets(c)
+    for cyl in c.cylinders:
+        if cyl.acting == "double" and "CAP" in cyl.ports and "ROD" in cyl.ports:
+            cap, rod = net(cyl.port("CAP")), net(cyl.port("ROD"))
+            if cap == rod:
+                checks.append(_check("circuit", f"{cyl.name}.CAP and {cyl.name}.ROD on separate lines", "fail",
+                                     f"{cyl.name}'s CAP and ROD ports are on one line (joined by tubes" + (" and a tee" if any(x.kind == "node" for x in c.components.values()) else "")
+                                     + "): both chambers always see the same pressure, so the piston cannot be driven either way",
+                                     "each port on its own line, each to its own valve port (A and B of a 5/2)", [cyl.name]))
+            else:
+                checks.append(_check("circuit", f"{cyl.name}.CAP and {cyl.name}.ROD on separate lines", "pass",
+                                     "the two chambers are fed by different lines", "", [cyl.name]))
     for cyl in c.cylinders:
         info = CylinderInfo(cyl.name, cyl.bore_mm, cyl.rod_mm, cyl.stroke_mm, cyl.acting, None, cycles_per_min=cyl.cycles_per_min)
         fed: dict[str, PathInfo] = {}
@@ -391,3 +403,22 @@ def run_checks(c: Circuit) -> tuple[list[Check], list[CylinderInfo], list[Supply
                              "no C, b from a datasheet for " + ", ".join(f"{k} ({v})" for k, v in list(estimated.items())[:8]) + ("..." if len(estimated) > 8 else "") + ": graded with conservative estimates",
                              "C= and b= from the datasheet on every component and tube", list(estimated)))
     return checks, infos, sinfos
+
+
+def _nets(c: Circuit):
+    """The pneumatic lines: ports joined by tubes, directly or through a tee / manifold node (not through a valve, a flow
+    control or any other component, which separate lines). Returns a function port -> its line's representative."""
+    parent: dict = {}
+
+    def find(x):
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for t in c.tubes:
+        ra, rb = find(t.a), find(t.b)
+        if ra != rb:
+            parent[ra] = rb
+    return find
