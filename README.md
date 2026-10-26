@@ -8,15 +8,16 @@ Fusion-style 3D editor in your browser, by hand or by chat: both edit the same m
 [Install](#quickstart) · [Limitations](#limitations) · [License](#license)
 
 <!--
-  STILL TO RECORD (the hero, V8 build, editor tour and manual-drag-then-agent-continues GIFs are done):
-  1. print-export dialog: the V8 engine kit's "Export for 3D printing" dialog ("V8 engine kit -> 43 printable
-     parts, 2 plates") with a part hovered on the plate.
+  STILL TO RECORD in the app shell (the hero, the V8 build, the checks card and the print dialog are re-shot;
+  scripts/record-demo.md has the recipes):
+  1. editor tour (docs/editor-tour.gif): still shows the editor before the shell.
+  2. manual drag, then the agent continues (docs/edit-agent-loop.gif / .mp4): still the old editor; needs a key.
 -->
-![A recorded eitri session, replayed: the thinnest-wall check fails, Claude finds the cause and rebuilds, and all 10 checks turn green](docs/check-fix-green.gif)
+![A recorded eitri session, replayed in the editor: Claude plans the hook, writes the model, a check fails, Claude rebuilds, and all 10 checks pass](docs/check-fix-green.gif)
 
-<sub>A real recorded session (the Wall racket holder demo, which anyone can replay without a key), cut to its
-key moments: the plan, the first failed build, the thinnest-wall check failing, the fix, all 10 checks passing.
-3 min 17 s of work in 20 s; [full session (39 s)](docs/check-fix-green-full.gif).</sub>
+<sub>A real recorded session (the Wall racket holder demo, which anyone can replay without a key), played back
+in the editor: the plan, Claude writing the model, the failed builds, the fix, all 10 checks passing. 3 min 17 s
+of work in 18 s.</sub>
 
 Every build comes back to the agent as a **geometry report** (bounding box, volume, every hole with diameter,
 depth and through-or-blind, thinnest wall and knife edges, interferences and clearances between parts, the
@@ -97,10 +98,18 @@ the conversation) or **New chat** to start over; every direct-modeling tool work
 **Import a file…** (STEP, IGES, STL, OBJ, 3MF, PLY or a model .py) and **Open a folder…** start projects
 without a prompt. Each project keeps its conversation, so it is still there after a restart.
 
+Every page shares one layout: a top bar with where you are (`eitri / wires / Quad power harness`), a rail with
+the five tools (CAD, Wires, Motion, Pneumatics, Firmware; each opens that tool's projects) and your project list
+at its foot, and a status bar with the tool, the core version, the project folder and the build's verdict. In a
+project the model (or a domain's diagram) fills the canvas; the inspector (checks, parameters, the selection,
+revisions) and the chat sit in panels docked on the right. The chat collapses to its header, the panels fold to
+a strip for more room, and the Export menu at the top of the inspector lists every file the project can be
+downloaded as. Dark by default, light when the system is.
+
 ![The V8 engine kit demo: the prompt, Claude writing the model, the build, all 43 checks passing](docs/v8-build.gif)
 
 <sub>The 43-part V8 demo: one prompt → Claude writes a 398-line model → all 43 checks pass (a recorded
-23-minute session, replayed and compressed to 16 s).</sub>
+23-minute session, replayed and compressed to 18 s).</sub>
 
 You watch Claude work as it happens: its thinking (readable summaries; each finished thought stays as an
 expandable "Thought for N s"), its reply typing out, the model code streaming into a panel over the 3D view,
@@ -568,7 +577,7 @@ nuts, washers and ball bearings (via bd_warehouse), bearing pockets.
 
 ## What the automatic checks catch
 
-![The checks card after the fix: all 10 checks pass, with the thinnest-wall fix called out](docs/editor-checks.png)
+![The checks card after the fix: all 10 checks of the racket holder pass, each with what was measured and what was expected](docs/editor-checks.png)
 
 Things that went wrong during development and are now caught by the build, not by
 hoping the agent notices:
