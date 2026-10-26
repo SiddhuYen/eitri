@@ -117,5 +117,5 @@ the builds, the checks going green) and by the suite's scripted session (test_we
 - For hosts: pages link `assets/design/*`, `assets/app.css` and `assets/shell-host.js` instead of `eitri.css` / `editor.css`;
   the editor's markup changed (`#side` is inside `#dock`, the title and home link moved to the top bar, `#homelink` is gone,
   drop-downs are `.dd`). eitri-hosted's share route list can stay as it is: the share page now needs nothing beyond it.
-- Not part of the redesign, noticed on the way: `fast_simplification` (used by mesh decimation through trimesh) is not declared in
-  pyproject.toml; `test_meshio.py::test_decimation` fails in an environment without it.
+- Dependencies: `fast_simplification` (trimesh's mesh decimation) is now declared, and `PyYAML` is in the `dev` extra; a fresh
+  install runs the whole suite with no skips. The full notes are in CHANGELOG.md (0.5.0).

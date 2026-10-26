@@ -22,6 +22,7 @@ dependencies = [
   "pillow>=10",
   "trimesh>=4",               # mesh import/repair, OBJ export, print-plate checks
   "networkx>=3",              # trimesh's hole filling
+  "fast_simplification>=0.2", # trimesh's quadric decimation: imported meshes over 200k triangles are decimated (eitri.meshio)
   "anthropic>=1.0",           # API-key check (and the --backend api session)
   "mcp>=1.2",                 # the tool server Claude talks to
   "claude-agent-sdk>=0.2",    # ships the Claude Code binary eitri drives (API key only)
@@ -34,7 +35,7 @@ Issues = "https://github.com/SiddhuYen/eitri/issues"
 
 [project.optional-dependencies]
 pdf = ["playwright>=1.40"]                  # PDF drawings and drawing previews (then: playwright install chromium)
-dev = ["pytest>=8", "playwright>=1.40"]
+dev = ["pytest>=8", "playwright>=1.40", "PyYAML>=6"]   # PyYAML: a test reads the WireViz YAML eitri writes itself
 
 [project.scripts]
 eitri = "eitri.cli:main"
