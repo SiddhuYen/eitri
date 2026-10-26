@@ -425,3 +425,11 @@ def test_pan_tilt_demo_and_its_configs():
     mh = heavy.build()
     reph = analyze(mh, heavy.verify(mh))
     assert one(reph, "torque joint tilt").severity == "fail" and one(reph, "tilt load at level").severity == "fail"
+
+
+def test_mass_rollup_says_where_the_payload_is_counted():
+    m = cantilever(payload_g=50)
+    roll = mass_rollup(m)
+    text = one(analyze(m), "mass rollup").measured
+    # the payload is part of the tip link's figure and of the total, once
+    assert roll["total_g"] == pytest.approx(sum(roll["links_g"].values())) and "the 50 g payload counted on arm" in text

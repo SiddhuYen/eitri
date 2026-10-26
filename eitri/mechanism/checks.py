@@ -220,7 +220,8 @@ def run_checks(m: Mechanism) -> tuple[list[Check], list[JointInfo], list[TargetI
                          "", [j.name for j in moving]))
     masses = mass_rollup(m)
     checks.append(_check("mass", "mass rollup", "pass",
-                         ", ".join(f"{k} {v:g} g" for k, v in masses["links_g"].items() if v) + (f"; payload {masses['payload_g']:g} g" if masses["payload_g"] else "; no payload")
+                         ", ".join(f"{k} {v:g} g" for k, v in masses["links_g"].items() if v)
+                         + (f" (the {masses['payload_g']:g} g payload counted on {m.resolved_tip()[0]})" if masses["payload_g"] else "; no payload")
                          + f"; total {masses['total_g']:g} g", "", list(m.links)))
     if not moving:
         return checks, [], [], {"poses": 0}, masses
