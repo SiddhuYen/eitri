@@ -315,3 +315,18 @@ Suite: 370 tests at v0.5.0 -> 412, all passing, no skips.
 2. RATED_FRACTION: keep 0.5 x stall, or move to a more conservative figure (ROBOTIS XL320: 1/5)? It changes every arm's grade.
 3. K_COPPER: keep 10.75 (copper near 29 C) or use 12.9 (75 C, NEC practice)? Drops go up ~20 % in every harness.
 4. Whether to add live-run support through a Claude Code login (it would change how eitri authenticates).
+
+# Your decisions, carried out (2026-10-26)
+
+1. Ground plane: on by default. "stays above its base plane" warns when any part reaches below z = 0 of the base;
+   `m.mount("edge" | "ceiling" | "wall")` opts a project out (the reference 3-DOF arm is declared clamped at a bench edge, since
+   its pick target needs it to fold below its base). Tested both ways. Commit 491f0a1.
+2. Servo continuous torque: the datasheet's rated torque when the actuator catalog has one (Feetech STS3215: 6.5 kg·cm continuous of
+   19.5 at 6 V, source recorded); otherwise ASSUMED_RATED_FRACTION = 1/3 of stall, named in the message as "assumed, not a spec".
+   Demos re-graded (unchanged results); AGENTS.md updated. Commit 07a3883.
+3. Voltage drop: K = 12.9, copper at 75 C (NEC Chapter 9 Table 8), tests and the README / reference updated. Commit 173bd0c.
+4. Claude Code login: no. eitri stays API-key only (Claude Code runs with --bare and never reads OAuth or the keychain). Decided
+   2026-10-26; not to be revisited without a new decision.
+
+Then: pneumatic pressure ratings (vendor defaults per kind, each sourced; FAIL naming the lowest-rated component reached), and the
+0.5.1 release.
