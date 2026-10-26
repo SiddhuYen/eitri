@@ -101,6 +101,25 @@ def test_the_harness_editor_replaces_the_3d_view(tmp_path):
         browser.close()
 
 
+def test_warnings_are_not_counted_as_passes(tmp_path):
+    # a battery lead at 40 A: the XT60s carry it above their 30 A continuous rating (a warning each), nothing fails
+    project = Project(tmp_path / "proj", name="pack")
+    project.write_model(MODEL.replace('"JST-XH"', '"XT60"').replace("current_A=2.0", "current_A=40.0").replace("Wire(24", "Wire(8")
+                        .replace("PARAMS = dict(length_mm=1500)", "PARAMS = dict(length_mm=100)"))
+    assert project.build(note="first", render=False).ok
+    url = start_viewer(project)
+    with pw.sync_playwright() as p:
+        browser, page, errors = _open(p, url)
+        st = _state(page)
+        n, warns = len(st["checks"]), sum(c.get("severity") == "warn" for c in st["checks"])
+        assert warns == 2 and all(c["ok"] for c in st["checks"]), st["checks"]
+        page.wait_for_function("() => document.querySelector('#st-buildtxt').textContent.includes('warn')", timeout=20000)
+        expect = f"{n - warns} of {n} checks pass, {warns} warn"
+        assert page.inner_text("#checktitle") == expect and expect in page.inner_text("#st-buildtxt")
+        assert not errors, errors
+        browser.close()
+
+
 def test_edit_a_wire_in_the_inspector(tmp_path):
     project, url = _start(tmp_path)
     with pw.sync_playwright() as p:

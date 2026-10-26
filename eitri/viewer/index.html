@@ -3186,7 +3186,8 @@ function renderReport() {
   card.classList.remove('pass', 'fail', 'none'); card.classList.add(verdict);
   $('checkicon').innerHTML = icon(verdict === 'pass' ? 'shield-check' : verdict === 'fail' ? 'circle-x' : 'list-checks');
   $('checktitle').textContent = verdict === 'none' ? 'Checks' : fails ? `${fails} of ${checks.length} check${checks.length === 1 ? '' : 's'} failing`
-    : checks.length ? `All ${checks.length} check${checks.length === 1 ? '' : 's'} pass` : 'No checks in this model';
+    : !checks.length ? 'No checks in this model' : warns ? `${checks.length - warns} of ${checks.length} checks pass, ${warns} warn`
+    : `All ${checks.length} check${checks.length === 1 ? '' : 's'} pass`;
   $('checksub').textContent = verdict === 'none' ? (state.ok_revision ? 'this model has no verify() checks yet' : 'no build yet')
     : isDomain() ? (warns ? `${warns} warning${warns === 1 ? '' : 's'}` : 'no warnings') + (state.ok_revision ? ` · revision ${state.ok_revision}` : '')
     : (issues.length ? `${issues.length} warning${issues.length === 1 ? '' : 's'} from the geometry report` : 'no warnings from the geometry report') + (state.ok_revision ? ` · revision ${state.ok_revision}` : '');
@@ -3721,7 +3722,7 @@ function renderShell() {
   else if (!s.ok_revision) { txt = s.last_error ? 'build failed' : 'no build yet'; cls = s.last_error ? 'bad' : ''; }
   else if (s.last_ok === false) { txt = `rev ${s.ok_revision} · latest build failed`; cls = 'bad'; }
   else if (!checks.length) { txt = `rev ${s.ok_revision} · built`; cls = 'ok'; }
-  else { txt = `rev ${s.ok_revision} · ` + (fails ? `${fails} of ${checks.length} checks failing` : `${checks.length} checks pass`) + (warns && !fails ? `, ${warns} warn` : ''); cls = fails ? 'bad' : warns ? 'warn' : 'ok'; }
+  else { txt = `rev ${s.ok_revision} · ` + (fails ? `${fails} of ${checks.length} checks failing` : warns ? `${checks.length - warns} of ${checks.length} checks pass, ${warns} warn` : `${checks.length} checks pass`); cls = fails ? 'bad' : warns ? 'warn' : 'ok'; }
   sb.className = 'st-build ' + cls; $('st-buildtxt').textContent = txt;
   const sv = $('stripverdict'); sv.className = 'sv ' + (!checks.length ? '' : fails ? 'fail' : 'pass'); sv.textContent = !checks.length ? '–' : fails ? String(fails) : '✓';
   sv.title = !checks.length ? 'no checks yet' : fails ? `${fails} check${fails === 1 ? '' : 's'} failing` : 'all checks pass';
