@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from ..checks import Check, check
 from ..model import CheckResult  # noqa: F401
 from .. import power
-from .catalog import BOARD_TYPES, voltage_drop
+from .catalog import BOARD_TYPES, faston_rating, voltage_drop
 from .model import Endpoint, Harness, Link, PinRef, SpliceRef
 
 WARN_FRACTION = 0.8          # within 20 % of the limit: a warning
@@ -226,17 +226,27 @@ def _ampacity(h: Harness) -> list[HCheck]:
     # connector pins against their rating
     for c in h.connectors.values():
         rating = c.rating
+        by_wire = c.rating_a is None and c.spec is not None and c.spec.by_wire
         loads = []
         for pin in c.pin_names:
             ref = PinRef(c.name, pin)
             cur = [h.wire_current(l) for l in h.links_at(ref)]
             cur = [x for x in cur if x is not None]
             if cur:
-                loads.append((sum(cur), ref))
+                pin_rating = min(faston_rating(l.gauge) for l in h.links_at(ref)) if by_wire else rating
+                loads.append((sum(cur), ref, pin_rating))
         if not loads:
             continue
-        worst, wref = max(loads, key=lambda t: t[0])
+        worst, wref, pin_rating = max(loads, key=lambda t: t[0] / t[2] if t[2] else t[0])
         refs = [c.name] + [l.id for l in h.links_at(wref)]
+        if by_wire:                                   # a spade: rated by the wire crimped into it (TE 108-106496)
+            g = min((l.gauge for l in h.links_at(wref)), key=faston_rating)
+            frac = worst / pin_rating
+            sev = "fail" if worst > pin_rating else "warn" if frac >= WARN_FRACTION else "pass"
+            out.append(_check("ampacity", f"connector rating {c.name} ({c.type}, by wire size)", sev,
+                              f"worst pin {wref}: {_fmt_a(worst)} of {_fmt_a(pin_rating)} with {g.label} crimped in ({frac * 100:.0f}%)",
+                              f"<= {_fmt_a(pin_rating)}" + (" (within 20% of the limit)" if sev == "warn" else ""), refs))
+            continue
         if rating is None:
             if not c.known and worst > 0:
                 out.append(_check("ampacity", f"connector rating {c.name} ({c.type})", "warn",

@@ -58,6 +58,9 @@ A splice may only join wires of ONE net, so a trunk and its branches are all on 
 
 An unknown type is allowed (`Connector("X", "ACME-9", pins=4, rating_a=5, pitch_mm=3.5)`); without `rating_a` its pins
 are not graded and a warning says so. Crimp-type connectors need one crimp terminal per populated pin (the BOM counts them).
+Ratings are continuous. Between an XT60's or XT90's continuous and its short-time rating the check warns (peaks under a
+minute only); past it, it fails. Spade terminals are rated by the wire crimped in (22 AWG 3 A ... 12 AWG 20 A), so a thicker
+wire raises their rating.
 
 ## The checks every build runs
 

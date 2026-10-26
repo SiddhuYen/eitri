@@ -324,6 +324,20 @@ def test_connector_continuous_and_short_time_ratings():
             assert RATING_SOURCES.get(key), key
 
 
+def test_spades_are_rated_by_the_wire_crimped_in():
+    # TE 108-106496: 18 AWG 7 A, 14 AWG 15 A, 22 AWG 3 A, whatever the tab width
+    def graded(conn_type, awg, amps):
+        h = lead(gauge=awg, current=amps, voltage=12)
+        for c in h.connectors.values():
+            c.type = conn_type
+        return check(analyze(h), "connector rating J1")
+    assert graded("SPADE-6.3", 18, 5).severity == "pass"
+    assert graded("SPADE-6.3", 18, 8).severity == "fail" and "with 18 AWG crimped in" in graded("SPADE-6.3", 18, 8).measured
+    assert graded("SPADE-2.8", 14, 10).severity == "pass"
+    assert graded("SPADE-4.8", 22, 4).severity == "fail"
+    assert "by wire size" in catalog_table()
+
+
 def test_connector_rating_sums_wires_on_a_pin():
     h = Harness()
     big = h.add(Connector("BIG", "JST-PH", pins=1))                    # 2 A per pin

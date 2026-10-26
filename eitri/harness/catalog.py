@@ -25,20 +25,21 @@ class ConnectorSpec:
     default_pins: int = 1
     gender: str = ""
     burst_a: float | None = None # the manufacturer's short-time (instantaneous) rating, when it publishes one
+    by_wire: bool = False        # the rating follows the wire crimped in (faston_rating), rating_a is the largest
 
 
 CATALOG: dict[str, ConnectorSpec] = {s.key: s for s in [
     ConnectorSpec("JST-XH", "JST XH 2.50 mm wire-to-board housing", 2.5, 3.0, "crimp", "SXH-001T-P0.6", "XHP-{n}", 2.5, 2),
     ConnectorSpec("JST-PH", "JST PH 2.00 mm wire-to-board housing", 2.0, 2.0, "crimp", "SPH-002T-P0.5S", "PHR-{n}", 2.0, 2),
-    ConnectorSpec("DUPONT-2.54", "Dupont 2.54 mm housing", 2.54, 2.0, "crimp", "Dupont 2.54 crimp contact", "", 2.5, 2),
+    ConnectorSpec("DUPONT-2.54", "Dupont 2.54 mm housing", 2.54, 3.0, "crimp", "Dupont 2.54 crimp contact", "", 2.5, 2),
     ConnectorSpec("MOLEX-MICROFIT-3.0", "Molex Micro-Fit 3.0 housing", 3.0, 8.5, "crimp", "43030-0001", "43025-{n:02d}00", 3.5, 2),
     ConnectorSpec("XT30", "Amass XT30 bullet connector", 5.0, 20.0, "solder", "", "", 6.0, 2),
     ConnectorSpec("XT60", "Amass XT60 bullet connector", 7.2, 30.0, "solder", "", "", 8.0, 2, burst_a=60.0),
     ConnectorSpec("XT90", "Amass XT90 bullet connector", 10.0, 45.0, "solder", "", "", 10.0, 2, burst_a=90.0),
     ConnectorSpec("RING", "ring terminal", None, None, "ring", "ring terminal (size to the stud)", "", 6.0),
-    ConnectorSpec("SPADE-2.8", "2.8 mm spade (Faston) terminal", None, 6.0, "spade", "2.8 mm spade terminal", "", 5.0),
-    ConnectorSpec("SPADE-4.8", "4.8 mm spade (Faston) terminal", None, 12.0, "spade", "4.8 mm spade terminal", "", 5.5),
-    ConnectorSpec("SPADE-6.3", "6.3 mm spade (Faston) terminal", None, 20.0, "spade", "6.3 mm spade terminal", "", 6.0),
+    ConnectorSpec("SPADE-2.8", "2.8 mm spade (Faston) terminal", None, 20.0, "spade", "2.8 mm spade terminal", "", 5.0, by_wire=True),
+    ConnectorSpec("SPADE-4.8", "4.8 mm spade (Faston) terminal", None, 20.0, "spade", "4.8 mm spade terminal", "", 5.5, by_wire=True),
+    ConnectorSpec("SPADE-6.3", "6.3 mm spade (Faston) terminal", None, 20.0, "spade", "6.3 mm spade terminal", "", 6.0, by_wire=True),
     ConnectorSpec("BARE", "bare / tinned end (soldered or screwed by the user)", None, None, "bare", "", "", 6.0),
     ConnectorSpec("SOLDER", "soldered to a pad or pin", None, None, "bare", "", "", 3.0),
     # development boards: wires end in Dupont 2.54 male contacts pushed into the board's female headers. No per-pin rating here:
@@ -52,8 +53,8 @@ BOARD_TYPES = {"ARDUINO-UNO": "uno", "ARDUINO-NANO": "nano"}
 RATING_SOURCES = {
     "JST-XH": "JST XH series page (jst-mfg.com, series 277): current rating 3 A AC/DC (AWG #22)",
     "JST-PH": "JST PH series page (jst-mfg.com, series 199): current rating 2 A AC/DC (AWG #24)",
-    "DUPONT-2.54": "derated from the 3 A continuous of the original 2.54 mm crimp contact (Amphenol FCI Mini-PV, datasheet "
-                   "48045): generic 'Dupont' contacts are unbranded copies with no published rating",
+    "DUPONT-2.54": "Amphenol FCI Mini-PV crimp contacts, the Berg (Du Pont) line generic 'Dupont' contacts copy: 3 A "
+                   "(48235-000LF, 22-26 AWG, as listed by Heilind / RS). Unbranded copies publish no rating of their own",
     "MOLEX-MICROFIT-3.0": "Molex Micro-Fit 3.0 crimp terminals 43030 (product spec PS-43045-001, as listed by element14 / Heilind): "
                           "up to 8.5 A per circuit; Molex derates it for many circuits in one housing",
     "XT30": "Amass XT30U-M product page (china-amass.net): current rating 20 A (16 AWG, temperature rise <= 85 K); no short-time "
@@ -62,11 +63,10 @@ RATING_SOURCES = {
             "lower figure is used). Holybro's 'Connector & Wire Rating' gives the same 30 A / 60 A (< 1 minute)",
     "XT90": "Amass XT90E-M product page (china-amass.net): current rating 45 A (10 AWG, temperature rise <= 85 K); burst 90 A "
             "(1 minute, temperature rise < 60 C) from Holybro's 'Genuine AMASS Connector Rating' table",
-    "SPADE-6.3": "TE/AMP FASTON catalog 1654369 (product spec 108-20019): .110 / .187 / .250 receptacles 20 A max with 2.5 mm^2 wire",
-    "SPADE-4.8": "derated below the 20 A FASTON family maximum (TE/AMP catalog 1654369), which assumes 2.5 mm^2 wire a 4.8 mm "
-                 "receptacle rarely takes; no per-size figure is published there",
-    "SPADE-2.8": "derated below the 20 A FASTON family maximum (TE/AMP catalog 1654369), which assumes 2.5 mm^2 wire a 2.8 mm "
-                 "receptacle rarely takes; no per-size figure is published there",
+    "SPADE-2.8": "TE product specification 108-106496 (110, 187 & 250 Series FASTON Terminals): 3-20 A by the wire crimped in, "
+                 "see FASTON_AMPS_BY_AWG",
+    "SPADE-4.8": "TE product specification 108-106496: as SPADE-2.8",
+    "SPADE-6.3": "TE product specification 108-106496: as SPADE-2.8",
 }
 
 ALIASES = {
@@ -107,11 +107,21 @@ def spec_for(type_name: str) -> ConnectorSpec | None:
     return CATALOG.get(normalize_type(type_name))
 
 
+def _rating_text(s: ConnectorSpec) -> str:
+    if s.key in BOARD_TYPES:
+        return "supply pins: power budget"
+    if s.rating_a is None:
+        return "wire-limited"
+    if s.by_wire:
+        return f"{min(FASTON_AMPS_BY_AWG.values()):g}-{s.rating_a:g} A by wire size"
+    return f"{s.rating_a:g} A" + (f" ({s.burst_a:g} A < 1 min)" if s.burst_a else "")
+
+
 def catalog_table() -> str:
     rows = ["| type | pitch | rating / pin | termination | notes |", "|---|---|---|---|---|"]
     for s in CATALOG.values():
         rows.append(f"| {s.key} | {'' if s.pitch_mm is None else f'{s.pitch_mm:g} mm'} | "
-                    f"{'wire-limited' if s.rating_a is None else f'{s.rating_a:g} A'} | {s.termination} | {s.family} |")
+                    f"{_rating_text(s)} | {s.termination} | {s.family} |")
     return "\n".join(rows)
 
 
@@ -150,6 +160,19 @@ def awg_ampacity(n: int) -> float:
         return float(_CHASSIS_AMPS[n])
     lo, hi = n - 1, n + 1
     return math.sqrt(_CHASSIS_AMPS[lo] * _CHASSIS_AMPS[hi])
+
+
+# FASTON (spade) terminals are rated by the wire crimped into them, whatever the tab width: TE product specification
+# 108-106496 Rev A1 (110, 187 & 250 Series FASTON Terminals), ratings 3-20 A, and its temperature-rising test currents per
+# wire size at a 30 C rise (UL 310 / IEC 60512-5-1). Odd sizes take the next thinner size's figure; wires outside the table
+# take its nearest end.
+FASTON_AMPS_BY_AWG = {24: 3.0, 22: 3.0, 20: 5.0, 18: 7.0, 16: 10.0, 14: 15.0, 12: 20.0}
+
+
+def faston_rating(gauge: "Gauge") -> float:
+    n = gauge.awg if gauge.awg is not None else nearest_awg(gauge.mm2)
+    n = min(max(n + (n % 2), 12), 24)
+    return FASTON_AMPS_BY_AWG[n]
 
 
 def awg_label(n: int) -> str:
