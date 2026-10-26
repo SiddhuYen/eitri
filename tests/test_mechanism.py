@@ -453,3 +453,27 @@ def test_rated_torque_comes_from_the_datasheet_when_the_catalog_has_one():
     assert given.rated_out("revolute") == (4.0, False) and given.rated_basis("revolute") == "as given"
     m = cantilever(actuator=Actuator("STS3215", stall_kgcm=19.5))
     assert "(6.5 kg·cm, datasheet: Feetech STS3215" in one(analyze(m), "torque joint j1").measured
+
+
+def test_an_arm_that_reaches_below_its_base_warns_unless_mounted_at_an_edge():
+    def arm2():
+        m = Mechanism("two-link")
+        m.link("base", fixed=True)
+        m.link("upper", length_mm=120, mass_g=40)
+        m.link("fore", length_mm=100, mass_g=30)
+        s = Actuator("MG996R", stall_kgcm=9.4, speed_deg_s=400, travel_deg=180, mass_g=55)
+        m.joint("shoulder", "base", "upper", axis=(0, 1, 0), at=(0, 0, 0), limit_deg=(-10, 120), actuator=s)
+        m.joint("elbow", "upper", "fore", axis=(0, 1, 0), limit_deg=(-90, 90), actuator=s)
+        m.payload(50)
+        m.tip("fore")
+        return m
+    m = arm2()
+    low = one(analyze(m), "stays above its base plane")                    # on a table (the default)
+    assert low.severity == "warn" and "below the base plane" in low.measured and "the tip" in low.measured and 'm.mount("edge")' in low.expected
+    m.mount("edge")                                                         # meant to hang over an edge: allowed, and said so
+    edge = one(analyze(m), "stays above its base plane")
+    assert edge.severity == "pass" and "mounted on an edge" in edge.measured
+    up = cantilever(limit=(0, 90))                                          # a link that only swings up never goes below
+    assert one(analyze(up), "stays above its base plane").severity == "pass"
+    with pytest.raises(MechanismError, match="mount"):
+        m.mount("floor")

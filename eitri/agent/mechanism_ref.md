@@ -38,6 +38,8 @@ m.target(name, (x, y, z), tol_mm=2)         a world point the tip must reach
 m.speed(joint, deg_s=... | mm_s=...)        a required joint speed
 m.require_reach(mm)                         a required tip radius from the first joint
 m.poses = 24                                random poses sampled by the checks besides the structured ones
+m.mount(on="table")                         where the base is fixed: "table" (default) warns when any part reaches below the
+                                            base plane (z < 0); "edge", "ceiling" or "wall" when it is meant to reach below its base
 ```
 
 Units: mm, grams, degrees, kgf·cm (1 kgf·cm = 0.0980665 N·m), N for prismatic joints; gravity is -Z at 9.80665 m/s².
@@ -80,6 +82,7 @@ PARAMS = dict(upper_mm=120.0, fore_mm=100.0, turret_mm=40.0, payload_g=50.0)
 
 def build(p):
     m = Mechanism("3-DOF arm", "yaw, shoulder, elbow on hobby servos")
+    m.mount("edge")                                                                  # clamped at the bench edge: it reaches below its base
     m.link("base", fixed=True)
     m.link("turret", length_mm=p.turret_mm, mass_g=70, direction=(0, 0, 1))      # stands up from the base
     m.link("upper", length_mm=p.upper_mm, mass_g=60)                               # home pose: extended along +X

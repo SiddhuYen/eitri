@@ -68,6 +68,7 @@ def catalog_actuator(name: str) -> ActuatorSpec | None:
     return next((s for k, s in ACTUATOR_CATALOG.items() if k in squashed), None)
 
 JOINT_TYPES = ("revolute", "prismatic", "fixed")
+MOUNTS = ("table", "edge", "ceiling", "wall")   # "table": the base plane is a surface the arm must stay above
 
 
 class MechanismError(ValueError):
@@ -279,9 +280,18 @@ class Mechanism:
         self.tip_at: np.ndarray | None = None
         self.reach_mm: float | None = None
         self.poses: int = 24                         # random poses sampled by the checks, besides the structured ones
+        self.mounted_on: str = "table"               # m.mount(): where the base is fixed
         self.layout: dict[str, list[float]] = {}
 
     # -- building ----------------------------------------------------------
+    def mount(self, on: str = "table") -> None:
+        """Where the base is fixed. "table" (the default): the base plane (z = 0 of the base) is a surface, and the checks warn
+        when any part of the mechanism reaches below it. "edge", "ceiling" or "wall": it is meant to reach below its base."""
+        on = str(on).strip().lower()
+        if on not in MOUNTS:
+            raise MechanismError(f"mount(on=...) must be one of {MOUNTS}, got {on!r}")
+        self.mounted_on = on
+
     def link(self, name: str, length_mm: float = 0.0, mass_g: float = 0.0, cg=None, fixed: bool = False, direction=(1.0, 0.0, 0.0), **kw) -> Link:
         l = Link(name, length_mm, mass_g, cg, fixed, direction, **kw)
         if l.name in self.links:

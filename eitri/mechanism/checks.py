@@ -326,5 +326,30 @@ def run_checks(m: Mechanism) -> tuple[list[Check], list[JointInfo], list[TargetI
         checks.append(_check("reach", "reach envelope", sev, text, f">= {m.reach_mm:g} mm", [tip_link]))
     else:
         checks.append(_check("reach", "reach envelope", "pass", text, "", [tip_link]))
+    checks.append(_base_plane(m, poses))
     return checks, infos, tinfos, reach, masses
 
+
+BASE_PLANE_TOL_MM = 0.5
+
+
+def _base_plane(m: Mechanism, poses: list[dict[str, float]]) -> Check:
+    """The lowest point of the mechanism (joints, link ends, masses, the tip) over the sampled poses, against the base plane z = 0:
+    a table-mounted arm that reaches below it would hit the table. m.mount("edge" | "ceiling" | "wall") turns this off."""
+    low = None
+    for q in poses:
+        pts = m.points(q)
+        named = ([("the tip", pts["tip"])] + [(f"joint {k}", v) for k, v in pts["joints"].items()]          # the tip first: it names a tie
+                 + [(f"the end of link {k}", v) for k, v in pts["ends"].items()] + [(f"{k}", v) for k, v in pts["masses"].items()])
+        what, p = min(named, key=lambda t: float(t[1][2]))
+        if low is None or float(p[2]) < low[0]:
+            low = (float(p[2]), what, q)
+    z, what, q = low
+    name = "stays above its base plane"
+    if m.mounted_on != "table":
+        return _check("reach", name, "pass", f"mounted on {'an' if m.mounted_on == 'edge' else 'a'} {m.mounted_on}: reaching below the base is allowed "
+                      f"(lowest point z = {z:.0f} mm, {what})", "", [])
+    if z < -BASE_PLANE_TOL_MM:
+        return _check("reach", name, "warn", f"{what} reaches z = {z:.0f} mm, {-z:.0f} mm below the base plane, at {_fmt_pose(q, m)}: mounted on a "
+                      "table it would hit the table", 'z >= 0: limit the joints, or m.mount("edge") if it hangs over an edge', [])
+    return _check("reach", name, "pass", f"lowest point z = {z:.0f} mm ({what}) over {len(poses)} sampled poses", "z >= 0 (mounted on a table)", [])

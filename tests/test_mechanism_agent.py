@@ -19,6 +19,7 @@ PARAMS = dict(arm_mm=100.0, payload_g=100.0)
 
 def build(p):
     m = Mechanism("Lever")
+    m.mount("edge")                                       # a lever at a bench edge: it swings below its pivot
     m.link("base", fixed=True)
     m.link("arm", length_mm=p.arm_mm, mass_g=12.4)
     m.joint("j1", "base", "arm", axis=(0, -1, 0), at=(0, 0, 0), limit_deg=(-90, 90), actuator=Actuator("MG996R", stall_kgcm=9.4, speed_deg_s=400, travel_deg=180))
