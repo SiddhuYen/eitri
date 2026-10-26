@@ -433,3 +433,9 @@ def test_mass_rollup_says_where_the_payload_is_counted():
     text = one(analyze(m), "mass rollup").measured
     # the payload is part of the tip link's figure and of the total, once
     assert roll["total_g"] == pytest.approx(sum(roll["links_g"].values())) and "the 50 g payload counted on arm" in text
+
+
+def test_a_misused_payload_call_says_how_to_call_it():
+    m = cantilever(payload_g=0)
+    with pytest.raises(MechanismError, match=r"mass_g must be a number of grams, not 'payload' .*payload\(mass_g"):
+        m.payload("payload", 50)

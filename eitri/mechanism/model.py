@@ -192,9 +192,15 @@ class PointMass:
     kind: str = "payload"                # payload | mass
 
     def __post_init__(self) -> None:
-        if float(self.mass_g) < 0:
+        try:
+            mass = float(self.mass_g)
+        except (TypeError, ValueError):
+            call = "payload(mass_g, link=None, at=None, name='payload')" if self.kind == "payload" else "mass(name, link, mass_g, at=None)"
+            raise MechanismError(f"{self.name}: mass_g must be a number of grams, not {self.mass_g!r} (the call is {call}, "
+                                 f"e.g. m.payload(50))") from None
+        if mass < 0:
             raise MechanismError(f"{self.name}: mass_g must not be negative")
-        self.mass_g = float(self.mass_g)
+        self.mass_g = mass
         if self.at is not None:
             self.at = _vec(self.at, f"{self.name} at")
 
