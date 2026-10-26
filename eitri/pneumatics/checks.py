@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 
 from ..checks import Check, check as _check, level
 from .flow import DEFAULT_C, consumption_per_cycle_l, cylinder_forces, drop_for_flow, flow_l_s, required_flow_l_s, series, tube_data
-from .model import EXHAUST_PORTS, P_ATM, Circuit, Cylinder, FlowControl, Node, PortRef, Regulator, Silencer, Supply, Tube, Valve
+from .model import EXHAUST_PORTS, pressure_rating, P_ATM, Circuit, Cylinder, FlowControl, Node, PortRef, Regulator, Silencer, Supply, Tube, Valve
 
 LOAD_RATIO_WARN = 0.7          # ESTIMATE: manufacturers' dynamic sizing guidance (SMC / Festo selection guides: 50-70 %)
 SUPPLY_WARN = 0.8
@@ -214,6 +214,50 @@ def find_path(c: Circuit, start: PortRef, goal: str) -> PathInfo:
 
 # --------------------------------------------------------------------------- the checks
 
+def _pressure_ratings(c: Circuit) -> list[Check]:
+    """Each pressure source (a supply at its pressure, a regulator at its set pressure) against the lowest-rated component it reaches
+    before the next regulator: through tubes, nodes, flow controls and every valve passage, never into an exhaust port (R, S)."""
+    out: list[Check] = []
+    sources = [(s, s.pressure_bar) for s in c.supplies] + [(r, r.set_bar) for r in c.components.values() if r.kind in ("regulator", "frl")]
+    for src, bar in sources:
+        seen_ports, reached = set(), {}
+        todo = [src.port("OUT")]
+        while todo:
+            ref = todo.pop()
+            if ref in seen_ports:
+                continue
+            seen_ports.add(ref)
+            nxt = [t.b if t.a == ref else t.a for t in c._tubes_at(ref)]
+            if ref in c.attached:
+                nxt.append(c.attached[ref])
+            comp = c.components[ref.component]
+            if comp is not src:
+                reached[comp.name] = comp
+                if comp.kind not in ("regulator", "frl"):            # a regulator ends this source's reach: it sets its own
+                    for a, b in comp.passages(None):
+                        for x, y in ((a, b), (b, a)):
+                            if x == ref.port and y not in EXHAUST_PORTS:
+                                nxt.append(comp.port(y))
+            todo += [n for n in nxt if n not in seen_ports and not (c.components[n.component].kind == "valve" and n.port in EXHAUST_PORTS)]
+        rated = [(pressure_rating(comp), comp) for comp in reached.values()]
+        rated = sorted(((r, why, comp) for (r, why), comp in rated if r is not None), key=lambda t: t[0])
+        if not rated:
+            continue
+        name = f"pressure ratings downstream of {src.name}"
+        low, why, comp = rated[0]
+        over = [(r, w, k) for r, w, k in rated if bar > r + 1e-9]
+        if over:
+            others = "; also over: " + ", ".join(f"{k.name} ({r:g} bar)" for r, _w, k in over[1:]) if len(over) > 1 else ""
+            out.append(_check("pressure", name, "fail",
+                              f"{bar:g} bar from {src.name} exceeds {comp.name}'s {low:g} bar ({why}){others}",
+                              f"<= {low:g} bar: a regulator set at or below {low:g} bar ahead of {comp.name}, or parts rated for {bar:g} bar (max_bar= from their datasheets)",
+                              [src.name] + [k.name for _r, _w, k in over]))
+        else:
+            out.append(_check("pressure", name, "pass", f"{bar:g} bar from {src.name}; the lowest rating it reaches is {comp.name}'s {low:g} bar ({why})",
+                              f"<= {low:g} bar", [src.name, comp.name]))
+    return out
+
+
 def run_checks(c: Circuit) -> tuple[list[Check], list[CylinderInfo], list[SupplyInfo]]:
     checks: list[Check] = []
     estimated: dict[str, str] = {}
@@ -403,6 +447,7 @@ def run_checks(c: Circuit) -> tuple[list[Check], list[CylinderInfo], list[Supply
         checks.append(_check("circuit", "no dead-headed lines", "fail", "; ".join(dead), "every line leads somewhere", [d.split()[1] if d.startswith('node') else d.split()[0] for d in dead]))
     elif c.tubes:
         checks.append(_check("circuit", "no dead-headed lines", "pass", f"{len(c.tubes)} tube(s), every line leads somewhere"))
+    checks += _pressure_ratings(c)
     if estimated:
         checks.append(_check("flow data", "flow data estimated", "warn",
                              "no C, b from a datasheet for " + ", ".join(f"{k} ({v})" for k, v in list(estimated.items())[:8]) + ("..." if len(estimated) > 8 else "") + ": graded with conservative estimates",

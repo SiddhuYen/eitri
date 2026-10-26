@@ -5,9 +5,9 @@ from .model import Circuit, PneumaticsError, Tube, _pos
 
 PNEUMATICS_OPS = frozenset({"set_component", "set_tube", "add_tube", "remove_tube", "set_vent"})
 _FIELDS = ("pressure_bar", "flow_l_min", "set_bar", "lubricator", "cls", "actuation", "returns", "normally", "center", "bore_mm", "rod_mm", "stroke_mm", "acting",
-           "load_N", "load_retract_N", "speed_mm_s", "speed_retract_mm_s", "cycles_per_min", "spring_N", "friction_fraction", "meter", "C", "b", "part_number", "notes")
+           "load_N", "load_retract_N", "speed_mm_s", "speed_retract_mm_s", "cycles_per_min", "spring_N", "friction_fraction", "meter", "C", "b", "max_bar", "part_number", "notes")
 _NUMERIC = {"pressure_bar", "flow_l_min", "set_bar", "bore_mm", "rod_mm", "stroke_mm", "load_N", "load_retract_N", "speed_mm_s", "speed_retract_mm_s", "cycles_per_min",
-            "spring_N", "friction_fraction", "C", "b"}
+            "spring_N", "friction_fraction", "C", "b", "max_bar"}
 
 
 def target_of(e: dict) -> str:
@@ -53,6 +53,8 @@ def _apply_one(c: Circuit, e: dict) -> str:
                 v = _pos(v, f"{comp.name} C")
             if k == "b" and v is not None and not 0 <= v < 1:
                 raise PneumaticsError(f"{comp.name}: b must be in [0, 1)")
+            if k == "max_bar" and v is not None and v <= 0:
+                raise PneumaticsError(f"{comp.name}: max_bar must be positive")
             if k in ("bore_mm", "rod_mm", "stroke_mm", "set_bar", "pressure_bar") and (v is None or v <= 0):
                 raise PneumaticsError(f"{comp.name}: {k} must be positive")
             setattr(comp, k, v)

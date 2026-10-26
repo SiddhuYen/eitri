@@ -139,7 +139,7 @@ ISO 1219 circuits; force, ISO 6358 flow, air consumption, pressure drop, circuit
 
 ```sh
 eitri build eitri/demos/pan-tilt/pan_tilt.py         # 12 pass, 0 warn, 0 FAIL
-eitri build eitri/demos/air-clamp/air_clamp.py       # 20 pass, 1 warn, 0 FAIL (the warning is intended: estimated flow data)
+eitri build eitri/demos/air-clamp/air_clamp.py       # 23 pass, 1 warn, 0 FAIL (the warning is intended: estimated flow data)
 eitri build eitri/demos/servo-sweep/servo_sweep.py   # 12 pass, 0 warn, 0 FAIL once arduino-cli is installed (below)
 ```
 

@@ -27,6 +27,7 @@ c.flow_control(name, meter="out", C=None, b=None)                a speed control
 c.node(name)                                                     a tee: any number of tubes meet at its port N
 c.tube(name, from_port, to_port, id_mm=6, length_m=1, fittings=2, C=None)    a run of tube; ports are comp["PORT"] or "NAME.PORT"
 c.silencer(valve["R"])                                           a silencer screwed onto an exhaust port;  c.exhaust(port) leaves it open
+every component also takes max_bar= (its maximum working pressure, from its datasheet) and part_number=
 ```
 
 C is the ISO 6358 sonic conductance in L/(s·bar) ANR and b the critical pressure ratio, from the component's datasheet
@@ -46,6 +47,10 @@ and the report says so in a warning. Units: bar gauge, N, mm, mm/s, L/min ANR.
   tube, components in series: 1/C² = sum 1/Cᵢ², b = min bᵢ) against the pressure the load needs, and through the exhaust path to the
   silencer; the achievable speed is the lesser of the two.
 - pressure drop per tube of a fill path at the required flow (WARN above 0.3 bar or 5%, FAIL when the flow cannot pass at all).
+- pressure ratings (FAIL over): each supply (at its pressure) and regulator (at its set pressure) against the lowest-rated component
+  it reaches before the next regulator; the failure names it. Give `max_bar=` from the part's datasheet on any component; the
+  defaults are vendor figures: regulator 16 bar (Festo LR-D-MINI inlet), FRL 10 (Festo MS4-LFR), valve 7 (SMC SY3000), flow control
+  10 (SMC AS), cylinder 10 (Festo DSNU), silencer 10 (Festo U), tee 10 (SMC KQ2). A supply above a valve's 7 bar needs a regulator.
 - flow data estimated: one warning naming every component or tube sized with an estimate (tubes: effective area from bore and
   equivalent length with 30 diameters per fitting, C = S/5, b = 0.5; valves/regulators/silencers: small-component defaults).
 - your own `verify(c, p, chk)`: `chk.at_most(name, value, limit)`, `chk.at_least`, `chk.between`, `chk.equal`, `chk.true`, `chk.count`,

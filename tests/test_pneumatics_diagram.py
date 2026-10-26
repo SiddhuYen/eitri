@@ -192,3 +192,43 @@ def test_an_undeclared_exhaust_port_is_named_when_a_chamber_cannot_vent():
     c.silencer(v["R"])
     c.silencer(v["S"])
     assert next(x for x in analyze(c).checks if x.name == "C1.CAP can exhaust").severity == "pass"
+
+
+def _straight(supply_bar, regulator_bar=None, **valve_kw):
+    from eitri.pneumatics import Circuit
+    c = Circuit("pressure")
+    air = c.supply("AIR", pressure_bar=supply_bar, flow_l_min=300)
+    src = air["OUT"]
+    if regulator_bar is not None:
+        reg = c.regulator("REG", set_bar=regulator_bar)
+        c.tube("T0", src, reg["IN"], id_mm=6, length_m=1)
+        src = reg["OUT"]
+    v = c.valve("V1", "5/2", actuation="solenoid", returns="spring", **valve_kw)
+    cyl = c.cylinder("C1", bore_mm=25, rod_mm=10, stroke_mm=50, load_N=50, speed_mm_s=100, cycles_per_min=10)
+    c.tube("T1", src, v["P"], id_mm=6, length_m=1)
+    c.tube("T2", v["A"], cyl["CAP"], id_mm=4, length_m=1)
+    c.tube("T3", v["B"], cyl["ROD"], id_mm=4, length_m=1)
+    c.silencer(v["R"])
+    c.silencer(v["S"])
+    return c
+
+
+def test_a_supply_above_a_downstream_rating_fails_and_a_regulator_fixes_it():
+    from eitri.pneumatics.report import analyze
+
+    def pressure(c):
+        return {x.name: x for x in analyze(c).checks if x.category == "pressure"}
+    # 12 bar straight into a 10 bar cylinder (Festo DSNU default) through a valve given a 16 bar rating: the cylinder is named
+    bad = pressure(_straight(12, max_bar=16))["pressure ratings downstream of AIR"]
+    assert bad.severity == "fail" and "12 bar from AIR exceeds C1's 10 bar (default: Festo DSNU" in bad.measured and "C1" in bad.refs
+    # with the default valve (SMC SY3000, 7 bar) the valve is the lowest-rated and is named first, the cylinder too
+    both = pressure(_straight(12))["pressure ratings downstream of AIR"]
+    assert both.severity == "fail" and "exceeds V1's 7 bar" in both.measured and "also over: C1 (10 bar)" in both.measured
+    # the same with a regulator set to 6 bar: the 12 bar only reaches the regulator (16 bar inlet, Festo LR-D-MINI)
+    ok = pressure(_straight(12, regulator_bar=6))
+    assert ok["pressure ratings downstream of AIR"].severity == "pass" and "REG's 16 bar" in ok["pressure ratings downstream of AIR"].measured
+    assert ok["pressure ratings downstream of REG"].severity == "pass" and "V1's 7 bar" in ok["pressure ratings downstream of REG"].measured
+    # a rating from the part's own datasheet wins over the default; silencers on the exhaust are never reached by supply pressure
+    c = _straight(6)
+    c.components["C1"].max_bar = 5
+    assert "exceeds C1's 5 bar (as given)" in pressure(c)["pressure ratings downstream of AIR"].measured

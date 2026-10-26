@@ -39,6 +39,26 @@ VALVE_CLASSES = {
 }
 EXHAUST_PORTS = ("R", "S")
 
+# Maximum working pressure by kind, when a component gives no max_bar of its own (fetched 2026-10-26; vendor datasheets as listed
+# by distributors). The supply is not rated: it is the source.
+PRESSURE_RATINGS = {
+    "regulator": (16.0, "Festo LR-D-MINI regulator: operating (inlet) pressure 1-16 bar"),
+    "frl": (10.0, "Festo MS4-LFR filter regulators: variants listed at 0.8-14, 1-10 and 2-12 bar; the lowest maximum is used"),
+    "valve": (7.0, "SMC SY3000 5-port solenoid valve: 0.1-0.7 MPa (internal pilot)"),
+    "flow_control": (10.0, "SMC AS speed controllers: maximum operating pressure 1 MPa"),
+    "cylinder": (10.0, "Festo DSNU round cylinders (ISO 6432): maximum operating pressure 10 bar"),
+    "silencer": (10.0, "Festo U silencers: operating pressure 0-10 bar"),
+    "node": (10.0, "SMC KQ2 one-touch fittings (union tee KQ2T): -100 kPa to 1 MPa"),
+}
+
+
+def pressure_rating(comp) -> tuple[float | None, str]:
+    """(maximum working pressure in bar, where it comes from): the component's max_bar, else the default for its kind."""
+    if comp.max_bar is not None:
+        return comp.max_bar, "as given"
+    bar, src = PRESSURE_RATINGS.get(comp.kind, (None, ""))
+    return bar, (f"default: {src}" if bar is not None else "not rated")
+
 
 class PneumaticsError(ValueError):
     """The circuit is described wrongly (not a sizing problem: those are reported by the checks)."""
@@ -72,6 +92,7 @@ class Component:
     notes: str = ""
     C: float | None = None               # ISO 6358 sonic conductance, L/(s·bar) ANR
     b: float | None = None               # ISO 6358 critical pressure ratio
+    max_bar: float | None = None         # maximum working pressure from the part's datasheet (default: PRESSURE_RATINGS by kind)
 
     def __post_init__(self) -> None:
         if not self.name or any(ch in str(self.name) for ch in ". \t\n"):
@@ -83,6 +104,8 @@ class Component:
             self.b = float(self.b)
             if not 0 <= self.b < 1:
                 raise PneumaticsError(f"{self.name}: b must be in [0, 1), got {self.b:g}")
+        if self.max_bar is not None:
+            self.max_bar = _pos(self.max_bar, f"{self.name} max_bar")
 
     def port(self, name: str) -> PortRef:
         name = str(name).upper()

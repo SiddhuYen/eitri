@@ -85,7 +85,7 @@ def circuit_data(c: Circuit, rep: CircuitReport | None = None) -> dict[str, Any]
     cinfo = {cy.name: cy for cy in (rep.cylinders if rep else [])}
     comps = []
     for comp in c.components.values():
-        d: dict[str, Any] = {"name": comp.name, "kind": comp.kind, "ports": list(comp.ports), "part_number": comp.part_number, "C": comp.C, "b": comp.b, "notes": comp.notes}
+        d: dict[str, Any] = {"name": comp.name, "kind": comp.kind, "ports": list(comp.ports), "part_number": comp.part_number, "C": comp.C, "b": comp.b, "max_bar": comp.max_bar, "notes": comp.notes}
         for k in ("pressure_bar", "flow_l_min", "set_bar", "frl", "lubricator", "cls", "actuation", "returns", "normally", "center", "bore_mm", "rod_mm", "stroke_mm",
                   "acting", "load_N", "load_retract_N", "speed_mm_s", "speed_retract_mm_s", "cycles_per_min", "spring_N", "friction_fraction", "meter"):
             if hasattr(comp, k):
