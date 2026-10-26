@@ -24,7 +24,7 @@ MODELS = {
     "pneumatics": (DEMOS / "air-clamp" / "air_clamp.py").read_text(encoding="utf-8"),
     "firmware": (DEMOS / "servo-sweep" / "servo_sweep.py").read_text(encoding="utf-8"),
 }
-# eitri-hosted's share route list (cadhost/projects.py SHARE_GET), copied as it is: the page must work within it
+# eitri-hosted's share route list, copied as it is: the page must work within it
 SHARE_GET = {"/", "/index.html", "/state.json", "/view.glb", "/topology.json", "/image.png", "/model.py", "/download"}
 
 
