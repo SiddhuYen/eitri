@@ -59,8 +59,8 @@ A splice may only join wires of ONE net, so a trunk and its branches are all on 
 An unknown type is allowed (`Connector("X", "ACME-9", pins=4, rating_a=5, pitch_mm=3.5)`); without `rating_a` its pins
 are not graded and a warning says so. Crimp-type connectors need one crimp terminal per populated pin (the BOM counts them).
 Ratings are continuous. Between an XT60's or XT90's continuous and its short-time rating the check warns (peaks under a
-minute only); past it, it fails. Spade terminals are rated by the wire crimped in (22 AWG 3 A ... 12 AWG 20 A), so a thicker
-wire raises their rating.
+minute only); past it, it fails. Spade terminals are rated by the wire crimped in (22 AWG 3 A ... 12 AWG 20 A), and so is Micro-Fit 3.0
+(18 AWG 8.5 A, 20-30 AWG 5 A): a thicker wire raises their rating, and the BOM names the terminal for each wire's size.
 
 ## The checks every build runs
 
@@ -70,6 +70,8 @@ wire raises their rating.
 - ampacity (FAIL above the limit, WARN within 20% of it): each wire's current against the chassis-wiring table
   (22 AWG 7 A, 20: 11, 18: 16, 16: 22, 14: 32, 12: 41, 10: 55, 8: 73, 6: 101, 4: 135, 2: 181 A; metric sizes use the nearest AWG),
   and each connector pin's summed current against its rating.
+- terminal fit (FAIL): every wire crimped into a connector is within the sizes that connector family's contacts take
+  (JST XH AWG 22-30, JST PH 24-32, Dupont 2.54 22-32, Micro-Fit 3.0 18-30): a 22 AWG wire does not go into a PH contact.
 - voltage drop (FAIL above max_drop_pct): V = 2*K*I*L/CM, K = 10.75, L in feet, CM the conductor's circular mils;
   per net, the worst source-to-load path, reported as % of voltage_V.
 - consistency: one gauge per net (FAIL if a thinner wire carries more than a thicker one of the net, WARN if the gauge

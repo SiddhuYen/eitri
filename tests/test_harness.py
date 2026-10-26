@@ -722,3 +722,52 @@ def test_quadcopter_demo_builds_green():
     h2 = m.build()
     h2.connectors["ESC1"].type = "JST-XH"
     assert check(analyze(h2), "connector rating ESC1").severity == "fail"
+
+
+def test_a_wire_must_fit_the_contacts_it_is_crimped_into():
+    # JST PH contacts take AWG 24-32 (JST): 22 AWG does not crimp; JST XH takes 22-30
+    h = lead(gauge=22, current=0.5, voltage=5)
+    for c in h.connectors.values():
+        c.type = "JST-PH"
+    fit = check(analyze(h), "wires fit the J1 contacts")
+    assert fit.severity == "fail" and "W1 22 AWG on J1" in fit.measured and "AWG 24 to 32" in fit.measured and "W1" in fit.refs
+    for l in h.links:
+        l.gauge = Gauge.parse(24)
+    assert check(analyze(h), "wires fit the J1 contacts").severity == "pass"
+    h = lead(gauge="0.5mm2", current=0.5, voltage=5)                      # about 20 AWG: too thick for XH
+    assert check(analyze(h), "wires fit the J1 contacts").severity == "fail"
+    h = lead(gauge=18, current=0.5, voltage=12)
+    for c in h.connectors.values():
+        c.type = "XT60"                                                   # solder cups: no contact range
+    assert not checks(analyze(h), "wires fit")
+
+
+def test_micro_fit_part_numbers_follow_the_gender():
+    from eitri.harness.catalog import housing_pn, terminal_pn
+    mf = spec_for("MOLEX-MICROFIT-3.0")
+    assert housing_pn(mf, 3) == housing_pn(mf, 3, "female") == "43645-0300" and terminal_pn(mf, "female") == "43030-0001"
+    assert housing_pn(mf, 3, "male") == "" and terminal_pn(mf, "male") == "43031-0001"   # no verified single-row plug number
+    assert housing_pn(mf, 14) == ""                                                       # 43645 stops at 12 circuits
+    h = Harness("mf")
+    a = h.add(Connector("A", "MOLEX-MICROFIT-3.0", pins=["1", "2"], gender="male"))
+    b = h.add(Connector("B", "MOLEX-MICROFIT-3.0", pins=["1", "2"], gender="female"))
+    h.connect(a["1"], b["1"], Wire(20, "RD", 100))
+    h.connect(a["2"], b["2"], Wire(20, "BK", 100))
+    rows = {r["part_number"]: r for r in outputs.bom(h)}
+    assert "43645-0200" in rows and "43031-0001" in rows and "43030-0001" in rows and "43025-0200" not in rows
+
+
+def test_micro_fit_is_rated_by_the_terminal_its_wire_needs():
+    # 18 AWG takes the 43030-0039 terminal (8.5 A); 20-24 AWG the 43030-0001 (listed at 5 A at the lowest)
+    def graded(awg, amps):
+        h = lead(gauge=awg, current=amps, voltage=12)
+        for c in h.connectors.values():
+            c.type = "MOLEX-MICROFIT-3.0"
+        return check(analyze(h), "connector rating J1"), outputs.bom(h)
+    c18, rows = graded(18, 6)
+    assert c18.severity == "pass" and "of 8.5 A with 18 AWG" in c18.measured
+    assert any(r["part_number"] == "43030-0039" and r["qty"] == 4 for r in rows)
+    c20, rows = graded(20, 6)
+    assert c20.severity == "fail" and "of 5 A with 20 AWG" in c20.measured
+    assert any(r["part_number"] == "43030-0001" for r in rows)
+    assert "5-8.5 A by wire size" in catalog_table()

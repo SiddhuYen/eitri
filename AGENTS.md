@@ -130,7 +130,7 @@ A project is either mechanical CAD (`from eitri import *`, `build(p)` returns bu
 harness** (`from eitri.harness import *`, `build(p)` returns a `Harness`). `eitri build model.py` works on both:
 for a harness it prints the connectivity / ampacity / voltage-drop checks and writes the diagram (SVG + PNG), BOM,
 cut list and WireViz YAML to `out/`. `eitri build eitri/demos/quad-power/quad_power.py` is a quick harness smoke test
-(it should report `27 pass, 5 warn, 0 FAIL`; the warnings are intended: the connectors run at or past their continuous ratings). No extra install or system package is needed for harnesses.
+(it should report `28 pass, 5 warn, 0 FAIL`; the warnings are intended: the connectors run at or past their continuous ratings). No extra install or system package is needed for harnesses.
 
 Three more domains work the same way, each chosen by its model file's import: **mechanism** (`from eitri.mechanism import *`:
 links, joints, actuators, targets; reach, worst-pose torque, speed, limits, mass), **pneumatics** (`from eitri.pneumatics import *`:

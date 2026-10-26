@@ -18,7 +18,7 @@ PARAMS = dict(
     fc_mm=120,             # splice to the flight controller
     trunk_awg=8,
     branch_awg=14,
-    fc_awg=22,
+    fc_awg=24,             # the thickest wire JST PH contacts take (AWG 24-32, JST)
 )
 
 ESCS = ("ESC1", "ESC2", "ESC3", "ESC4")             # front-left, front-right, rear-left, rear-right

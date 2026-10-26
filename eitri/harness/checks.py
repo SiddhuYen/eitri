@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from ..checks import Check, check
 from ..model import CheckResult  # noqa: F401
 from .. import power
-from .catalog import BOARD_TYPES, faston_rating, voltage_drop
+from .catalog import BOARD_TYPES, nearest_awg, voltage_drop, wire_rating
 from .model import Endpoint, Harness, Link, PinRef, SpliceRef
 
 WARN_FRACTION = 0.8          # within 20 % of the limit: a warning
@@ -121,6 +121,7 @@ def run_checks(h: Harness) -> tuple[list[HCheck], dict[str, NetInfo]]:
     stats = net_stats(h)
     checks += _connectivity(h)
     checks += _ampacity(h)
+    checks += _terminal_fit(h)
     checks += _drops(h, stats)
     checks += _consistency(h)
     checks += _power(h)
@@ -233,14 +234,14 @@ def _ampacity(h: Harness) -> list[HCheck]:
             cur = [h.wire_current(l) for l in h.links_at(ref)]
             cur = [x for x in cur if x is not None]
             if cur:
-                pin_rating = min(faston_rating(l.gauge) for l in h.links_at(ref)) if by_wire else rating
+                pin_rating = min(wire_rating(c.spec, l.gauge) for l in h.links_at(ref)) if by_wire else rating
                 loads.append((sum(cur), ref, pin_rating))
         if not loads:
             continue
         worst, wref, pin_rating = max(loads, key=lambda t: t[0] / t[2] if t[2] else t[0])
         refs = [c.name] + [l.id for l in h.links_at(wref)]
-        if by_wire:                                   # a spade: rated by the wire crimped into it (TE 108-106496)
-            g = min((l.gauge for l in h.links_at(wref)), key=faston_rating)
+        if by_wire:                                   # rated by the wire crimped into it (spades: TE 108-106496; Micro-Fit: by terminal)
+            g = min((l.gauge for l in h.links_at(wref)), key=lambda gg: wire_rating(c.spec, gg))
             frac = worst / pin_rating
             sev = "fail" if worst > pin_rating else "warn" if frac >= WARN_FRACTION else "pass"
             out.append(_check("ampacity", f"connector rating {c.name} ({c.type}, by wire size)", sev,
@@ -263,6 +264,35 @@ def _ampacity(h: Harness) -> list[HCheck]:
         sev = "fail" if worst > rating else "warn" if frac >= WARN_FRACTION else "pass"
         out.append(_check("ampacity", f"connector rating {c.name} ({c.type}, {_fmt_a(rating)}/pin)", sev,
                           f"worst pin {wref}: {_fmt_a(worst)} ({frac * 100:.0f}%)", f"<= {_fmt_a(rating)}" + (" (within 20% of the limit)" if sev == "warn" else ""), refs))
+    return out
+
+
+def _terminal_fit(h: Harness) -> list[HCheck]:
+    """Every wire crimped into a catalog connector is a size its family's contacts take (catalog.AWG_SOURCES)."""
+    out: list[HCheck] = []
+    for c in h.connectors.values():
+        spec = c.spec
+        if spec is None or spec.awg is None or c.termination != "crimp":
+            continue
+        thick, thin = spec.awg
+        wires, bad = [], []
+        for pin in c.pin_names:
+            for l in h.links_at(PinRef(c.name, pin)):
+                n = l.gauge.awg if l.gauge.awg is not None else nearest_awg(l.gauge.mm2)
+                wires.append(l)
+                if not thick <= n <= thin:
+                    bad.append((l, pin))
+        if not wires:
+            continue
+        name = f"wires fit the {c.name} contacts ({c.type}, AWG {thick}-{thin})"
+        if bad:
+            out.append(_check("terminal fit", name, "fail",
+                              "; ".join(f"{l.id} {l.gauge.label} on {c.name}.{pin}" for l, pin in bad[:8])
+                              + f": {c.type} contacts take AWG {thick} to {thin}, so {'it does' if len(bad) == 1 else 'they do'} not crimp",
+                              f"AWG {thick}-{thin}: a thinner wire if its current allows, or a connector made for this size",
+                              [c.name] + [l.id for l, _p in bad]))
+        else:
+            out.append(_check("terminal fit", name, "pass", f"{len(wires)} wire(s), all within AWG {thick}-{thin}", f"AWG {thick}-{thin}", [c.name]))
     return out
 
 

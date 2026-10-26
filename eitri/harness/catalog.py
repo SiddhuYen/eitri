@@ -25,14 +25,20 @@ class ConnectorSpec:
     default_pins: int = 1
     gender: str = ""
     burst_a: float | None = None # the manufacturer's short-time (instantaneous) rating, when it publishes one
-    by_wire: bool = False        # the rating follows the wire crimped in (faston_rating), rating_a is the largest
+    by_wire: bool = False        # the rating follows the wire crimped in (AMPS_BY_AWG, wire_rating), rating_a is the largest
+    awg: tuple[int, int] | None = None   # the thickest and thinnest wire the family's crimp contacts take (None: not limited)
+    pn_gender: str = ""          # the gender housing_pn / terminal_pn are for; the other gender uses the male_* numbers
+    male_housing_pn: str = ""
+    male_terminal_pn: str = ""
+    pn_max: int = 0              # housing_pn exists only up to this many positions (0: no limit)
 
 
 CATALOG: dict[str, ConnectorSpec] = {s.key: s for s in [
-    ConnectorSpec("JST-XH", "JST XH 2.50 mm wire-to-board housing", 2.5, 3.0, "crimp", "SXH-001T-P0.6", "XHP-{n}", 2.5, 2),
-    ConnectorSpec("JST-PH", "JST PH 2.00 mm wire-to-board housing", 2.0, 2.0, "crimp", "SPH-002T-P0.5S", "PHR-{n}", 2.0, 2),
-    ConnectorSpec("DUPONT-2.54", "Dupont 2.54 mm housing", 2.54, 3.0, "crimp", "Dupont 2.54 crimp contact", "", 2.5, 2),
-    ConnectorSpec("MOLEX-MICROFIT-3.0", "Molex Micro-Fit 3.0 housing", 3.0, 8.5, "crimp", "43030-0001", "43025-{n:02d}00", 3.5, 2),
+    ConnectorSpec("JST-XH", "JST XH 2.50 mm wire-to-board housing", 2.5, 3.0, "crimp", "SXH-001T-P0.6", "XHP-{n}", 2.5, 2, awg=(22, 30)),
+    ConnectorSpec("JST-PH", "JST PH 2.00 mm wire-to-board housing", 2.0, 2.0, "crimp", "SPH-002T-P0.5S", "PHR-{n}", 2.0, 2, awg=(24, 32)),
+    ConnectorSpec("DUPONT-2.54", "Dupont 2.54 mm housing", 2.54, 3.0, "crimp", "Dupont 2.54 crimp contact", "", 2.5, 2, awg=(22, 32)),
+    ConnectorSpec("MOLEX-MICROFIT-3.0", "Molex Micro-Fit 3.0 housing", 3.0, 8.5, "crimp", "43030-0001", "43645-{n:02d}00", 3.5, 2,
+                  by_wire=True, awg=(18, 30), pn_gender="female", male_terminal_pn="43031-0001", pn_max=12),
     ConnectorSpec("XT30", "Amass XT30 bullet connector", 5.0, 20.0, "solder", "", "", 6.0, 2),
     ConnectorSpec("XT60", "Amass XT60 bullet connector", 7.2, 30.0, "solder", "", "", 8.0, 2, burst_a=60.0),
     ConnectorSpec("XT90", "Amass XT90 bullet connector", 10.0, 45.0, "solder", "", "", 10.0, 2, burst_a=90.0),
@@ -49,14 +55,22 @@ CATALOG: dict[str, ConnectorSpec] = {s.key: s for s in [
 ]}
 BOARD_TYPES = {"ARDUINO-UNO": "uno", "ARDUINO-NANO": "nano"}
 
+# The wire range of each crimp family (`awg`), fetched 2026-10-26. A wire outside it fits none of the family's contacts.
+AWG_SOURCES = {
+    "JST-XH": "JST XH series page (series 277): applicable wire AWG #30 to #22 (0.05-0.33 mm^2)",
+    "JST-PH": "JST PH series page (series 199): applicable wire AWG #32 to #24 (0.032-0.22 mm^2)",
+    "DUPONT-2.54": "Amphenol FCI Mini-PV receptacle contacts: 48235-000LF 22-26 AWG, 48237-000LF 28-32 AWG (Heilind, Farnell)",
+    "MOLEX-MICROFIT-3.0": "Molex Micro-Fit 3.0 43030 terminals: 43030-0039 18 AWG, 43030-0001 20-24 AWG, 43030-0004 26-30 AWG "
+                          "(element14, RS); housings 43645-0200 ... 43645-1200 single row, female (RS, Heilind, Octopart)",
+}
+
 # Where each rating above comes from (fetched 2026-10-26). A rating lower than its source is a deliberate derating, said so.
 RATING_SOURCES = {
     "JST-XH": "JST XH series page (jst-mfg.com, series 277): current rating 3 A AC/DC (AWG #22)",
     "JST-PH": "JST PH series page (jst-mfg.com, series 199): current rating 2 A AC/DC (AWG #24)",
     "DUPONT-2.54": "Amphenol FCI Mini-PV crimp contacts, the Berg (Du Pont) line generic 'Dupont' contacts copy: 3 A "
                    "(48235-000LF, 22-26 AWG, as listed by Heilind / RS). Unbranded copies publish no rating of their own",
-    "MOLEX-MICROFIT-3.0": "Molex Micro-Fit 3.0 crimp terminals 43030 (product spec PS-43045-001, as listed by element14 / Heilind): "
-                          "up to 8.5 A per circuit; Molex derates it for many circuits in one housing",
+    "MOLEX-MICROFIT-3.0": "Molex Micro-Fit 3.0 crimp terminals, by the wire crimped in: see MICROFIT_AMPS_BY_AWG",
     "XT30": "Amass XT30U-M product page (china-amass.net): current rating 20 A (16 AWG, temperature rise <= 85 K); no short-time "
             "rating published",
     "XT60": "Amass XT60 datasheet V1.2: rated current 30 A, instantaneous 60 A (the XT60H product page gives 35 A at 12 AWG; the "
@@ -103,6 +117,25 @@ def normalize_type(text: str) -> str:
     return t
 
 
+def housing_pn(spec: ConnectorSpec, pins: int, gender: str = "") -> str:
+    """The catalog's housing part number for this many positions and this gender ("" when it has none)."""
+    if spec.pn_gender and gender and gender != spec.pn_gender:
+        pattern = spec.male_housing_pn
+    else:
+        pattern = spec.housing_pn
+    if not pattern or (spec.pn_max and pins > spec.pn_max):
+        return ""
+    return pattern.format(n=pins)
+
+
+def terminal_pn(spec: ConnectorSpec, gender: str = "", awg: int | None = None) -> str:
+    """The crimp terminal for this gender and, where the family has one per wire size, this wire ("" when none fits)."""
+    other = bool(spec.pn_gender and gender and gender != spec.pn_gender)
+    if awg is not None and spec.key in TERMINALS_BY_AWG:
+        return TERMINALS_BY_AWG[spec.key]["male" if other else (spec.pn_gender or "female")].get(awg, "")
+    return spec.male_terminal_pn if other else spec.terminal_pn
+
+
 def spec_for(type_name: str) -> ConnectorSpec | None:
     return CATALOG.get(normalize_type(type_name))
 
@@ -113,7 +146,7 @@ def _rating_text(s: ConnectorSpec) -> str:
     if s.rating_a is None:
         return "wire-limited"
     if s.by_wire:
-        return f"{min(FASTON_AMPS_BY_AWG.values()):g}-{s.rating_a:g} A by wire size"
+        return f"{min(AMPS_BY_AWG[s.key].values()):g}-{max(AMPS_BY_AWG[s.key].values()):g} A by wire size"
     return f"{s.rating_a:g} A" + (f" ({s.burst_a:g} A < 1 min)" if s.burst_a else "")
 
 
@@ -169,10 +202,32 @@ def awg_ampacity(n: int) -> float:
 FASTON_AMPS_BY_AWG = {24: 3.0, 22: 3.0, 20: 5.0, 18: 7.0, 16: 10.0, 14: 15.0, 12: 20.0}
 
 
-def faston_rating(gauge: "Gauge") -> float:
-    n = gauge.awg if gauge.awg is not None else nearest_awg(gauge.mm2)
-    n = min(max(n + (n % 2), 12), 24)
-    return FASTON_AMPS_BY_AWG[n]
+# Micro-Fit 3.0 crimp terminals by wire size (distributor listings, fetched 2026-10-26): female 43030-0039 for 18 AWG, 8.5 A
+# (element14); 43030-0001 for 20-24 AWG, listed at 5 A (Farnell), 7 A (element14) and 8.5 A (RS): the lowest is used;
+# 43030-0004 for 26-30 AWG, 5 A. Male: 43031-0001 for 20-24 AWG (element14, Heilind).
+MICROFIT_AMPS_BY_AWG = {18: 8.5, 20: 5.0, 22: 5.0, 24: 5.0, 26: 5.0, 28: 5.0, 30: 5.0}
+MICROFIT_TERMINALS = {"female": {18: "43030-0039", **{n: "43030-0001" for n in (20, 21, 22, 23, 24)},
+                                 **{n: "43030-0004" for n in (26, 27, 28, 29, 30)}},
+                      "male": {n: "43031-0001" for n in (20, 21, 22, 23, 24)}}
+
+AMPS_BY_AWG = {"SPADE-2.8": FASTON_AMPS_BY_AWG, "SPADE-4.8": FASTON_AMPS_BY_AWG, "SPADE-6.3": FASTON_AMPS_BY_AWG,
+               "MOLEX-MICROFIT-3.0": MICROFIT_AMPS_BY_AWG}
+TERMINALS_BY_AWG = {"MOLEX-MICROFIT-3.0": MICROFIT_TERMINALS}
+
+
+def gauge_awg(gauge: "Gauge") -> int:
+    return gauge.awg if gauge.awg is not None else nearest_awg(gauge.mm2)
+
+
+def wire_rating(spec: ConnectorSpec, gauge: "Gauge") -> float:
+    """A by-wire connector's per-pin rating for this wire: the table's figure, an odd size taking the next thinner size's,
+    a wire outside the table its nearest end."""
+    table = AMPS_BY_AWG[spec.key]
+    n = gauge_awg(gauge)
+    if n in table:
+        return table[n]
+    thinner = [k for k in sorted(table) if k > n]
+    return table[thinner[0]] if thinner else table[max(table)]
 
 
 def awg_label(n: int) -> str:

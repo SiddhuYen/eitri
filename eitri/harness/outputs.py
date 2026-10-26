@@ -8,7 +8,7 @@ import csv
 import io
 from collections import OrderedDict
 
-from .catalog import BOARD_TYPES, color_name
+from .catalog import BOARD_TYPES, color_name, gauge_awg, housing_pn, terminal_pn
 from .model import Harness, Link, PinRef, SpliceRef
 
 SERVICE_LOOP = 0.10          # extra wire bought on top of the cut lengths
@@ -27,7 +27,7 @@ def bom(h: Harness) -> list[dict]:
     # connectors, grouped by what they are
     groups: OrderedDict[tuple, list] = OrderedDict()
     for c in h.connectors.values():
-        pn = c.part_number or (c.spec.housing_pn.format(n=c.pins) if c.spec and c.spec.housing_pn else "")
+        pn = c.part_number or (housing_pn(c.spec, c.pins, c.gender) if c.spec else "")
         groups.setdefault((c.type, c.pins, c.gender, pn), []).append(c)
     for (typ, pins, gender, pn), cs in groups.items():
         spec = cs[0].spec
@@ -38,20 +38,24 @@ def bom(h: Harness) -> list[dict]:
         add("connector", desc, len(cs), part_number=pn, notes=", ".join(c.name for c in cs))
 
     # crimp terminals: one per populated pin of a crimp connector (a ring/spade connector is its own terminal)
-    terminals: OrderedDict[str, list] = OrderedDict()
+    terminals: OrderedDict[str, OrderedDict] = OrderedDict()
     solder: dict[str, int] = {}
     shield_pins = {p for cab in h.cables.values() for p in cab.shield_ends}
     for c in h.connectors.values():
         populated = [p for p in c.pin_names if h.links_at(PinRef(c.name, p)) or PinRef(c.name, p) in shield_pins]
         if not populated:
             continue
-        if c.termination == "crimp":
-            pn = c.terminal_pn or (c.spec.terminal_pn if c.spec else "") or "crimp contact (match the housing)"
-            terminals.setdefault(pn, []).append((c.name, len(populated)))
+        if c.termination == "crimp":                 # the terminal follows the wire where the family has one per size
+            for p in populated:
+                links = h.links_at(PinRef(c.name, p))
+                awg = gauge_awg(links[0].gauge) if links else None
+                pn = c.terminal_pn or (terminal_pn(c.spec, c.gender, awg) if c.spec else "") or "crimp contact (match the housing)"
+                per = terminals.setdefault(pn, OrderedDict())
+                per[c.name] = per.get(c.name, 0) + 1
         elif c.termination == "solder":
             solder[c.type] = solder.get(c.type, 0) + len(populated)
     for pn, items in terminals.items():
-        add("terminal", "crimp terminal", sum(n for _c, n in items), part_number=pn, notes="; ".join(f"{c} x{n}" for c, n in items))
+        add("terminal", "crimp terminal", sum(items.values()), part_number=pn, notes="; ".join(f"{c} x{n}" for c, n in items.items()))
     for typ, n in solder.items():
         add("termination", f"solder cups, {typ} (solder + heat shrink)", n)
 
@@ -116,7 +120,7 @@ def bom_markdown(h: Harness, rows: list[dict] | None = None) -> str:
 # --------------------------------------------------------------------------- cut list
 
 
-def _termination(h: Harness, e) -> tuple[str, float]:
+def _termination(h: Harness, e, gauge=None) -> tuple[str, float]:
     """(how this end is terminated, the insulation to strip in mm)."""
     if isinstance(e, SpliceRef):
         s = h.splices[e.splice]
@@ -126,7 +130,7 @@ def _termination(h: Harness, e) -> tuple[str, float]:
     strip = spec.strip_mm if spec else 5.0
     t = c.termination
     if t == "crimp":
-        pn = c.terminal_pn or (spec.terminal_pn if spec else "")
+        pn = c.terminal_pn or (terminal_pn(spec, c.gender, gauge_awg(gauge) if gauge is not None else None) if spec else "")
         return f"crimp {pn or 'contact'} into {c.name} pos {e.pin}", strip
     if t == "solder":
         return f"solder to {c.name} {e.pin} cup", strip
@@ -140,8 +144,8 @@ def _termination(h: Harness, e) -> tuple[str, float]:
 def cutlist(h: Harness) -> list[dict]:
     rows = []
     for l in h.links:
-        ta, sa = _termination(h, l.a)
-        tb, sb = _termination(h, l.b)
+        ta, sa = _termination(h, l.a, l.gauge)
+        tb, sb = _termination(h, l.b, l.gauge)
         rows.append({"id": l.id, "from": str(l.a), "to": str(l.b), "gauge": l.gauge.label, "color": l.color, "net": l.net or "",
                      "cut_mm": round(l.length_mm, 1), "strip_a_mm": sa, "strip_b_mm": sb, "term_a": ta, "term_b": tb,
                      "cable": f"{l.cable} core {l.core}" if l.cable else "", "label": l.label or l.id})
