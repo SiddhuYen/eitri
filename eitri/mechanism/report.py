@@ -64,7 +64,7 @@ def summarize(rep: MechanismReport) -> str:
             if j.required is not None:
                 bits.append(f"needs {j.required:.2f} {j.load_unit}")
             if j.stall is not None:
-                bits.append(f"{j.actuator}: stall {j.stall:.1f}, rated {j.rated:.1f} {j.load_unit}{' (est.)' if j.rated_is_estimate else ''}")
+                bits.append(f"{j.actuator}: stall {j.stall:.1f}, rated {j.rated:.1f} {j.load_unit}{' (assumed)' if j.rated_is_estimate else ''}")
             if j.margin_stall is not None:
                 bits.append(f"margin {j.margin_stall:.2f}x stall / {j.margin_rated:.2f}x rated")
             if j.speed_available is not None:

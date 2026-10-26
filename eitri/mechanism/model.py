@@ -29,13 +29,44 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from fractions import Fraction
 from typing import Any, Iterable
 
 import numpy as np
 
 G = 9.80665                    # m/s^2, standard gravity (ISO 80000-3)
 KGCM_PER_NM = 1.0 / 0.0980665  # 1 kgf.cm = 0.0980665 N.m (the kilogram-force is defined with standard gravity)
-RATED_FRACTION = 0.5           # ESTIMATE: a hobby servo or small motor is usually held at 1/3 to 1/2 of stall for continuous duty
+# The share of stall torque (or force) taken as the continuous rating when neither the model nor the actuator catalog gives one.
+# It is an ASSUMPTION, not a spec, and the checks say so: hobby-servo makers publish stall only. 1/3 is the ratio of the one
+# hobby-class servo in the catalog that publishes a continuous rating (Feetech STS3215: 6.5 of 19.5 kg.cm at 6 V), and it keeps
+# below the "half of stall" rule of thumb on purpose; ROBOTIS asks for 1/5 of stall for steady loads on its XL320.
+ASSUMED_RATED_FRACTION = 1 / 3
+
+
+@dataclass(frozen=True)
+class ActuatorSpec:
+    """A catalog actuator: what its datasheet gives (rated None: the maker publishes no continuous rating)."""
+    key: str
+    stall_kgcm: float
+    rated_kgcm: float | None
+    at_V: float
+    source: str
+
+
+# Datasheet figures, fetched 2026-10-26. Matched by name: Actuator("MG996R", ...) or Actuator("Feetech STS3215", ...).
+ACTUATOR_CATALOG = {s.key: s for s in [
+    ActuatorSpec("STS3215", 19.5, 6.5, 6.0, "Feetech STS3215 datasheet as listed by Core Electronics and RobotShop: rated continuous "
+                 "torque 6.5 kg.cm, peak 19.5 kg.cm, both at 6 V"),
+    ActuatorSpec("MG996R", 9.4, None, 4.8, "TowerPro MG996R datasheet: stall 9.4 kgf.cm at 4.8 V, 11 kgf.cm at 6 V; no continuous rating"),
+    ActuatorSpec("SG90", 1.8, None, 4.8, "TowerPro SG90 datasheet: stall 1.8 kgf.cm at 4.8 V; no continuous rating"),
+]}
+
+
+def catalog_actuator(name: str) -> ActuatorSpec | None:
+    """The catalog entry whose key appears in an actuator's name ("TowerPro MG996R" -> MG996R), else None."""
+    squashed = "".join(ch for ch in str(name).upper() if ch.isalnum())
+    return next((s for k, s in ACTUATOR_CATALOG.items() if k in squashed), None)
+
 JOINT_TYPES = ("revolute", "prismatic", "fixed")
 
 
@@ -64,7 +95,8 @@ def _unit(v, what: str) -> np.ndarray:
 @dataclass(eq=False)
 class Actuator:
     """What drives a joint. Torque and speed are at the motor's own shaft; `gear_ratio` > 1 multiplies torque (x efficiency) and
-    divides speed at the joint. rated_* is the recommended continuous value (default: RATED_FRACTION x stall, an estimate)."""
+    divides speed at the joint. rated_* is the recommended continuous value: as given, else the catalog's datasheet figure (a
+    revolute actuator named after a catalog entry), else ASSUMED_RATED_FRACTION x stall, an assumption the checks name."""
     name: str = "actuator"
     stall_kgcm: float | None = None      # revolute: stall torque, kgf.cm
     rated_kgcm: float | None = None
@@ -95,12 +127,25 @@ class Actuator:
         return None if v is None else float(v) * self.gear_ratio * self.efficiency
 
     def rated_out(self, kind: str) -> tuple[float | None, bool]:
-        """(recommended continuous torque/force at the joint, whether it is an estimate from the stall value)."""
+        """(recommended continuous torque/force at the joint, whether it is assumed from the stall value)."""
         v = self.rated_kgcm if kind == "revolute" else self.rated_N
+        if v is None and kind == "revolute":
+            spec = catalog_actuator(self.name)
+            v = spec.rated_kgcm if spec else None
         if v is not None:
             return float(v) * self.gear_ratio * self.efficiency, False
         s = self.stall_out(kind)
-        return (None if s is None else s * RATED_FRACTION), True
+        return (None if s is None else s * ASSUMED_RATED_FRACTION), True
+
+    def rated_basis(self, kind: str) -> str:
+        """Where the continuous rating comes from, for the check message."""
+        if (self.rated_kgcm if kind == "revolute" else self.rated_N) is not None:
+            return "as given"
+        spec = catalog_actuator(self.name) if kind == "revolute" else None
+        if spec is not None and spec.rated_kgcm is not None:
+            return f"datasheet: {spec.source}"
+        why = f"{spec.key} publishes no continuous rating" if spec is not None else "no rated value given"
+        return f"assumed, not a spec: {Fraction(ASSUMED_RATED_FRACTION).limit_denominator(20)} of stall ({why})"
 
     def speed_out(self, kind: str) -> float | None:
         v = self.speed_deg_s if kind == "revolute" else self.speed_mm_s

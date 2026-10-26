@@ -45,7 +45,7 @@ def joints_csv(rows: list[dict]) -> str:
 
 def joints_markdown(m: Mechanism, rep: MechanismReport) -> str:
     rows = [[r["joint"], r["type"], f"{r['limit_lo']:g}..{r['limit_hi']:g} {r['unit']}", r["actuator"] or "-", f"{_num(r['required'])} {r['load_unit']}",
-             (_num(r["stall"], 1) + " / " + _num(r["rated"], 1) + (" (est.)" if r["rated_estimate"] else "")) if r["stall"] is not None else "-",
+             (_num(r["stall"], 1) + " / " + _num(r["rated"], 1) + (" (assumed)" if r["rated_estimate"] else "")) if r["stall"] is not None else "-",
              (_num(r["margin_stall"]) + "x / " + _num(r["margin_rated"]) + "x") if r["margin_stall"] is not None else "-",
              (_num(r["speed_required"], 0) if r["speed_required"] is not None else "-") + " / " + (_num(r["speed_available"], 0) if r["speed_available"] is not None else "-"),
              f"{r['moving_mass_g']:g}", r["status"]] for r in joint_rows(rep)]

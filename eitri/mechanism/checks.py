@@ -258,10 +258,11 @@ def run_checks(m: Mechanism) -> tuple[list[Check], list[JointInfo], list[TargetI
         info.margin_stall, info.margin_rated = (None if math.isinf(ms) else round(ms, 3)), (None if math.isinf(mr) else round(mr, 3))
         sev = "fail" if load > stall else "warn" if load > rated else "pass"
         info.status = sev
+        basis = a.rated_basis(j.type)
         if load < 0.005:
-            margin = f"no gravity load on this axis (inertial load is not graded); stall {stall:.1f}, rated {rated:.1f} {info.load_unit}{' (an estimate)' if est else ''}"
+            margin = f"no gravity load on this axis (inertial load is not graded); stall {stall:.1f}, rated {rated:.1f} {info.load_unit} ({basis})"
         else:
-            margin = f"margin {ms:.2f}x stall, {mr:.2f}x rated continuous ({rated:.1f} {info.load_unit}{', an estimate of ' + f'{a.stall_out(j.type) and 0.5:g}' + 'x stall' if est else ''})"
+            margin = f"margin {ms:.2f}x stall, {mr:.2f}x rated continuous ({rated:.1f} {info.load_unit}, {basis})"
         checks.append(_check(kind, f"{what} ({label})", sev,
                              f"{load:.1f} {info.load_unit} required at the worst pose ({_fmt_pose(pose, m)}) vs {stall:.1f} {info.load_unit} stall, {margin}",
                              f"required <= {rated:.1f} {info.load_unit} rated, never > {stall:.1f} stall", [j.name]))
@@ -326,3 +327,4 @@ def run_checks(m: Mechanism) -> tuple[list[Check], list[JointInfo], list[TargetI
     else:
         checks.append(_check("reach", "reach envelope", "pass", text, "", [tip_link]))
     return checks, infos, tinfos, reach, masses
+

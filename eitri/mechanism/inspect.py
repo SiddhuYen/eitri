@@ -24,7 +24,7 @@ def mechanism_scope(m: Mechanism, p=None) -> dict:
     def joints():
         rep = analyze(m)
         for j in rep.joint_info:
-            act = f"{j.actuator}: stall {j.stall:.2f}, rated {j.rated:.2f} {j.load_unit}{' (est.)' if j.rated_is_estimate else ''}" if j.stall is not None else "no actuator"
+            act = f"{j.actuator}: stall {j.stall:.2f}, rated {j.rated:.2f} {j.load_unit}{' (assumed)' if j.rated_is_estimate else ''}" if j.stall is not None else "no actuator"
             sp = f"; speed {j.speed_available:.0f}" + (f" vs {j.speed_required:g} required" if j.speed_required else "") if j.speed_available is not None else ""
             print(f"{j.name} ({j.type}): {j.limit[0]:g}..{j.limit[1]:g} {j.unit}; needs {j.required:.2f} {j.load_unit} at {j.worst_pose}; {act}"
                   + (f"; margin {j.margin_stall:.2f}x stall" if j.margin_stall is not None else "") + sp + f"; moves {j.moving_mass_g:g} g; {j.status}")

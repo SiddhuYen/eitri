@@ -27,7 +27,8 @@ m.joint(name, parent, child, type="revolute", axis=(0, 0, 1), at=None, limit_deg
 Actuator(name, stall_kgcm=None, rated_kgcm=None, stall_N=None, rated_N=None, speed_deg_s=None, speed_mm_s=None,
          gear_ratio=1, efficiency=1, travel_deg=None, travel_mm=None, mass_g=0)
     the motor's own figures (at its shaft); gear_ratio > 1 multiplies torque (x efficiency) and divides speed at the joint;
-    rated_* = recommended continuous (default 0.5 x stall, an ESTIMATE the checks say so about); travel = the actuator's own
+    rated_* = recommended continuous: give the datasheet's when it has one; else the catalog's (STS3215: 6.5 kg·cm), else
+    1/3 of stall, an assumption the checks name (MG996R, SG90 publish stall only); travel = the actuator's own
     range (180 for a hobby servo; None = continuous); mass_g sits on the parent link at the joint
 
 m.payload(mass_g, link=None, at=None)       a point mass the tip carries (default: at the tip)
