@@ -13,7 +13,7 @@ import pytest
 from eitri.harness import (Cable, Connector, Gauge, Harness, HarnessError, Net, Splice, Wire, awg_ampacity,
                            net_stats, voltage_drop)
 from eitri.harness import diagram, outputs
-from eitri.harness.catalog import catalog_table, normalize_color, normalize_type, spec_for
+from eitri.harness.catalog import CATALOG, RATING_SOURCES, catalog_table, normalize_color, normalize_type, spec_for
 from eitri.harness.report import analyze, summarize
 
 
@@ -93,7 +93,7 @@ def test_catalog_types_and_unknown_allowed():
     for t in ("JST-XH", "JST-PH", "DUPONT-2.54", "MOLEX-MICROFIT-3.0", "XT30", "XT60", "RING", "SPADE-6.3", "BARE", "SOLDER"):
         assert spec_for(t) is not None, t
     assert normalize_type("xt-60") == "XT60" and normalize_type("micro-fit 3.0") == "MOLEX-MICROFIT-3.0" and normalize_type("ring terminal") == "RING"
-    assert spec_for("XT60").rating_a == 60 and spec_for("JST-PH").pitch_mm == 2.0
+    assert spec_for("XT60").rating_a == 30 and spec_for("XT60").burst_a == 60 and spec_for("JST-PH").pitch_mm == 2.0
     odd = Connector("X", "ACME-9", pins=4, rating_a=5, pitch_mm=3.5)
     assert not odd.known and odd.rating == 5 and odd.pitch == 3.5
     assert "XT60" in catalog_table()
@@ -303,6 +303,25 @@ def test_connector_pin_rating():
     assert check(analyze(h), "connector rating J1").severity == "fail"
     h.connectors["J1"].rating_a = 10.0
     assert check(analyze(h), "connector rating J1").severity == "pass"
+
+
+def test_connector_continuous_and_short_time_ratings():
+    # XT60: 30 A continuous, 60 A short-time (Amass datasheet V1.2); a current between the two is a peak-only warning
+    def rated(amps, **kw):
+        h = lead(gauge=8, current=amps, voltage=14.8)
+        for c in h.connectors.values():
+            c.type = "XT60"
+            for k, v in kw.items():
+                setattr(c, k, v)
+        return check(analyze(h), "connector rating J1")
+    assert rated(20).severity == "pass"
+    peak = rated(45)
+    assert peak.severity == "warn" and "above the 30 A continuous rating" in peak.measured and "60 A short-time" in peak.measured
+    assert rated(61).severity == "fail"                               # past the short-time rating too
+    assert rated(45, rating_a=40.0).severity == "fail"                # a rating given in the model has no short-time allowance
+    for key, spec in CATALOG.items():                                 # every graded catalog type says where its rating comes from
+        if spec.rating_a is not None:
+            assert RATING_SOURCES.get(key), key
 
 
 def test_connector_rating_sums_wires_on_a_pin():
@@ -672,7 +691,12 @@ def test_quadcopter_demo_builds_green():
     m = load_model(demo)
     h = m.build()
     rep = analyze(h, m.verify(h))
-    assert rep.ok and not rep.failed and not rep.warnings, summarize(rep)
+    assert rep.ok and not rep.failed, summarize(rep)
+    # the only warnings are the connectors at or past their continuous rating: the XT60 carries the 44.5 A peak (30 A
+    # continuous, 60 A short-time), each XT30 its ESC's full 20 A (20 A rating)
+    warned = {c.name: c for c in rep.warnings}
+    assert set(warned) == {"connector rating BATT (XT60, 30 A/pin)"} | {f"connector rating ESC{i} (XT30, 20 A/pin)" for i in range(1, 5)}, summarize(rep)
+    assert "short-time rating" in warned["connector rating BATT (XT60, 30 A/pin)"].measured
     assert len(h.connectors) == 6 and len(h.splices) == 2 and len(h.links) == 12
     st = net_stats(h)
     assert st["VBAT"].current_A == pytest.approx(44.5) and st["VBAT"].drop_pct < 1.0

@@ -243,6 +243,13 @@ def _ampacity(h: Harness) -> list[HCheck]:
                                   f"unknown type {c.type!r}: {_fmt_a(worst)} on {wref} is not graded", "give Connector(..., rating_a=<A per pin>)", refs))
             continue
         frac = worst / rating
+        burst = c.spec.burst_a if c.spec and c.rating_a is None else None
+        if worst > rating and burst is not None and worst <= burst:
+            out.append(_check("ampacity", f"connector rating {c.name} ({c.type}, {_fmt_a(rating)}/pin)", "warn",
+                              f"worst pin {wref}: {_fmt_a(worst)} ({frac * 100:.0f}%), above the {_fmt_a(rating)} continuous rating, "
+                              f"within the {_fmt_a(burst)} short-time rating: fine for peaks under a minute, not for a steady load",
+                              f"<= {_fmt_a(rating)} continuous, or a larger connector", refs))
+            continue
         sev = "fail" if worst > rating else "warn" if frac >= WARN_FRACTION else "pass"
         out.append(_check("ampacity", f"connector rating {c.name} ({c.type}, {_fmt_a(rating)}/pin)", sev,
                           f"worst pin {wref}: {_fmt_a(worst)} ({frac * 100:.0f}%)", f"<= {_fmt_a(rating)}" + (" (within 20% of the limit)" if sev == "warn" else ""), refs))

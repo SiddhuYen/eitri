@@ -2,6 +2,8 @@
 
 Each ESC is rated 20 A and the flight controller draws 0.5 A. The four ESCs never peak together, so the pack
 (the trunk) is sized for the measured in-flight peak, `pack_peak_a`; each branch is sized for its own ESC's full 20 A.
+The checks warn on the connectors, as they should: the 44.5 A peak is above the XT60's 30 A continuous rating (within
+its 60 A short-time rating), and each XT30 runs at its full 20 A rating.
 """
 from eitri.harness import *
 

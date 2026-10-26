@@ -1,7 +1,8 @@
 """Reference data for harness design: the connector catalog, AWG sizes and ampacity, wire colours.
 
-Everything here is plain data. Ratings are the manufacturers' typical continuous per-pin ratings; a model
-file can always give its own (`Connector(..., rating_a=...)`), and an unknown connector type is allowed.
+Everything here is plain data. Ratings are the manufacturers' continuous per-pin ratings, each with its source in
+`RATING_SOURCES`; a model file can always give its own (`Connector(..., rating_a=...)`), and an unknown connector type
+is allowed.
 """
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ class ConnectorSpec:
     strip_mm: float = 3.0        # insulation to strip at this termination
     default_pins: int = 1
     gender: str = ""
+    burst_a: float | None = None # the manufacturer's short-time (instantaneous) rating, when it publishes one
 
 
 CATALOG: dict[str, ConnectorSpec] = {s.key: s for s in [
@@ -30,9 +32,9 @@ CATALOG: dict[str, ConnectorSpec] = {s.key: s for s in [
     ConnectorSpec("JST-PH", "JST PH 2.00 mm wire-to-board housing", 2.0, 2.0, "crimp", "SPH-002T-P0.5S", "PHR-{n}", 2.0, 2),
     ConnectorSpec("DUPONT-2.54", "Dupont 2.54 mm housing", 2.54, 2.0, "crimp", "Dupont 2.54 crimp contact", "", 2.5, 2),
     ConnectorSpec("MOLEX-MICROFIT-3.0", "Molex Micro-Fit 3.0 housing", 3.0, 8.5, "crimp", "43030-0001", "43025-{n:02d}00", 3.5, 2),
-    ConnectorSpec("XT30", "Amass XT30 bullet connector", 5.0, 30.0, "solder", "", "", 6.0, 2),
-    ConnectorSpec("XT60", "Amass XT60 bullet connector", 7.2, 60.0, "solder", "", "", 8.0, 2),
-    ConnectorSpec("XT90", "Amass XT90 bullet connector", 10.0, 90.0, "solder", "", "", 10.0, 2),
+    ConnectorSpec("XT30", "Amass XT30 bullet connector", 5.0, 20.0, "solder", "", "", 6.0, 2),
+    ConnectorSpec("XT60", "Amass XT60 bullet connector", 7.2, 30.0, "solder", "", "", 8.0, 2, burst_a=60.0),
+    ConnectorSpec("XT90", "Amass XT90 bullet connector", 10.0, 45.0, "solder", "", "", 10.0, 2, burst_a=90.0),
     ConnectorSpec("RING", "ring terminal", None, None, "ring", "ring terminal (size to the stud)", "", 6.0),
     ConnectorSpec("SPADE-2.8", "2.8 mm spade (Faston) terminal", None, 6.0, "spade", "2.8 mm spade terminal", "", 5.0),
     ConnectorSpec("SPADE-4.8", "4.8 mm spade (Faston) terminal", None, 12.0, "spade", "4.8 mm spade terminal", "", 5.5),
@@ -45,6 +47,27 @@ CATALOG: dict[str, ConnectorSpec] = {s.key: s for s in [
     ConnectorSpec("ARDUINO-NANO", "Arduino Nano board (2.54 mm headers)", 2.54, None, "crimp", "Dupont 2.54 female crimp contact", "", 2.5, 3),
 ]}
 BOARD_TYPES = {"ARDUINO-UNO": "uno", "ARDUINO-NANO": "nano"}
+
+# Where each rating above comes from (fetched 2026-10-26). A rating lower than its source is a deliberate derating, said so.
+RATING_SOURCES = {
+    "JST-XH": "JST XH series page (jst-mfg.com, series 277): current rating 3 A AC/DC (AWG #22)",
+    "JST-PH": "JST PH series page (jst-mfg.com, series 199): current rating 2 A AC/DC (AWG #24)",
+    "DUPONT-2.54": "derated from the 3 A continuous of the original 2.54 mm crimp contact (Amphenol FCI Mini-PV, datasheet "
+                   "48045): generic 'Dupont' contacts are unbranded copies with no published rating",
+    "MOLEX-MICROFIT-3.0": "Molex Micro-Fit 3.0 crimp terminals 43030 (product spec PS-43045-001, as listed by element14 / Heilind): "
+                          "up to 8.5 A per circuit; Molex derates it for many circuits in one housing",
+    "XT30": "Amass XT30U-M product page (china-amass.net): current rating 20 A (16 AWG, temperature rise <= 85 K); no short-time "
+            "rating published",
+    "XT60": "Amass XT60 datasheet V1.2: rated current 30 A, instantaneous 60 A (the XT60H product page gives 35 A at 12 AWG; the "
+            "lower figure is used). Holybro's 'Connector & Wire Rating' gives the same 30 A / 60 A (< 1 minute)",
+    "XT90": "Amass XT90E-M product page (china-amass.net): current rating 45 A (10 AWG, temperature rise <= 85 K); burst 90 A "
+            "(1 minute, temperature rise < 60 C) from Holybro's 'Genuine AMASS Connector Rating' table",
+    "SPADE-6.3": "TE/AMP FASTON catalog 1654369 (product spec 108-20019): .110 / .187 / .250 receptacles 20 A max with 2.5 mm^2 wire",
+    "SPADE-4.8": "derated below the 20 A FASTON family maximum (TE/AMP catalog 1654369), which assumes 2.5 mm^2 wire a 4.8 mm "
+                 "receptacle rarely takes; no per-size figure is published there",
+    "SPADE-2.8": "derated below the 20 A FASTON family maximum (TE/AMP catalog 1654369), which assumes 2.5 mm^2 wire a 2.8 mm "
+                 "receptacle rarely takes; no per-size figure is published there",
+}
 
 ALIASES = {
     "XH": "JST-XH", "JSTXH": "JST-XH", "JST XH": "JST-XH",
@@ -94,14 +117,18 @@ def catalog_table() -> str:
 
 # --------------------------------------------------------------------------- AWG
 
-# Chassis-wiring ampacity (single conductor in free air), amperes, even AWG sizes. Odd sizes are the
-# geometric mean of their neighbours.
+# Chassis-wiring ampacity (single conductor in free air, not in a bundle), amperes, even AWG sizes: the "maximum amps for
+# chassis wiring" column of the Handbook of Electronic Tables and Formulas for American Wire Gauge, as tabulated by
+# PowerStream (powerstream.com/Wire_Size.htm, fetched 2026-10-26; it calls the column conservative, for wiring in air).
+# Odd sizes are the geometric mean of their neighbours.
 _CHASSIS_AMPS = {
     -3: 380, -2: 328, -1: 283, 0: 245, 1: 211, 2: 181, 3: 158, 4: 135, 6: 101, 8: 73, 10: 55, 12: 41, 14: 32,
     16: 22, 18: 16, 20: 11, 22: 7, 24: 3.5, 26: 2.2, 28: 1.4, 30: 0.86, 32: 0.53, 34: 0.33, 36: 0.21, 38: 0.13, 40: 0.081,
 }
 AWG_MIN, AWG_MAX = -3, 40            # -3 is 4/0
-K_COPPER = 10.75                     # ohm-circular-mil per foot, the voltage-drop constant for copper
+# ohm-circular-mil per foot, the voltage-drop constant for copper: annealed copper is 10.371 at 20 C (IACS, NBS Handbook 100)
+# and rises 0.393 %/C, so 10.75 is copper near 29 C. A hot wire drops more (NEC practice uses 12.9 at 75 C).
+K_COPPER = 10.75
 MM2_PER_CM = 0.000506707479          # one circular mil in mm^2
 FT_PER_MM = 1 / 304.8
 
