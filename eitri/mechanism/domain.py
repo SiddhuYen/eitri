@@ -19,6 +19,10 @@ DOWNLOADS = {
     "joints": ("joints_csv", "text/csv", ".joints.csv"), "joints_md": ("joints_md", "text/markdown", ".joints.md"),
     "mass": ("mass_csv", "text/csv", ".mass.csv"), "mass_md": ("mass_md", "text/markdown", ".mass.md"),
 }
+# the Export menu and the share page's buttons, in order (eitri.exports); every fmt is a DOWNLOADS key
+EXPORTS = (("svg", "Diagram SVG", "The kinematic diagram (.svg)"), ("png", "Diagram PNG", "The kinematic diagram (.png)"),
+           ("joints", "Joints CSV", "Joint / torque table (.csv)"), ("joints_md", "Joints MD", "Joint / torque table (Markdown)"),
+           ("mass", "Mass CSV", "Mass rollup (.csv)"), ("mass_md", "Mass MD", "Mass rollup (Markdown)"))
 BOM_KEYS = {"md": "mass_md", "csv": "mass_csv", "files": ("joints_md", "joints_csv", "mass_md", "mass_csv")}
 REVIEW_HINT = ("The image is the kinematic diagram at the home pose (side and plan views), with the worst-load pose ghosted: joints "
                "failing their torque or speed check are red, warnings amber, targets are crosses (green reached, red missed), and the "

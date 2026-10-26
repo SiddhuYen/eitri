@@ -20,6 +20,11 @@ DOWNLOADS = {
     "cutlist": ("cutlist_csv", "text/csv", ".cutlist.csv"), "cutlist_md": ("cutlist_md", "text/markdown", ".cutlist.md"),
     "wireviz": ("wireviz", "text/yaml", ".wireviz.yaml"),
 }
+# the Export menu and the share page's buttons, in order (eitri.exports); every fmt is a DOWNLOADS key
+EXPORTS = (("svg", "Diagram SVG", "The harness diagram (.svg)"), ("png", "Diagram PNG", "The harness diagram (.png)"),
+           ("bom", "BOM CSV", "Bill of materials (.csv)"), ("bom_md", "BOM MD", "Bill of materials (Markdown)"),
+           ("cutlist", "Cut list CSV", "Cut and strip lengths of every wire (.csv)"), ("cutlist_md", "Cut list MD", "Cut list (Markdown)"),
+           ("wireviz", "WireViz YAML", "WireViz-compatible YAML (interop)"))
 BOM_KEYS = {"md": "bom_md", "csv": "csv", "cutlist_md": "cutlist_md", "cutlist_csv": "cutlist_csv", "files": ("bom_md", "csv", "cutlist_md", "cutlist_csv", "wireviz")}
 REVIEW_HINT = ("The image is the harness diagram: failing wires and connectors are outlined red, warnings amber, and the failing checks "
                "are listed under it. Check it against the request before finishing.")

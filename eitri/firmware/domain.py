@@ -19,6 +19,10 @@ DOWNLOADS = {
     "pinout": ("pinout_csv", "text/csv", ".pinout.csv"), "pinout_md": ("pinout_md", "text/markdown", ".pinout.md"),
     "header": ("header", "text/x-c", "_eitri_pins.h"), "log": ("compile_log", "text/plain", ".compile.log"),
 }
+# the Export menu and the share page's buttons, in order (eitri.exports); every fmt is a DOWNLOADS key
+EXPORTS = (("svg", "Pinout SVG", "The pinout diagram (.svg)"), ("png", "Pinout PNG", "The pinout diagram (.png)"),
+           ("pinout", "Pinout CSV", "Pinout table (.csv)"), ("pinout_md", "Pinout MD", "Pinout table (Markdown)"),
+           ("header", "eitri_pins.h", "The generated pin header"), ("log", "Compile log", "arduino-cli output"))
 BOM_KEYS = None
 REVIEW_HINT = ("The image is the pinout: every declared pin on the board with its constant, direction and role, the peripherals wired "
                "to their pins, and the compile verdict; pins failing a check are red, warnings amber, and the failing checks are listed "

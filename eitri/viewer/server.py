@@ -120,7 +120,19 @@ def _state(project: Project, hub=None, home: str | None = None) -> dict:
         "engine": _engine(),
         "replaying": bool(hub is not None and getattr(hub, "_guest", None) is not None),
         "last_event": hub.last_event_id if hub is not None else 0,
+        "exports": _exports(project.kind),
+        "version": _version(),
     }
+
+
+def _exports(kind: str | None) -> list[dict]:
+    from ..exports import export_formats
+    return export_formats(kind)
+
+
+def _version() -> str:
+    from .. import __version__
+    return __version__
 
 
 HARNESS_DOWNLOADS = {                      # /download?fmt=...: a harness build's shop outputs
@@ -159,7 +171,9 @@ def make_handler(project: Project, lock: threading.Lock, hub=None, home: str | N
         st = _state(project, hub, home)
         if agent is not None:                  # the website knows whether Claude can run (a key, a binary)
             st["needs_key"] = bool(agent().get("needs_key"))
-        if policy is not None:
+        if policy is None:                     # running locally: the status bar shows where the project lives (never sent by a hosted policy)
+            st["folder"] = str(project.folder)
+        else:
             st = policy.state(st)
         return st
 

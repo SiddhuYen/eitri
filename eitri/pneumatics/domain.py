@@ -19,6 +19,10 @@ DOWNLOADS = {
     "bom": ("csv", "text/csv", ".bom.csv"), "bom_md": ("bom_md", "text/markdown", ".bom.md"),
     "cylinders": ("cylinders_csv", "text/csv", ".cylinders.csv"), "cylinders_md": ("cylinders_md", "text/markdown", ".cylinders.md"),
 }
+# the Export menu and the share page's buttons, in order (eitri.exports); every fmt is a DOWNLOADS key
+EXPORTS = (("svg", "Schematic SVG", "The ISO 1219 schematic (.svg)"), ("png", "Schematic PNG", "The schematic (.png)"),
+           ("bom", "BOM CSV", "Bill of materials (.csv)"), ("bom_md", "BOM MD", "Bill of materials (Markdown)"),
+           ("cylinders", "Cylinders CSV", "Cylinder sizing table (.csv)"), ("cylinders_md", "Cylinders MD", "Cylinder sizing table (Markdown)"))
 BOM_KEYS = {"md": "bom_md", "csv": "csv", "files": ("bom_md", "csv", "cylinders_md", "cylinders_csv")}
 REVIEW_HINT = ("The image is the schematic (ISO 1219-style symbols, supply at the bottom, cylinders at the top): components and tubes "
                "failing a check are red, warnings amber, and the failing checks are listed under it. Check it against the request before finishing.")
