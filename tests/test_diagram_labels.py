@@ -91,6 +91,19 @@ def _planar_arm():
     return m
 
 
+def _lift():
+    from eitri.mechanism import Actuator, Mechanism
+    m = Mechanism("Vertical lift")
+    m.link("base", fixed=True)
+    m.link("carriage", length_mm=60, mass_g=500, direction=(1, 0, 0))
+    screw = Actuator("lead screw", stall_N=150, rated_N=80, speed_mm_s=40, travel_mm=100, mass_g=350)
+    m.joint("lift", "base", "carriage", type="prismatic", axis=(0, 0, 1), at=(0, 0, 0), limit_mm=(0, 100), actuator=screw)
+    m.payload(1000)
+    m.tip("carriage")
+    m.target("top", (60, 0, 90))
+    return m
+
+
 def _cyl25():
     from test_pneumatics_diagram import cyl25
     return cyl25()
@@ -113,6 +126,7 @@ CASES = {
     "two servos on a separate supply": _uno_servo,
     "pan-tilt": _demo(DEMOS / "pan-tilt" / "pan_tilt.py"),
     "two-link planar arm": _planar_arm,
+    "vertical lift": _lift,
     "air clamp": _demo(DEMOS / "air-clamp" / "air_clamp.py"),
     "25 x 50 cylinder circuit": _cyl25,
     "servo sweep": _demo(DEMOS / "servo-sweep" / "servo_sweep.py"),
@@ -136,6 +150,16 @@ def test_planar_mechanisms_draw_one_view():
     sc, _rep = _scene(CASES["pan-tilt"])                                 # a pan joint about Z: the plan view says something
     names = [it["s"] for it in sc.items if it["t"] == "text" and it.get("g") == "frame" and "view" in it["s"]]
     assert [n.split()[0] for n in names] == ["side", "plan"]
+
+
+def test_a_slide_shows_its_stroke_along_its_axis():
+    sc, _rep = _scene(_lift)
+    rails = [it for it in sc.items if it.get("cls") == "rail" and it.get("dash")]
+    assert len(rails) == 1
+    r = rails[0]
+    # 0..100 mm up Z: a vertical rail in the side view, as long as the stroke at the view's scale, starting at the joint
+    joint = sc.nodes["lift"]
+    assert abs(r["x1"] - r["x2"]) < 0.5 and abs(r["x1"] - joint["x"]) < 0.5 and abs(r["y1"] - joint["y"]) < 0.5 and r["y2"] < r["y1"] - 50
 
 
 def test_firmware_inputs_are_named_as_asked():

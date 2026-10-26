@@ -90,6 +90,17 @@ def _around(x: float, y: float, r: float) -> list[tuple[float, float, str]]:
     return out
 
 
+def _rails(m: Mechanism, pts) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    """Each prismatic joint's travel: the two ends of its stroke along its axis (world frame, at the drawn pose)."""
+    out = {}
+    for j in m.joints:
+        if j.type == "prismatic" and j.limit and j.name in pts["axes"]:
+            p, a = np.asarray(pts["joints"][j.name], float), np.asarray(pts["axes"][j.name], float)
+            n = float(np.linalg.norm(a)) or 1.0
+            out[j.name] = (p + a / n * j.limit[0], p + a / n * j.limit[1])
+    return out
+
+
 def worst_pose(m: Mechanism, rep) -> dict[str, float] | None:
     """The pose of the most loaded joint (relative to its stall), from the report."""
     best = None
@@ -115,6 +126,7 @@ def build_scene(m: Mechanism, rep=None, status: dict[str, str] | None = None, fo
     wp = worst_pose(m, rep)
     ghost = m.points(wp) if wp and wp != m.home_pose() else None
     all_pts = list(home["joints"].values()) + list(home["ends"].values()) + [home["tip"]] + list(home["masses"].values()) + [t.at for t in m.targets] + [np.zeros(3)]
+    all_pts += [e for r in _rails(m, home).values() for e in r]
     if ghost:
         all_pts += list(ghost["joints"].values()) + list(ghost["ends"].values()) + [ghost["tip"]]
     top = MARGIN + 22
@@ -170,7 +182,18 @@ def _draw(m, rep, status, footer, title, home, ghost, views, side, order, top) -
             a, b = v.to(np.zeros(3)), v.to(pts["ends"][m.base])
             items.append({"t": "line", "x1": a[0], "y1": a[1], "x2": b[0], "y2": b[1], "stroke": color, "sw": width, "g": f"link:{m.base}" if group else "ghost", "cls": "link", **({"dash": dash} if dash else {})})
 
+    rails = _rails(m, home)
     for v in views:
+        # a prismatic joint's stroke: a dashed rail along its axis, with a stop at each end
+        for name, (lo, hi) in rails.items():
+            a, b = v.to(lo), v.to(hi)
+            d = np.array([b[0] - a[0], b[1] - a[1]])
+            if float(np.hypot(*d)) < 2:
+                continue                                      # the axis points out of this view
+            n = np.array([-d[1], d[0]]) / float(np.hypot(*d)) * 6
+            items.append({"t": "line", "x1": a[0], "y1": a[1], "x2": b[0], "y2": b[1], "stroke": MUTED, "sw": 1.5, "dash": "5 4", "g": f"joint:{name}", "cls": "rail"})
+            for e in (a, b):
+                items.append({"t": "line", "x1": e[0] - n[0], "y1": e[1] - n[1], "x2": e[0] + n[0], "y2": e[1] + n[1], "stroke": MUTED, "sw": 1.5, "g": f"joint:{name}", "cls": "rail"})
         if ghost and v is side:
             chain(v, ghost, GHOST, LINK_W - 1.5, False, "6 5")
             tp = v.to(ghost["tip"])
@@ -201,7 +224,9 @@ def _draw(m, rep, status, footer, title, home, ghost, views, side, order, top) -
                 items.append({"t": "circle", "cx": q[0], "cy": q[1], "r": 2, "fill": col, "stroke": "none", "sw": 0, "g": g, "cls": "joint"})
             elif j.type == "prismatic":
                 items.append({"t": "rect", "x": q[0] - 7, "y": q[1] - 7, "w": 14, "h": 14, "rx": 1, "fill": "#ffffff", "stroke": col, "sw": 2, "g": g, "cls": "joint"})
-                items.append({"t": "line", "x1": q[0] - 4, "y1": q[1], "x2": q[0] + 4, "y2": q[1], "stroke": col, "sw": 2, "g": g})
+                d = np.subtract(v.to(home["joints"][j.name] + home["axes"][j.name]), q)   # the slide direction, as drawn
+                d = d / float(np.hypot(*d)) * 4 if float(np.hypot(*d)) > 1e-6 else np.array([4.0, 0.0])
+                items.append({"t": "line", "x1": q[0] - d[0], "y1": q[1] - d[1], "x2": q[0] + d[0], "y2": q[1] + d[1], "stroke": col, "sw": 2, "g": g})
             else:
                 items.append({"t": "polyline", "pts": [(q[0], q[1] - 6), (q[0] + 6, q[1]), (q[0], q[1] + 6), (q[0] - 6, q[1])], "closed": True, "fill": "#ffffff", "stroke": col, "sw": 1.5, "g": g, "cls": "joint"})
             if v is side:
