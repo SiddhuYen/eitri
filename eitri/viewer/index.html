@@ -3638,6 +3638,10 @@ async function pollOnce() {
       if ($('showdrawing').checked) $('drawing').src = drawingUrl('svg', true) + '&r=' + s.ok_revision;
       renderReport(); renderRevisions();
     }
+    {                                                       // the same revision's checks can change (a replay reveals its final report): redraw the card
+      const ck = JSON.stringify([s.ok_revision, s.last_ok, (s.checks || []).map(c => [c.name, c.ok, c.severity, c.measured])]);
+      if (ck !== checksKey) { const first = !checksKey; checksKey = ck; if (!first && s.ok_revision === currentRev) renderReport(); }
+    }
     renderParams(); renderEdits(); renderJoints(); renderBom(); renderBends(); renderMfgParts();
     renderDemo(); renderKeyNote(); renderEngine(); renderHosted(); renderShell();
     if (!s.ok_revision || !(s.parts || []).length) hideLoading();
@@ -3688,7 +3692,7 @@ function showSheet(s) {
 }
 // a download is offered when it can be had: CAD formats are written on demand, a domain's files by its last good build
 const available = x => !x.output || !!((state.outputs || {})[x.output]);
-let shellKey = '', exportsKey = '';
+let shellKey = '', exportsKey = '', checksKey = '';
 function renderShell() {
   const s = state, tool = window.eitriTools ? eitriTools.ofKind(s.kind) : { key: 'cad', name: 'eitri CAD', short: 'CAD' };
   const title = s.title || s.name || 'eitri', home = s.home || (s.hosted ? '/' : null);
