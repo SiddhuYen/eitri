@@ -19,6 +19,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from .. import power as _power
 from ..checks import Check, check as _check
 from .boards import Board, PinCap
 from .compile import CompileResult
@@ -234,6 +235,8 @@ def run_checks(fw: Firmware, compiled: CompileResult | None = None) -> tuple[lis
     if unresolved:
         checks.append(_check("usage", "pin calls resolved", "warn", "not followed (a pin held in another variable): " + "; ".join(unresolved[:6]), "PIN_<NET> constants from eitri_pins.h", []))
 
+    checks += _power_budget(fw)
+
     # -- compile
     comp: dict = {}
     if compiled is not None:
@@ -254,3 +257,47 @@ def run_checks(fw: Firmware, compiled: CompileResult | None = None) -> tuple[lis
             checks.append(_check("compile", "compiles (arduino-cli)", "fail", f"{len(errs)} error(s): " + "; ".join((f"{e['file']}:{e['line']}: " if e.get("file") else "") + e["msg"] for e in errs[:5]),
                                  "no compile errors", sorted({e["file"] for e in errs if e.get("file")})))
     return checks, infos, comp
+
+
+def _power_budget(fw: Firmware) -> list[Check]:
+    """What the peripherals declared on a board supply pin (servo(power="5V", current_A=...), load(...)) draw, against what the pin can
+    supply when the board is powered the way fw.powered says (limits and their sources: eitri.power)."""
+    out: list[Check] = []
+    by_pin: dict[str, list] = {}
+    for per in fw.peripherals:
+        pw = per.params.get("power")
+        if pw in ("5V", "3V3"):
+            by_pin.setdefault(pw, []).append(per)
+    ext = [p for p in fw.peripherals if p.params.get("power") == "external"]
+    if ext:
+        out.append(_check("power", "loads on their own supply", "pass",
+                          ", ".join(p.name + (f" ({p.params['current_A']:g} A)" if p.params.get("current_A") is not None else "") for p in ext)
+                          + ": not on the board's supply pins; their supply's ground must be wired to the board's GND (a shared ground)",
+                          "a common ground with the board", [p.name for p in ext]))
+    for pin, pers in by_pin.items():
+        names = [p.name for p in pers]
+        how = "USB" if fw.powered == "usb" else (f"VIN {fw.vin_V:g} V" if fw.vin_V is not None else "VIN")
+        name = f"supply {pin} pin ({fw.board_key}, on {how})"
+        unknown = [p.name for p in pers if p.params.get("current_A") is None]
+        if unknown:
+            out.append(_check("power", name, "warn", f"{', '.join(unknown)} on the {pin} pin with no current_A: not graded",
+                              "current_A: the worst-case draw from the datasheet (a servo's stall current)", names))
+            continue
+        draw = sum(p.params["current_A"] for p in pers)
+        lim = _power.supply_limit(fw.board_key, pin, fw.powered, fw.vin_V)
+        src = f" [source: {lim.source}]" if lim.source else ""
+        parts = ", ".join(f"{p.name} {p.params['current_A']:g} A" for p in pers)
+        if lim.limit_A is None:
+            out.append(_check("power", name, "warn", f"{draw:g} A drawn ({parts}); not graded: {lim.basis}{src}",
+                              "the board's supply limit, or power=\"external\" with a shared ground", names))
+            continue
+        sev = _power.grade(draw, lim)
+        if sev == "fail":
+            out.append(_check("power", name, "fail",
+                              f"{draw:g} A drawn ({parts}), but the {pin} pin can supply {lim.limit_A:g} A, limited by {lim.basis}. "
+                              f"Fix: {_power.advice(pin)}; declare it power=\"external\".{src}", f"<= {lim.limit_A:g} A", names))
+        else:
+            out.append(_check("power", name, sev, f"{draw:g} A of {lim.limit_A:g} A ({parts}), limited by {lim.basis}"
+                              + ("; the board's own draw shares this budget" if sev == "warn" else "") + src,
+                              f"<= {lim.limit_A:g} A" + (" (within 20% of the limit)" if sev == "warn" else ""), names))
+    return out

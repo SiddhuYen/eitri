@@ -65,7 +65,7 @@ class PinDecl:
 @dataclass(eq=False)
 class Peripheral:
     name: str
-    kind: str                        # servo | pwm_motor | limit_switch | serial
+    kind: str                        # servo | pwm_motor | limit_switch | button | potentiometer | serial | load
     pins: dict[str, str] = field(default_factory=dict)       # function -> pin
     params: dict[str, Any] = field(default_factory=dict)
 
@@ -83,8 +83,13 @@ class Source:
 
 
 class Firmware:
-    def __init__(self, name: str = "firmware", board: str = "uno", description: str = "", wifi: bool = False, libraries: list[str] | None = None):
+    def __init__(self, name: str = "firmware", board: str = "uno", description: str = "", wifi: bool = False, libraries: list[str] | None = None,
+                 powered: str = "usb", vin_V: float | None = None):
         self.name = name
+        self.powered = str(powered or "usb").lower()           # how the board itself is powered: "usb" or "vin" (the power-budget check)
+        if self.powered not in ("usb", "vin"):
+            raise FirmwareError(f"powered must be 'usb' or 'vin', not {powered!r}")
+        self.vin_V = None if vin_V is None else float(vin_V)
         self.description = description
         self.board_key = str(board)
         self.wifi = bool(wifi)
@@ -108,9 +113,14 @@ class Firmware:
         self.pins.append(p)
         return p
 
-    def servo(self, name: str, pin, min_us: int = 544, max_us: int = 2400) -> Peripheral:
-        """A hobby servo on a digital pin (the Servo / ESP32Servo library drives it)."""
-        per = Peripheral(str(name), "servo", {"signal": str(pin)}, {"min_us": int(min_us), "max_us": int(max_us)})
+    def servo(self, name: str, pin, min_us: int = 544, max_us: int = 2400, power: str | None = None, current_A: float | None = None) -> Peripheral:
+        """A hobby servo on a digital pin (the Servo / ESP32Servo library drives it).
+
+        power: where its supply comes from, "5V" / "3V3" (a board pin: graded by the power-budget check) or "external" (its own
+        supply, ground shared with the board); current_A: what it draws at worst (its stall current, from its datasheet)."""
+        params = {"min_us": int(min_us), "max_us": int(max_us)}
+        params.update(_power_params(name, power, current_A))
+        per = Peripheral(str(name), "servo", {"signal": str(pin)}, params)
         self.pin(pin, "out", "servo", net=str(name), _peripheral=per.name)
         self.peripherals.append(per)
         return per
@@ -130,10 +140,31 @@ class Firmware:
         self.peripherals.append(per)
         return per
 
+    def button(self, name: str, pin, pullup: bool = True, active_low: bool = True, interrupt: bool = False) -> Peripheral:
+        """A push button to ground (pull-up, active low by default): a user input, drawn and named as a button."""
+        self.pin(pin, "in", "interrupt" if interrupt else "digital_in", net=str(name), pullup=pullup, _peripheral=str(name))
+        per = Peripheral(str(name), "button", {"input": str(pin)}, {"pullup": pullup, "active_low": active_low, "interrupt": interrupt})
+        self.peripherals.append(per)
+        return per
+
+    def potentiometer(self, name: str, pin) -> Peripheral:
+        """A potentiometer's wiper on an analog input (its ends on the board's 5V / 3V3 and GND): analogRead gives its position."""
+        self.pin(pin, "in", "analog_in", net=str(name), _peripheral=str(name))
+        per = Peripheral(str(name), "potentiometer", {"wiper": str(pin)})
+        self.peripherals.append(per)
+        return per
+
     def limit_switch(self, name: str, pin, pullup: bool = True, active_low: bool = True, interrupt: bool = False) -> Peripheral:
         """A limit switch to ground (pull-up, active low by default); interrupt=True needs an interrupt-capable pin."""
         self.pin(pin, "in", "interrupt" if interrupt else "digital_in", net=str(name), pullup=pullup, _peripheral=str(name))
         per = Peripheral(str(name), "limit_switch", {"input": str(pin)}, {"pullup": pullup, "active_low": active_low, "interrupt": interrupt})
+        self.peripherals.append(per)
+        return per
+
+    def load(self, name: str, supply: str = "5V", current_A: float | None = None, notes: str = "") -> Peripheral:
+        """Anything powered from a board supply pin that is not a pin of the sketch (a sensor module, an LED strip, a display):
+        supply "5V" / "3V3", current_A its worst-case draw from its datasheet. Graded by the power-budget check."""
+        per = Peripheral(str(name), "load", {}, {**_power_params(name, supply, current_A), "notes": notes})
         self.peripherals.append(per)
         return per
 
@@ -198,6 +229,21 @@ class Firmware:
 
     def __repr__(self) -> str:
         return f"Firmware({self.name!r}: {self.board_key}, {len(self.pins)} pins, {len(self.sources)} source file(s))"
+
+
+def _power_params(name, power, current_A) -> dict:
+    if power is None:
+        if current_A is not None:
+            raise FirmwareError(f"{name}: current_A needs power= (5V, 3V3 or external)")
+        return {}
+    p = str(power).strip().upper().lstrip("+").replace("3.3V", "3V3")
+    if p == "EXTERNAL":
+        p = "external"
+    elif p not in ("5V", "3V3"):
+        raise FirmwareError(f"{name}: power must be 5V, 3V3 or external, not {power!r}")
+    if current_A is not None and float(current_A) < 0:
+        raise FirmwareError(f"{name}: current_A must not be negative")
+    return {"power": p, "current_A": None if current_A is None else float(current_A)}
 
 
 def is_firmware(obj: Any) -> bool:

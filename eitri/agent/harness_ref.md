@@ -71,6 +71,14 @@ are not graded and a warning says so. Crimp-type connectors need one crimp termi
   per net, the worst source-to-load path, reported as % of voltage_V.
 - consistency: one gauge per net (FAIL if a thinner wire carries more than a thicker one of the net, WARN if the gauge
   changes at the same current); one colour per net (WARN); a shielded cable's shield must be terminated (FAIL).
+- power (when an `ARDUINO-UNO` / `ARDUINO-NANO` connector is in the harness): the current leaving the board's `5V` and `3V3` pins
+  (the sum of the wires' currents there) against what the pin can supply: Uno and Nano 3V3 50 mA; 5V 500 mA on USB (the Uno's
+  polyfuse, the Nano's USB port); the Uno on VIN: its 5 V regulator, 0.8 A or less as it heats up (`Connector(..., powered="vin",
+  vin_V=9)`); the Nano on VIN is not published and is reported ungraded. FAIL above, WARN within 20% (the board's own draw shares the
+  budget). A servo or a motor never runs from a board pin: give it its own supply and wire that supply's ground to the board's GND.
+  Shared ground (FAIL): every connector that takes a signal from a board's D/A pin must reach the board's GND through some wire.
+  Name the board's pins as printed on it: `5V`, `3V3`, `GND`, `VIN`, `D0`..`D13`, `A0`..`A5`; give each power net its loads'
+  worst-case current (a servo's stall current from its datasheet).
 - your own `verify(h, p, c)`: `c.at_most(name, value, limit)`, `c.equal`, `c.between`, `c.at_least`, `c.true`, `c.count`,
   `c.note`. Helpers: `net_stats(h)` ({net: .drop_pct, .drop_V, .current_A, .length_mm, .wires}), `h.link("W1")`,
   `h.wire_current(link)`, `voltage_drop(I, length_mm, Gauge.parse(14))`, `awg_ampacity(14)`.

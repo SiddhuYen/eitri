@@ -39,7 +39,12 @@ CATALOG: dict[str, ConnectorSpec] = {s.key: s for s in [
     ConnectorSpec("SPADE-6.3", "6.3 mm spade (Faston) terminal", None, 20.0, "spade", "6.3 mm spade terminal", "", 6.0),
     ConnectorSpec("BARE", "bare / tinned end (soldered or screwed by the user)", None, None, "bare", "", "", 6.0),
     ConnectorSpec("SOLDER", "soldered to a pad or pin", None, None, "bare", "", "", 3.0),
+    # development boards: wires end in Dupont 2.54 male contacts pushed into the board's female headers. No per-pin rating here:
+    # the I/O pins carry signals, and the 5V / 3V3 supply pins are graded by the power-budget check (limits and sources: eitri/power.py)
+    ConnectorSpec("ARDUINO-UNO", "Arduino Uno R3 board (female 2.54 mm headers)", 2.54, None, "crimp", "Dupont 2.54 male crimp contact", "", 2.5, 3),
+    ConnectorSpec("ARDUINO-NANO", "Arduino Nano board (2.54 mm headers)", 2.54, None, "crimp", "Dupont 2.54 female crimp contact", "", 2.5, 3),
 ]}
+BOARD_TYPES = {"ARDUINO-UNO": "uno", "ARDUINO-NANO": "nano"}
 
 ALIASES = {
     "XH": "JST-XH", "JSTXH": "JST-XH", "JST XH": "JST-XH",
@@ -49,6 +54,8 @@ ALIASES = {
     "MOLEX MICRO-FIT 3.0": "MOLEX-MICROFIT-3.0", "MICROFIT-3.0": "MOLEX-MICROFIT-3.0", "MICRO-FIT 3.0": "MOLEX-MICROFIT-3.0",
     "SPADE": "SPADE-6.3", "FASTON": "SPADE-6.3", "RING TERMINAL": "RING", "RING-TERMINAL": "RING",
     "TINNED": "BARE", "WIRE": "BARE", "SOLDER-PAD": "SOLDER",
+    "UNO": "ARDUINO-UNO", "ARDUINO UNO": "ARDUINO-UNO", "ARDUINO-UNO-R3": "ARDUINO-UNO", "ARDUINO UNO R3": "ARDUINO-UNO",
+    "NANO": "ARDUINO-NANO", "ARDUINO NANO": "ARDUINO-NANO",
 }
 for _s in ("M3", "M4", "M5", "M6", "M8", "M10"):
     ALIASES[f"RING-{_s}"] = "RING"

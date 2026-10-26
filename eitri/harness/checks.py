@@ -5,17 +5,21 @@
     ampacity      wire gauge against the wire's current (chassis-wiring table), connector pins against their rating
     voltage drop  V = 2*K*I*L/CM along every source-to-load path of a net, against the net's max_drop_pct
     consistency   one gauge and one colour per net, shielded cables terminated
+    power         a board's 5V / 3V3 pin against what it can supply (eitri.power, sourced limits); everything that takes a
+                  signal from a board's I/O pin shares the board's ground
 
 Each check is a HCheck: pass, warn or fail, with `refs` naming the wires / connectors it is about (the editor
 highlights them). Nothing here raises on a bad design: a bad design is a failed check.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from ..checks import Check, check
 from ..model import CheckResult  # noqa: F401
-from .catalog import voltage_drop
+from .. import power
+from .catalog import BOARD_TYPES, voltage_drop
 from .model import Endpoint, Harness, Link, PinRef, SpliceRef
 
 WARN_FRACTION = 0.8          # within 20 % of the limit: a warning
@@ -119,6 +123,7 @@ def run_checks(h: Harness) -> tuple[list[HCheck], dict[str, NetInfo]]:
     checks += _ampacity(h)
     checks += _drops(h, stats)
     checks += _consistency(h)
+    checks += _power(h)
     return checks, stats
 
 
@@ -312,4 +317,101 @@ def _consistency(h: Harness) -> list[HCheck]:
             where = " and ".join(str(p) for p in ends)
             out.append(_check("consistency", f"shield terminated: {cab.name}", "pass",
                               f"{'one end' if len(ends) == 1 else 'both ends'}: {where}", "", refs))
+    return out
+
+
+# --------------------------------------------------------------------------- power: board supply pins, shared ground
+
+_IO = re.compile(r"^(D\d+|A\d+)$", re.I)       # a board I/O pin: D0..D13, A0..A7
+
+
+def _nodes(h: Harness) -> dict:
+    """Electrical nodes: every endpoint (pin or splice) mapped to a representative, joined by the wires."""
+    parent: dict = {}
+
+    def find(x):
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for l in h.links:
+        if l.kind == "shield":
+            continue
+        ra, rb = find(l.a), find(l.b)
+        if ra != rb:
+            parent[ra] = rb
+    return {x: find(x) for x in list(parent)}
+
+
+def _power(h: Harness) -> list[HCheck]:
+    out: list[HCheck] = []
+    boards = [c for c in h.connectors.values() if c.type in BOARD_TYPES]
+    if not boards:
+        return out
+    node = _nodes(h)
+    of = lambda e: node.get(e, e)
+    for b in boards:
+        key = BOARD_TYPES[b.type]
+        label = power.BOARDS[key]
+        # the supply pins: what the wires leaving them carry, against the pin's limit for how the board is powered
+        for pin in b.pin_names:
+            sp = power.supply_pin_name(pin)
+            if sp is None:
+                continue
+            links = h.links_at(PinRef(b.name, pin))
+            if not links:
+                continue
+            cur = [h.wire_current(l) for l in links]
+            refs = [b.name] + [l.id for l in links]
+            nets = sorted({l.net for l in links if l.net})
+            lim = power.supply_limit(key, sp, b.powered, b.vin_V)
+            how = f"{label} on {'USB' if b.powered == 'usb' else f'VIN {b.vin_V:g} V' if b.vin_V is not None else 'VIN'}"
+            name = f"supply {b.name}.{pin} ({how})"
+            if any(c is None for c in cur):
+                out.append(_check("power", name, "warn", f"{len(links)} wire(s) leave {b.name}.{pin} but not all of them have a current: not graded",
+                                  "give the net (or the wire) current_A: what the loads draw, at their worst (a servo's stall current)", refs))
+                continue
+            draw = sum(cur)
+            sev = power.grade(draw, lim)
+            src = f" [source: {lim.source}]" if lim.source else ""
+            if lim.limit_A is None:
+                out.append(_check("power", name, "warn", f"{_fmt_a(draw)} drawn; not graded: {lim.basis}{src}",
+                                  "the board's supply limit (power the load separately if unsure)", refs))
+            elif sev == "fail":
+                out.append(_check("power", name, "fail",
+                                  f"{_fmt_a(draw)} drawn from {b.name}.{pin}" + (f" (net {', '.join(nets)})" if nets else "")
+                                  + f", but the pin can supply {_fmt_a(lim.limit_A)}, limited by {lim.basis}. Fix: {power.advice(pin)}.{src}",
+                                  f"<= {_fmt_a(lim.limit_A)}", refs))
+            else:
+                out.append(_check("power", name, sev,
+                                  f"{_fmt_a(draw)} of {_fmt_a(lim.limit_A)} ({draw / lim.limit_A * 100:.0f}%), limited by {lim.basis}"
+                                  + ("; the board's own draw shares this budget" if sev == "warn" else "") + src,
+                                  f"<= {_fmt_a(lim.limit_A)}" + (" (within 20% of the limit)" if sev == "warn" else ""), refs))
+        # shared ground: a load that takes a signal from the board must have a pin on the board's ground node
+        gnd = {of(PinRef(b.name, p)) for p in b.pin_names if p.strip().upper().startswith("GND")}
+        loads: dict[str, list[str]] = {}
+        for pin in b.pin_names:
+            if not _IO.match(pin.strip()):
+                continue
+            n = of(PinRef(b.name, pin))
+            for e, rep_ in node.items():
+                if rep_ == n and isinstance(e, PinRef) and e.connector != b.name:
+                    loads.setdefault(e.connector, []).append(f"{b.name}.{pin}")
+        for cname, sigs in sorted(loads.items()):
+            c = h.connectors[cname]
+            shared = any(of(PinRef(cname, p)) in gnd for p in c.pin_names)
+            name = f"shared ground {cname} - {b.name}"
+            sig = ", ".join(sorted(set(sigs)))
+            if shared:
+                out.append(_check("power", name, "pass", f"{cname} takes {sig} and shares {b.name}'s GND", "a common ground", [cname, b.name]))
+            elif not gnd:
+                out.append(_check("power", name, "fail", f"{cname} takes {sig}, but {b.name} has no GND pin in the harness: the signal has no reference",
+                                  f"add {b.name}'s GND pin and wire it to {cname}'s ground (or to its supply's ground)", [cname, b.name]))
+            else:
+                out.append(_check("power", name, "fail",
+                                  f"{cname} takes {sig}, but none of its pins reaches {b.name}'s GND: a signal needs a common ground. "
+                                  f"When {cname} has its own supply, wire that supply's ground (or {cname}'s ground) to {b.name} GND",
+                                  "a common ground", [cname, b.name]))
     return out

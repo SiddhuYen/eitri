@@ -82,6 +82,8 @@ class Connector:
     pitch_mm: float | None = None
     terminal_pn: str = ""                   # crimp terminal part number (defaults to the catalog's)
     nc: Iterable[str] = ()
+    powered: str = "usb"                    # a board (ARDUINO-UNO, ARDUINO-NANO): how the board itself is powered, "usb" or "vin"
+    vin_V: float | None = None              # a board powered on VIN: that voltage (sets the 5 V regulator's thermal limit)
     pin_names: list[str] = field(default_factory=list, init=False)
     pin_labels: dict[str, str] = field(default_factory=dict, init=False)
 
@@ -111,6 +113,9 @@ class Connector:
         self.pin_names, self.pin_labels = names, labels
         self.pins = len(names)
         self.nc = [str(x) for x in self.nc]
+        self.powered = str(self.powered or "usb").lower()
+        if self.powered not in ("usb", "vin"):
+            raise HarnessError(f"{self.name}: powered must be 'usb' or 'vin', not {self.powered!r}")
         for n in self.nc:
             if n not in names:
                 raise HarnessError(f"{self.name}: nc pin {n!r} is not one of its pins {names}")

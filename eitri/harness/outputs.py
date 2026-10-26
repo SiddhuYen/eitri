@@ -8,7 +8,7 @@ import csv
 import io
 from collections import OrderedDict
 
-from .catalog import color_name
+from .catalog import BOARD_TYPES, color_name
 from .model import Harness, Link, PinRef, SpliceRef
 
 SERVICE_LOOP = 0.10          # extra wire bought on top of the cut lengths
@@ -30,7 +30,9 @@ def bom(h: Harness) -> list[dict]:
         pn = c.part_number or (c.spec.housing_pn.format(n=c.pins) if c.spec and c.spec.housing_pn else "")
         groups.setdefault((c.type, c.pins, c.gender, pn), []).append(c)
     for (typ, pins, gender, pn), cs in groups.items():
-        desc = f"{typ} connector, {pins} pos" if pins > 1 else f"{typ} terminal"
+        spec = cs[0].spec
+        desc = (spec.family if spec and spec.rating_a is None and spec.key in BOARD_TYPES else
+                f"{typ} connector, {pins} pos" if pins > 1 else f"{typ} terminal")
         if gender:
             desc += f", {gender}"
         add("connector", desc, len(cs), part_number=pn, notes=", ".join(c.name for c in cs))

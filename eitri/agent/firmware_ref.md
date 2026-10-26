@@ -11,16 +11,20 @@ image is the pinout. eitri never flashes hardware.
 ## The API
 
 ```
-fw = Firmware("name", board="uno" | "nano" | "esp32", description="", wifi=False)
+fw = Firmware("name", board="uno" | "nano" | "esp32", description="", wifi=False, powered="usb" | "vin", vin_V=None)
 
 fw.pin(pin, direction="out" | "in" | "inout", role=None, net="", pullup=False)
     pin: "D9", "9", "A0" (Uno/Nano) or "GPIO25", "25" (ESP32); role: digital_in, digital_out, pwm, analog_in, dac, interrupt, servo,
     serial_tx, serial_rx, i2c_sda, i2c_scl (default: digital_out / digital_in by direction); net: the name the code uses as
     PIN_<net> (default: the pin's name)
-fw.servo(name, pin, min_us=544, max_us=2400)                    a hobby servo: pin role servo, net = name
+fw.servo(name, pin, min_us=544, max_us=2400, power=None, current_A=None)   a hobby servo: pin role servo, net = name;
+    power: "5V" / "3V3" (from the board's pin) or "external" (its own supply, ground shared with the board), current_A its stall current
 fw.pwm_motor(name, pwm, dir, dir2=None, enable=None)             a DC motor driver: <name>_PWM (pwm), <name>_DIR (digital_out), ...
-fw.limit_switch(name, pin, pullup=True, active_low=True, interrupt=False)   a switch to ground: digital_in (or interrupt)
+fw.button(name, pin, pullup=True, active_low=True, interrupt=False)          a push button to ground (a user input): digital_in (or interrupt)
+fw.limit_switch(name, pin, pullup=True, active_low=True, interrupt=False)    a limit / end-stop switch the mechanism trips: digital_in (or interrupt)
+fw.potentiometer(name, pin)                                       a potentiometer's wiper on an analog pin: analog_in
 fw.serial(baud=115200)                                           the hardware serial port: its pins stay reserved; SERIAL_BAUD is defined
+fw.load(name, supply="5V" | "3V3", current_A=None)               anything else powered from a board supply pin (a sensor module, a display)
 fw.source("sketch.ino", code)                                    a source file (one .ino is the main sketch; .h / .c / .cpp beside it)
 ```
 
@@ -43,6 +47,9 @@ every call.
   `attachInterrupt` only on an interrupt pin; a declared pin the code never uses fails, and so does a pull-up declared but configured
   as `INPUT`.
 - no undeclared pins: a pin API call with a literal or a constant the pinout does not declare fails.
+- power budget (when servos or loads declare `power=` / `current_A=`): the declared draw on the board's 5V and 3V3 pins against what
+  they can supply (Uno / Nano 3V3 50 mA; 5V 500 mA on USB; the Uno on VIN its regulator, 0.8 A or less as it heats; others ungraded).
+  A servo's stall current (an MG996R: 2.5 A) is far above any board pin: declare it `power="external"` and share the ground.
 - compiles (arduino-cli): every compile error is listed as file:line: message; flash and RAM use are reported (a warning above 90%
   RAM); compiler warnings in your own files are a warning. Without arduino-cli or the board's core this check fails and says how to
   install them.
@@ -105,7 +112,7 @@ void loop() {
 def build(p):
     fw = Firmware("Servo sweep", board="uno", description="sweep a servo while a button is held")
     fw.servo("PAN", pin="D9")
-    fw.limit_switch("START", pin="D2")
+    fw.button("START", pin="D2")
     fw.pin("D13", "out", "digital_out", net="LED")
     fw.serial(115200)
     fw.source("sweep.ino", SKETCH.replace("{step_ms}", str(p.step_ms)).replace("{sweep_deg}", str(p.sweep_deg)))
