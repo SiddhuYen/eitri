@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <!-- eitri mark: an isometric cube, top face in the accent, the two visible sides in steel -->
-  <path d="M16 3.5 28 10.25 16 17 4 10.25Z" fill="#ff8a3d"/>
-  <path d="M4 10.25 16 17v13.5L4 23.75Z" fill="#8b95a3"/>
-  <path d="M28 10.25 16 17v13.5l12-6.75Z" fill="#5c6675"/>
-  <path d="M16 17v13.5M4 10.25 16 17l12-6.75" stroke="#0d1015" stroke-width="1.1" stroke-linejoin="round"/>
-</svg>
