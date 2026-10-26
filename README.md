@@ -763,5 +763,5 @@ eitri is licensed under the [Functional Source License, Version 1.1, MIT Future 
 (FSL-1.1-MIT): you may use, modify and redistribute it for any purpose except offering a competing
 commercial product or service; each version becomes MIT-licensed two years after it is released. Bundled
 third-party assets keep their own licenses: three.js (MIT, `eitri/viewer/vendor/three/LICENSE`), IBM Plex
-Sans and JetBrains Mono (SIL OFL 1.1, `eitri/web/assets/fonts/`), Lucide icons (ISC,
+Sans and JetBrains Mono (SIL OFL 1.1, `eitri/web/assets/design/fonts/`), Lucide icons (ISC,
 `eitri/web/assets/LICENSE-lucide.txt`).

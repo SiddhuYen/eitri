@@ -5,12 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>eitri</title>
 <link rel="icon" href="assets/mark.svg">
-<link rel="stylesheet" href="assets/eitri.css">
-<link rel="stylesheet" href="assets/editor.css">
+<link rel="stylesheet" href="assets/design/fonts.css">
+<link rel="stylesheet" href="assets/design/tokens.css">
+<link rel="stylesheet" href="assets/design/shell.css">
+<link rel="stylesheet" href="assets/app.css">
+<script src="assets/design/glyphs.js"></script>
+<!-- eitri:host-head -->
+<script src="assets/shell-host.js" data-root="/"></script>
+<script src="assets/design/shell.js"></script>
 </head>
-<body>
-<div id="app">
-  <div id="canvas">
+<body class="app editor" data-tool="cad">
+<a class="skip" href="#canvas">Skip to the model</a>
+<eitri-topbar id="topbar" crumbs='[["eitri","/"],["cad"]]'></eitri-topbar>
+<eitri-rail id="rail" active="cad"></eitri-rail>
+<main id="main" class="canvas editor">
+  <div id="canvas" class="viewport" tabindex="-1" aria-label="The model">
     <div id="tools">
       <button data-tool="select" class="on" title="Select (V, Esc): click a part, face or edge to select it · shift-click adds · click empty space to clear · drag to orbit"><svg class="i"><use href="assets/icons.svg#i-mouse-pointer-2"/></svg><span class="t-label">Select</span></button>
       <span class="sep"></span><span class="grp">Create</span>
@@ -44,7 +53,7 @@
       <button id="undo" title="Undo last change (Ctrl/Cmd+Z)"><svg class="i"><use href="assets/icons.svg#i-undo-2"/></svg><span class="t-label">Undo</span></button>
       <button id="redo" title="Redo (Ctrl/Cmd+Shift+Z)"><svg class="i"><use href="assets/icons.svg#i-redo-2"/></svg><span class="t-label">Redo</span></button>
       <button id="labelsbtn" title="Show hole labels"><svg class="i"><use href="assets/icons.svg#i-tag"/></svg><span class="t-label">Labels</span></button>
-      <button id="printbtn" title="Export for 3D printing: the parts to print, oriented, laid out on plates (STL, 3MF, zip)"><svg class="i"><use href="assets/icons.svg#i-printer"/></svg><span class="t-label">Print</span></button><div class="menu" id="exportmenu"><button title="Download the model"><svg class="i"><use href="assets/icons.svg#i-download"/></svg><span>Export</span><svg class="i sm"><use href="assets/icons.svg#i-chevron-down"/></svg></button><div class="items"><a href="download?fmt=step" download>STEP (.step)</a><a href="download?fmt=stl" download>STL (.stl)</a><a href="download?fmt=obj" title="Wavefront OBJ (meshes, one object per part)">OBJ</a><a href="download?fmt=iges" title="IGES (surfaces and solids)">IGES</a><a href="download?fmt=3mf" download>3MF (.3mf)</a><a href="download?fmt=glb" download>GLB (.glb)</a><a href="download?fmt=svg" download>Drawing (.svg)</a><a href="download?fmt=dxf" download>Drawing (.dxf)</a><a href="model.py" download>model source (.py)</a></div></div>
+      <button id="printbtn" title="Export for 3D printing: the parts to print, oriented, laid out on plates (STL, 3MF, zip)"><svg class="i"><use href="assets/icons.svg#i-printer"/></svg><span class="t-label">Print</span></button>
     </div>
     <div class="viewcube-wrap" title="Click a face to look along it"><div class="viewcube" id="viewcube">
       <div class="f" data-cube="front">FRONT</div><div class="f" data-cube="back">BACK</div><div class="f" data-cube="right">RIGHT</div>
@@ -52,7 +61,7 @@
       <div class="viewcube-axes"><span class="x">X</span><span class="y">Y</span><span class="z">Z</span></div></div>
     <div id="views">
       <button data-view="iso">Iso</button><button data-view="front">Front</button><button data-view="top">Top</button><button data-view="right">Right</button>
-      <div class="menu" id="viewmenu"><button>More ▾</button><div class="items"><button data-view="back">Back</button><button data-view="left">Left</button><button data-view="bottom">Bottom</button><button id="fitsel">Fit selection</button></div></div>
+      <div class="dd" id="viewmenu"><button>More ▾</button><div class="items"><button data-view="back">Back</button><button data-view="left">Left</button><button data-view="bottom">Bottom</button><button id="fitsel">Fit selection</button></div></div>
       <button id="fit" title="Fit all (double-click: fit selection)">Fit</button><button id="lookat" title="Look at the selected face (A)">Look at</button><button id="ortho" title="Orthographic (O)">Ortho</button>
     </div>
     <div id="problem"></div>
@@ -65,37 +74,36 @@
     <div id="hud">loading…</div>
     <div id="notice" role="status" aria-live="polite"></div>
     <div id="toast" role="status" aria-live="polite"></div>
-    <div id="resizer" title="Drag to resize the panel"></div>
     <div id="livecode"><div class="lchead"><span class="lcdot"></span><span id="lctitle">Claude is writing the model</span><span id="lcmeta" style="color:#8b95a1"></span><span style="flex:1"></span><button id="lcclose" title="Hide until your next message">×</button></div><pre id="lccode"></pre></div>
   </div>
-  <div id="side">
-    <div class="sidetop">
-      <div class="nav"><a id="homelink" href="/" style="display:none" title="All projects"><svg class="i"><use href="assets/icons.svg#i-arrow-left"/></svg><span>Projects</span></a><span style="flex:1"></span><span class="wordmark"><img class="mark" src="assets/mark.svg" alt="">eitri</span></div>
-      <h1 id="title">eitri</h1>
-      <div id="status">waiting for the first build…</div>
-      <div id="stages" class="stages"></div>
-      <div id="hostedbar"></div>
+  <aside id="dock" aria-label="Inspector and chat">
+    <div id="resizer" title="Drag to resize the panels"></div>
+    <div id="dockstrip">
+      <button class="iconbtn" id="dockunfold" title="Show the inspector and the chat" aria-label="Show the inspector and the chat"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#i-panel-right-open"/></svg></button>
+      <span class="sv" id="stripverdict" title="Checks">–</span>
+      <button class="iconbtn" id="stripchat" title="Chat with Claude" aria-label="Chat with Claude"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#i-message-square"/></svg></button>
     </div>
-    <div id="sharebar"></div>
-    <div id="demobar"><div class="t"><svg class="i"><use href="assets/icons.svg#i-play"/></svg><span id="demotitle">Demo project</span><span class="badge accent" style="margin-left:auto">recorded session</span></div>
+    <div id="side" role="region" aria-label="Inspector">
+      <div class="dock-head">
+        <div class="row1">
+          <div class="ttl"><div class="eyebrow"><span class="pill-tag" id="kindtag">CAD</span><span id="kindline"></span></div>
+            <h1 id="title">eitri</h1>
+            <div id="status">waiting for the first build…</div></div>
+          <button class="iconbtn" id="dockfold" title="Fold the panels: more room for the model" aria-label="Fold the panels"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#i-panel-right-close"/></svg></button>
+        </div>
+        <div id="stages" class="stages"></div>
+        <div class="acts"><div class="dd" id="exportdd"><button id="exportbtn" aria-haspopup="true" aria-expanded="false"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#i-download"/></svg>Export<svg class="i sm" aria-hidden="true"><use href="assets/icons.svg#i-chevron-down"/></svg></button><div class="items" id="exportitems" role="menu"></div></div></div>
+        <div id="hostedbar"></div>
+      </div>
+      <div id="sharebar"></div>
+      <div id="demobar"><div class="t"><svg class="i"><use href="assets/icons.svg#i-play"/></svg><span id="demotitle">Demo project</span><span class="badge accent" style="margin-left:auto">recorded session</span></div>
       <div class="d" id="demodesc"></div>
       <div class="acts"><button class="primary" id="replaybtn"><svg class="i"><use href="assets/icons.svg#i-play"/></svg>Watch Claude build it</button><button id="replaystop" style="display:none"><svg class="i"><use href="assets/icons.svg#i-square"/></svg>Stop replay</button><button class="small" id="demoreset" title="Put the demo back exactly as shipped"><svg class="i"><use href="assets/icons.svg#i-rotate-ccw"/></svg>Reset demo</button></div>
       <div class="stats" id="demostats"></div></div>
-    <div id="checkcard" class="none"><div class="head" id="checkhead"><span class="verdict" id="checkicon"><svg class="i"><use href="assets/icons.svg#i-list-checks"/></svg></span><div style="min-width:0;flex:1"><div class="title" id="checktitle">Checks</div><div class="sub" id="checksub">no build yet</div></div><svg class="i sm"><use href="assets/icons.svg#i-chevron-down"/></svg></div>
+      <div id="domaininsp" aria-label="Selection"></div>
+      <div id="checkcard" class="none"><div class="head" id="checkhead"><span class="verdict" id="checkicon"><svg class="i"><use href="assets/icons.svg#i-list-checks"/></svg></span><div style="min-width:0;flex:1"><div class="title" id="checktitle">Checks</div><div class="sub" id="checksub">no build yet</div></div><svg class="i sm"><use href="assets/icons.svg#i-chevron-down"/></svg></div>
       <div class="diff" id="checkdiff"></div><div id="checks"></div><div class="issues" id="issues"></div></div>
-    <div class="row" id="chathead"><h2>Chat with Claude</h2><span style="flex:1"></span><button class="small" id="newchat" title="Start a new conversation: Claude forgets this chat; your model, edits and history stay"><svg class="i sm"><use href="assets/icons.svg#i-message-square-plus"/></svg>New chat</button></div>
-    <div id="chat">
-      <div id="messages"></div>
-      <div class="chips" id="chips"></div>
-      <div id="attachments"></div>
-      <div id="composer"><textarea id="chatinput" placeholder="Describe a part, or tell Claude what to change. Click geometry first to refer to it; paste or drop an image to attach it."></textarea>
-        <div id="composerbtns"><button class="primary" id="send">Send</button><button id="stop" title="Stop Claude (the conversation is kept)">Stop</button><button class="small" id="attach" title="Attach an image: a photo, a sketch or a drawing">Image…</button></div>
-        <input type="file" id="attachfile" accept="image/png,image/jpeg,image/gif,image/webp" multiple style="display:none"></div>
-      <div id="keynote"></div>
-      <div class="muted" id="chatstatus" style="font-size:11px"></div>
-      <div class="muted" id="planusage" style="font-size:11px" title="Your Claude plan's usage limits, as of Claude's last reply"></div>
-    </div>
-    <div class="sec" data-sec="params"><h2>Parameters</h2>
+      <div class="sec" data-sec="params"><h2>Parameters</h2>
     <div id="configs" class="row"></div>
     <div id="params"></div>
     <div class="row"><button class="primary" id="apply">Apply &amp; rebuild</button><span id="applyStatus" class="muted"></span></div>
@@ -148,8 +156,36 @@
     <div class="muted" style="font-size:11px"><kbd>V</kbd> select <kbd>S</kbd> sketch <kbd>H</kbd> hole <kbd>B</kbd> primitive <kbd>W</kbd> insert fastener <kbd>P</kbd> push/pull <kbd>D</kbd> edit geometry <kbd>F</kbd> fillet <kbd>C</kbd> chamfer <kbd>E</kbd> shell <kbd>J</kbd> combine <kbd>X</kbd> split <kbd>I</kbd> mirror <kbd>N</kbd> pattern <kbd>K</kbd> scale <kbd>T</kbd> thread <kbd>M</kbd> move <kbd>G</kbd> align <kbd>L</kbd> measure <kbd>A</kbd> look at <kbd>O</kbd> ortho <kbd>Enter</kbd> apply <kbd>Esc</kbd> cancel <kbd>⌘Z</kbd> undo · in a sketch: <kbd>R</kbd> rectangle <kbd>C</kbd> circle <kbd>G</kbd> polygon <kbd>O</kbd> slot <kbd>T</kbd> text · shift-click adds to a selection · hold <kbd>Alt</kbd> while dragging to disable snapping</div>
   </div>
     </div>
-  </div>
-</div>
+    <section id="chatpanel" aria-label="Chat with Claude">
+      <div id="chatgrip" title="Drag to resize the chat"></div>
+      <div id="chathead" role="button" tabindex="0" aria-expanded="true" aria-controls="chat">
+        <h2><svg class="i sm" aria-hidden="true"><use href="assets/icons.svg#i-message-square"/></svg>Chat with Claude</h2><span class="peek" id="chatpeek"></span><span class="spacer"></span>
+        <button class="small" id="newchat" title="Start a new conversation: Claude forgets this chat; your model, edits and history stay"><svg class="i sm" aria-hidden="true"><use href="assets/icons.svg#i-message-square-plus"/></svg>New chat</button>
+        <span class="chev"><svg class="i sm" aria-hidden="true"><use href="assets/icons.svg#i-chevron-down"/></svg></span>
+      </div>
+      <div id="chat">
+      <div id="messages"></div>
+      <div class="chips" id="chips"></div>
+      <div id="attachments"></div>
+      <div id="composer"><textarea id="chatinput" placeholder="Describe a part, or tell Claude what to change. Click geometry first to refer to it; paste or drop an image to attach it."></textarea>
+        <div id="composerbtns"><button class="primary" id="send">Send</button><button id="stop" title="Stop Claude (the conversation is kept)">Stop</button><button class="small" id="attach" title="Attach an image: a photo, a sketch or a drawing">Image…</button></div>
+        <input type="file" id="attachfile" accept="image/png,image/jpeg,image/gif,image/webp" multiple style="display:none"></div>
+      <div id="keynote"></div>
+      <div class="muted" id="chatstatus" style="font-size:11px"></div>
+      <div class="muted" id="planusage" style="font-size:11px" title="Your Claude plan's usage limits, as of Claude's last reply"></div>
+      </div>
+    </section>
+  </aside>
+</main>
+<footer class="status" id="statusbar">
+  <span class="st-tool"><span class="dot" aria-hidden="true"></span><span id="st-tool">eitri</span></span>
+  <span id="st-version"></span>
+  <span id="st-where">local</span>
+  <span class="st-path" id="st-path" hidden></span>
+  <span class="st-build" id="st-build"><span class="dot" aria-hidden="true"></span><span id="st-buildtxt">loading</span></span>
+  <span class="sp"></span>
+  <a id="st-combined" href="https://eitri.io" target="_blank" rel="noopener">combined workspace: eitri.io</a>
+</footer>
 <script>
   window.__eitriProblem = function (msg) {
     var el = document.getElementById('problem'); if (!el) return;
@@ -285,10 +321,11 @@ $('fit').onclick = () => setView('iso');
 $('fit').ondblclick = () => fitSelection();
 $('fitsel').onclick = () => { fitSelection(); closeMenus(); };
 // dropdown menus (export, more views)
-function closeMenus() { document.querySelectorAll('.menu.open').forEach(m => m.classList.remove('open')); }
-document.querySelectorAll('.menu > button').forEach(b => b.onclick = ev => { ev.stopPropagation(); const m = b.parentElement; const was = m.classList.contains('open'); closeMenus(); if (!was) m.classList.add('open'); });
-document.querySelectorAll('.menu .items').forEach(it => it.addEventListener('click', () => setTimeout(closeMenus, 50)));
-document.addEventListener('click', ev => { if (!ev.target.closest('.menu')) closeMenus(); });
+function closeMenus() { document.querySelectorAll('.dd.open').forEach(m => { m.classList.remove('open'); const b = m.querySelector(':scope > button'); if (b) b.setAttribute('aria-expanded', 'false'); }); }
+document.querySelectorAll('.dd > button').forEach(b => b.onclick = ev => { ev.stopPropagation(); const m = b.parentElement; const was = m.classList.contains('open'); closeMenus(); if (!was) { m.classList.add('open'); b.setAttribute('aria-expanded', 'true'); const it = m.querySelector('.items'); if (it) requestAnimationFrame(() => it.scrollIntoView({ block: 'nearest' })); } });
+document.querySelectorAll('.dd .items').forEach(it => it.addEventListener('click', () => setTimeout(closeMenus, 50)));
+document.addEventListener('click', ev => { if (!ev.target.closest('.dd')) closeMenus(); });
+document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && document.querySelector('.dd.open')) closeMenus(); });
 function fitSelection() {
   const ents = [...selected].map(entry).filter(Boolean);
   if (!ents.length) return setView('iso');
@@ -310,10 +347,15 @@ function lookAt() {
 }
 $('lookat').onclick = lookAt;
 
+function isLight() {
+  const t = document.documentElement.dataset.theme;
+  return t ? t === 'light' : !!(window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches);
+}
+if (window.matchMedia) matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { if (grid) makeGrid(); });
 function makeGrid() {
   if (grid) scene.remove(grid);
   const size = Math.max(10, Math.ceil(radius * 2.5 / 10) * 10);
-  const light = document.documentElement.dataset.theme === 'light';
+  const light = isLight();
   grid = new THREE.GridHelper(size, size / 10, light ? 0x9aa2ad : 0x3a4452, light ? 0xd5d9df : 0x222932);
   grid.material.transparent = true; grid.material.opacity = 0.9; grid.material.depthWrite = false;
   grid.rotation.x = Math.PI / 2;
@@ -331,7 +373,6 @@ $('showdrawing').onchange = e => { const img = $('drawing'); img.style.display =
 $('drawviews').addEventListener('change', () => { if ($('showdrawing').checked) $('drawing').src = drawingUrl('svg', true) + '&r=' + (state.ok_revision || 0); });
 for (const id of ['drawstyle', 'drawproj']) $(id).addEventListener('change', () => { if ($('showdrawing').checked) $('drawing').src = drawingUrl('svg', true) + '&r=' + (state.ok_revision || 0); });
 $('drawpdf').addEventListener('click', ev => { ev.preventDefault(); window.location = drawingUrl('pdf', false); });
-document.querySelectorAll('#exportmenu a[href^="download?fmt=svg"], #exportmenu a[href^="download?fmt=dxf"]').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); const fmt = a.getAttribute('href').includes('dxf') ? 'dxf' : 'svg'; window.location = drawingUrl(fmt, false); }));
 $('edges').onchange = e => edgeObjs.forEach(o => o.visible = e.target.checked && !hidden.has(partOf.get(o)));
 
 // ---------------------------------------------------------------- labels (HTML overlay)
@@ -569,7 +610,7 @@ function failNotice(raw, intent, ids) {
 function setTool(name) {
   cancelTool(false);
   tool = name; toolData = {};
-  document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === name));
+  document.querySelectorAll('#tools [data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === name));
   hint(HINTS[name] || '');
   if (name === 'sketch' && selected.size === 1) { const e = entry([...selected][0]); if (e && e.type === 'plane') startSketch(e); }
   if (name === 'move' && selected.size === 1) { const e = entry([...selected][0]); if (e && e.name) startGizmo(e.name); }
@@ -580,7 +621,7 @@ function setTool(name) {
   if (name !== 'shell' && name !== 'thread' && name !== 'pushpull' && name !== 'fillet' && name !== 'chamfer' && name !== 'select' && name !== 'measure') { for (const id of [...selected]) if (String(id).startsWith('edit:')) selected.delete(id); }
   refreshMaterials(); renderSelection(); renderTimeline();
 }
-document.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => setTool(b.dataset.tool));
+document.querySelectorAll('#tools [data-tool]').forEach(b => b.onclick = () => setTool(b.dataset.tool));
 function cancelTool(keepTool) {
   drag = null; if (primDraw) endPrimDraw(); controls.enabled = true;
   endSketch(); endGizmo(); endEditGizmo(); hideVertexHandles(); measurePts = []; clearLabels('measure'); clearLabels('readout'); clearOverlay();
@@ -3210,7 +3251,9 @@ async function compareWith(number) {
   loader.load(r.glb, g => { if (compareRev !== number) return; g.scene.traverse(o => { if (o.isMesh) o.material = new THREE.MeshStandardMaterial({ color: 0xd9534f, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }); if (o.isLine || o.isLineSegments) o.visible = false; }); compareGroup.add(g.scene); hint(`revision ${number} shown in red over the current model`); });
 }
 async function renderRevisions() {
-  const el = $('revisions'); const revs = await fetch('revisions').then(r => r.json()).catch(() => []);
+  if (readOnly()) return;                                    // a shared view: the owner's history is not served
+  const el = $('revisions'); let revs = await fetch('revisions').then(r => r.ok ? r.json() : []).catch(() => []);
+  if (!Array.isArray(revs)) revs = [];
   el.innerHTML = '';
   for (const r of revs.slice(-12).reverse()) {
     const row = document.createElement('div'); row.className = 'rev';
@@ -3513,13 +3556,13 @@ function captureThumb(rev) {
     const s = Math.min(W / src.width, H / src.height);
     c.getContext('2d').drawImage(src, (W - src.width * s) / 2, (H - src.height * s) / 2, src.width * s, src.height * s);
     thumbRev = rev;
-    fetch('thumb', { method: 'POST', body: JSON.stringify({ data: c.toDataURL('image/png') }) }).catch(() => {});
+    if (!readOnly()) fetch('thumb', { method: 'POST', body: JSON.stringify({ data: c.toDataURL('image/png') }) }).catch(() => {});
   } catch (e) { /* no thumbnail this time */ }
 }
 
 // ---------------------------------------------------------------- the side panel's width (drag its left edge)
 (() => {
-  const app = $('app'), rz = $('resizer'); if (!app || !rz) return;
+  const app = $('main'), rz = $('resizer'); if (!app || !rz) return;
   try { const w = parseInt(localStorage.getItem('eitri.side') || ''); if (w >= 300 && w <= 900) app.style.setProperty('--side', w + 'px'); } catch (e) { /* no storage */ }
   rz.addEventListener('pointerdown', ev => {
     ev.preventDefault(); ev.stopPropagation(); rz.classList.add('on'); rz.setPointerCapture(ev.pointerId);
@@ -3550,7 +3593,9 @@ async function harnessTick(s) {
     try {
       const host = document.createElement('div'); host.id = 'hostharness'; $('canvas').appendChild(host);
       const m = await import(`./assets/${s.kind}.js`);
-      harnessEd = (m.createHarnessEditor || m.createEditor)(host, { send: e => sendEdit(e), call: (path, body) => rebuildCall(path, body), hint: t => hint(t) });
+      harnessEd = (m.createHarnessEditor || m.createEditor)(host, { send: e => sendEdit(e), call: (path, body) => rebuildCall(path, body), hint: t => hint(t),
+        diagramUrl: readOnly() ? 'download?fmt=svg' : null, readOnly: readOnly() });
+      const insp = host.querySelector('.hinspector'); if (insp) $('domaininsp').appendChild(insp);   // the selection and the domain's tables, docked
       window.__harness = harnessEd; window.__domain = harnessEd;
       hideLoading();
     } catch (e) { window.__eitriProblem('the ' + s.kind + ' editor could not start: ' + e.message); }
@@ -3559,7 +3604,7 @@ async function harnessTick(s) {
   if (harnessEd) harnessEd.update(s);
   if (s.ok_revision && s.ok_revision !== currentRev) {
     currentRev = s.ok_revision;
-    $('sheet').src = 'image.png?r=' + s.ok_revision;
+    showSheet(s);
     renderReport(); renderRevisions();
   }
 }
@@ -3569,7 +3614,6 @@ async function pollOnce() {
     state = s;
     const title = s.title || s.name || 'eitri'; if ($('title').textContent !== title) $('title').textContent = title;
     if (document.title !== title + ' · eitri') document.title = title + ' · eitri';
-    if (s.home && $('homelink').style.display === 'none') { $('homelink').href = s.home; $('homelink').style.display = 'inline-block'; }
     const status = s.ok_revision ? `revision ${s.ok_revision}` + (s.last_ok ? '' : ' (latest build failed)') + (s.last_note ? ' — ' + s.last_note : '') : 'waiting for the first build…';
     if ($('status').textContent !== status) $('status').textContent = status;
     const pv = s.preview, building = agentBusy || editsInFlight > 0;
@@ -3590,12 +3634,12 @@ async function pollOnce() {
       const newTopo = await fetch(s.topology).then(r => r.json()).catch(() => null);
       if (rev !== currentRev) { pollAgain = true; return; }
       loadModel(s.glb, rev, newTopo, { animate: agentBusy && !quiet });
-      $('sheet').src = 'image.png?r=' + s.ok_revision;
+      showSheet(s);
       if ($('showdrawing').checked) $('drawing').src = drawingUrl('svg', true) + '&r=' + s.ok_revision;
       renderReport(); renderRevisions();
     }
     renderParams(); renderEdits(); renderJoints(); renderBom(); renderBends(); renderMfgParts();
-    renderDemo(); renderKeyNote(); renderEngine(); renderHosted();
+    renderDemo(); renderKeyNote(); renderEngine(); renderHosted(); renderShell();
     if (!s.ok_revision || !(s.parts || []).length) hideLoading();
     if (!autoReplay && s.demo) { autoReplay = true; const q = new URLSearchParams(location.search); if (q.get('replay') === '1') { history.replaceState(null, '', location.pathname); if (!s.busy) startReplay(parseFloat(q.get('speed')) || 1); } }
   }
@@ -3634,6 +3678,100 @@ window.__eitri_sketch = { sub: skSetTool, tool: skSetTool, apply: applySketch, s
   op: (op, args) => skOp(op, args), solve: () => skSolve(), constrain: skConstrain, select: ids => { if (sketch) { sketch.sel = new Set(ids); redrawSketch(); renderSelection(); } }, model: () => sketch ? sketch.model : null, status: () => sketch ? sketch.status : null, busy: () => skBusy || !!skQueue, finish: finishSketchTool, del: skDeleteSelected,
   snap: (x, y) => sketch ? skSnap({ clientX: x, clientY: y }) : null, pts: () => sketch ? sketch.pts : null, opts: o => { if (sketch) { Object.assign(sketch, o); renderSelection(); } return sketch ? { method: sketch.method, extent: sketch.extent, symmetric: sketch.symmetric, taper: sketch.taper, thin: sketch.thin, flip: sketch.flip, axis: sketch.axis, sections: sketch.sections } : null; }, frame: () => sketch ? { o: sketch.fr.o.toArray(), x: sketch.fr.x.toArray(), y: sketch.fr.y.toArray(), n: sketch.fr.n.toArray(), plane: sketch.plane.position.toArray(), ext: sketch.ext, inScene: overlay.children.includes(sketch.plane) } : null };
 
+// ---------------------------------------------------------------- the shell: top bar crumbs, rail, status bar, export menu, docked panels
+const readOnly = () => !!(state.hosted && state.hosted.mode === 'share');
+// the review image: only when the latest good build drew one (a quick rebuild after an edit by hand skips it)
+function showSheet(s) {
+  const img = $('sheet'), has = !!((s.outputs || {}).png);
+  img.style.display = has ? '' : 'none';
+  if (has) img.src = 'image.png?r=' + s.ok_revision; else img.removeAttribute('src');
+}
+// a download is offered when it can be had: CAD formats are written on demand, a domain's files by its last good build
+const available = x => !x.output || !!((state.outputs || {})[x.output]);
+let shellKey = '', exportsKey = '';
+function renderShell() {
+  const s = state, tool = window.eitriTools ? eitriTools.ofKind(s.kind) : { key: 'cad', name: 'eitri CAD', short: 'CAD' };
+  const title = s.title || s.name || 'eitri', home = s.home || (s.hosted ? '/' : null);
+  const key = JSON.stringify([tool.key, title, home]);
+  if (key !== shellKey) {
+    shellKey = key;
+    document.body.dataset.tool = tool.key;
+    const crumbs = [['eitri', home || '/'], [tool.key, home ? (home + (home.endsWith('/') ? '' : '/') + '?tool=' + tool.key) : null], [title]];
+    $('topbar').setAttribute('crumbs', JSON.stringify(s.hosted || !home ? [['eitri', home || null], [tool.key], [title]] : crumbs));
+    $('rail').querySelectorAll('a[data-tool]').forEach(a => { if (a.dataset.tool === tool.key && !a.classList.contains('neutral')) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+    $('kindtag').textContent = tool.short; $('kindline').textContent = s.hosted && s.hosted.mode === 'share' ? 'shared · read only' : 'project';
+    $('st-tool').textContent = tool.name;
+  }
+  $('st-version').textContent = s.version ? 'core v' + s.version : '';
+  if (s.hosted && !(window.EITRI_SHELL || {}).host) {           // served by a host that did not fill the slots: no OSS-only defaults
+    document.querySelectorAll('.local-badge').forEach(b => b.remove());
+    $('st-where').hidden = true;
+  }
+  const path = $('st-path');
+  if (s.folder && !s.hosted) { path.hidden = false; if (path.title !== s.folder) { path.title = s.folder; path.textContent = '‎' + s.folder.replace(/^\/Users\/[^/]+|^\/home\/[^/]+/, '~'); } } else path.hidden = true;
+  // the build: what the checks say, or what is happening now
+  const checks = s.checks || [], fails = checks.filter(c => !c.ok).length, warns = checks.filter(c => c.ok && c.severity === 'warn').length;
+  const busy = agentBusy || editsInFlight > 0 || !!s.building, sb = $('st-build');
+  let txt, cls;
+  if (busy) { txt = s.building && s.building.stage ? s.building.stage : 'building'; cls = 'busy'; }
+  else if (!s.ok_revision) { txt = s.last_error ? 'build failed' : 'no build yet'; cls = s.last_error ? 'bad' : ''; }
+  else if (s.last_ok === false) { txt = `rev ${s.ok_revision} · latest build failed`; cls = 'bad'; }
+  else if (!checks.length) { txt = `rev ${s.ok_revision} · built`; cls = 'ok'; }
+  else { txt = `rev ${s.ok_revision} · ` + (fails ? `${fails} of ${checks.length} checks failing` : `${checks.length} checks pass`) + (warns && !fails ? `, ${warns} warn` : ''); cls = fails ? 'bad' : warns ? 'warn' : 'ok'; }
+  sb.className = 'st-build ' + cls; $('st-buildtxt').textContent = txt;
+  const sv = $('stripverdict'); sv.className = 'sv ' + (!checks.length ? '' : fails ? 'fail' : 'pass'); sv.textContent = !checks.length ? '–' : fails ? String(fails) : '✓';
+  sv.title = !checks.length ? 'no checks yet' : fails ? `${fails} check${fails === 1 ? '' : 's'} failing` : 'all checks pass';
+  renderExports();
+}
+function renderExports() {
+  const list = (state.exports || []).filter(available), key = JSON.stringify(list.map(x => x.fmt));
+  if (key === exportsKey) return;
+  exportsKey = key;
+  const box = $('exportitems'); box.textContent = '';
+  const head = document.createElement('div'); head.className = 'head'; head.textContent = 'Download'; box.appendChild(head);
+  for (const x of list) {
+    const a = document.createElement('a'); a.href = x.href; a.title = x.title; a.setAttribute('role', 'menuitem'); a.dataset.fmt = x.fmt;
+    a.setAttribute('download', '');
+    a.innerHTML = icon('download', 'sm'); a.appendChild(document.createTextNode(x.label));
+    if (!isDomain() && (x.fmt === 'svg' || x.fmt === 'dxf')) a.addEventListener('click', ev => { ev.preventDefault(); window.location = drawingUrl(x.fmt, false); });
+    box.appendChild(a);
+  }
+  $('exportdd').hidden = !list.length;
+}
+// the dock: fold it to a strip, resize the chat, collapse the chat to its header
+(() => {
+  const body = document.body, chat = $('chatpanel'), head = $('chathead');
+  const store = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* private window */ } };
+  const read = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+  const relayout = () => setTimeout(() => window.dispatchEvent(new Event('resize')), 0);
+  const fold = on => { body.classList.toggle('dock-folded', on); store('eitri.dockFolded', on ? '1' : '0'); relayout(); };
+  $('dockfold').onclick = () => fold(true);
+  $('dockunfold').onclick = () => fold(false);
+  $('stripchat').onclick = () => { fold(false); setChat(true); $('chatinput').focus(); };
+  $('stripverdict').onclick = () => fold(false);
+  if (read('eitri.dockFolded') === '1') body.classList.add('dock-folded');
+  function setChat(open) {
+    chat.classList.toggle('closed', !open); head.setAttribute('aria-expanded', String(open)); store('eitri.chatClosed', open ? '0' : '1');
+    if (open) { const m = $('messages'); m.scrollTop = m.scrollHeight; }
+  }
+  window.__eitri_chat = setChat;
+  head.addEventListener('click', ev => { if (ev.target.closest('button')) return; setChat(chat.classList.contains('closed')); });
+  head.addEventListener('keydown', ev => { if ((ev.key === 'Enter' || ev.key === ' ') && ev.target === head) { ev.preventDefault(); setChat(chat.classList.contains('closed')); } });
+  if (read('eitri.chatClosed') === '1') setChat(false);
+  const h = parseFloat(read('eitri.chatH') || ''); if (h >= 20 && h <= 85) { chat.style.setProperty('--chat-h', h + '%'); chat.classList.add('sized'); }
+  const grip = $('chatgrip');
+  grip.addEventListener('pointerdown', ev => {
+    ev.preventDefault(); grip.classList.add('on'); grip.setPointerCapture(ev.pointerId);
+    const dock = $('dock').getBoundingClientRect();
+    const move = e => { const pct = Math.min(85, Math.max(20, (dock.bottom - e.clientY) / dock.height * 100)); chat.style.setProperty('--chat-h', pct.toFixed(1) + '%'); chat.classList.add('sized'); };
+    const up = () => { grip.classList.remove('on'); grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', up); store('eitri.chatH', parseFloat(chat.style.getPropertyValue('--chat-h')) || 46); };
+    grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', up);
+  });
+  // the collapsed chat's header shows the last line said, so nothing is missed
+  new MutationObserver(() => { const last = [...$('messages').querySelectorAll('.msg.agent, .msg.you')].pop(); $('chatpeek').textContent = last ? last.textContent.trim().slice(0, 140) : ''; })
+    .observe($('messages'), { childList: true, subtree: true, characterData: true });
+})();
+
 // ---------------------------------------------------------------- hosted: usage meter, share link, out-of-quota, read-only shares
 function renderHosted() {
   const h = state.hosted; if (!h) return;
@@ -3641,9 +3779,14 @@ function renderHosted() {
     document.body.classList.add('readonly');
     const b = $('sharebar'); if (b.dataset.done) return; b.dataset.done = '1';
     b.innerHTML = `<div class="t">${icon('eye')}<span>Shared view</span><span class="badge neutral" style="margin-left:auto">read only</span></div>
-      <div class="d"></div><div class="acts">${['step', 'stl', '3mf', 'glb'].map(f => `<a class="btn sm" href="download?fmt=${f}" download>${icon('download', 'sm')}${f.toUpperCase()}</a>`).join('')}</div>
+      <div class="d"></div><div class="acts" id="sharedl"></div>
       <div class="stats"><a href="/">Design your own with eitri</a></div>`;
-    b.querySelector('.d').textContent = `${h.title || 'A design'} by @${h.owner || 'someone'}. Orbit it, look inside with a section, and download the files.`;
+    b.querySelector('.d').textContent = `${h.title || 'A design'} by @${h.owner || 'someone'}. ` + (isDomain() ? 'Look around the diagram and download the files.' : 'Orbit it, look inside with a section, and download the files.');
+    const dl = b.querySelector('#sharedl');
+    for (const x of (state.exports || []).filter(available)) {
+      const a = document.createElement('a'); a.className = 'btn sm'; a.href = x.href; a.title = x.title; a.setAttribute('download', ''); a.dataset.fmt = x.fmt;
+      a.innerHTML = icon('download', 'sm'); a.appendChild(document.createTextNode(x.label)); dl.appendChild(a);
+    }
     return;
   }
   const u = h.usage || {}; const el = $('hostedbar');

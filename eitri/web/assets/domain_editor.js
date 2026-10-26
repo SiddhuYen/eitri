@@ -34,21 +34,23 @@ export function createDiagramEditor(host, api, spec) {
   const hint = t => { hintEl.textContent = t || ''; };
   const defaultHint = () => hint((spec.hint && spec.hint(mode)) || 'click a thing to edit it · scroll to zoom · drag the background to pan');
 
+  let autoFit = true;                                                 // refit when the stage changes size, until the view is moved by hand
   function fit() {
     const sc = data && data.scene; if (!sc) return;
     const w = stage.clientWidth, h = stage.clientHeight; if (!w || !h) return;
-    const room = w > 900 ? 316 : 0;
-    const k = Math.min((w - room - 40) / sc.width, (h - 40) / sc.height, 1.6);
-    view = { k: Math.max(0.2, k), x: Math.max(20, (w - room - sc.width * k) / 2), y: Math.max(20, (h - sc.height * k) / 2) };
+    const top = 64;                                                   // the tool strip floats over the top edge (the inspector is docked beside the stage)
+    const k = Math.min((w - 48) / sc.width, (h - top - 28) / sc.height, 1.6);
+    view = { k: Math.max(0.2, k), x: Math.max(24, (w - sc.width * k) / 2), y: Math.max(top, top + (h - top - 28 - sc.height * k) / 2) };
     setView();
   }
+  if (window.ResizeObserver) new ResizeObserver(() => { if (autoFit && fitted) fit(); }).observe(stage);
   stage.addEventListener('wheel', ev => {
-    ev.preventDefault();
+    ev.preventDefault(); autoFit = false;
     const r = stage.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top;
     const k2 = Math.min(4, Math.max(0.15, view.k * Math.exp(-ev.deltaY * (ev.ctrlKey ? 0.01 : 0.0015))));
     view.x = mx - (mx - view.x) * (k2 / view.k); view.y = my - (my - view.y) * (k2 / view.k); view.k = k2; setView();
   }, { passive: false });
-  root.querySelector('[data-f="fit"]').onclick = fit;
+  root.querySelector('[data-f="fit"]').onclick = () => { autoFit = true; fit(); };
 
   const groups = (kind, id) => [...paper.querySelectorAll(`g[data-kind="${kind}"]`)].filter(g => g.dataset.id === id);
   function paintSelection() { paper.querySelectorAll('.sel').forEach(g => g.classList.remove('sel')); if (sel) groups(sel.kind, sel.id).forEach(g => g.classList.add('sel')); }
@@ -63,7 +65,8 @@ export function createDiagramEditor(host, api, spec) {
   async function loadSvg(rev) {
     if (svgBusy) return; svgBusy = true;
     try {
-      const txt = await fetch((spec.svgUrl || 'domain.svg') + '?r=' + rev, { cache: 'no-store' }).then(r => r.ok ? r.text() : Promise.reject(new Error('no diagram yet')));
+      const url = api.diagramUrl || spec.svgUrl || 'domain.svg';    // api.diagramUrl: a read-only share page names a route it may load
+      const txt = await fetch(url + (url.includes('?') ? '&' : '?') + 'r=' + rev, { cache: 'no-store' }).then(r => r.ok ? r.text() : Promise.reject(new Error('no diagram yet')));
       paper.innerHTML = txt; shownRev = rev; empty.style.display = 'none';
       const svg = paper.querySelector('svg'); if (svg) { svg.removeAttribute('width'); svg.removeAttribute('height'); svg.style.width = data.scene.width + 'px'; svg.style.height = data.scene.height + 'px'; }
       if (!fitted) { fitted = true; fit(); }
@@ -79,12 +82,12 @@ export function createDiagramEditor(host, api, spec) {
     if (mode !== (spec.tools || [{ t: 'select' }])[0].t) {                 // a domain tool (wiring, placing): the domain decides
       if (spec.onPick && spec.onPick(mode, g ? g.dataset.kind : null, g ? g.dataset.id : null, ev.target.dataset ? ev.target.dataset.pin : null, ev)) return;
     }
-    if (g && spec.draggable && spec.draggable.has(g.dataset.kind)) {
+    if (g && !api.readOnly && spec.draggable && spec.draggable.has(g.dataset.kind)) {      // a read-only view selects, never drags
       drag = { kind: g.dataset.kind, id: g.dataset.id, g, x0: ev.clientX, y0: ev.clientY, dx: 0, dy: 0, moved: false };
     } else if (g) {
       select({ kind: g.dataset.kind, id: g.dataset.id }); return;
     } else {
-      drag = { pan: true, x0: ev.clientX, y0: ev.clientY, vx: view.x, vy: view.y, moved: false };
+      drag = { pan: true, x0: ev.clientX, y0: ev.clientY, vx: view.x, vy: view.y, moved: false }; autoFit = false;
     }
     stage.setPointerCapture(ev.pointerId);
   });

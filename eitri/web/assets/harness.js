@@ -51,21 +51,23 @@ export function createHarnessEditor(host, api) {
     : 'click a wire or connector to edit it · drag connectors to place them · scroll to zoom · drag the background to pan');
 
   // ---------------------------------------------------------------- view: fit, zoom, pan
+  let autoFit = true;                                                 // refit when the stage changes size, until the view is moved by hand
   function fit() {
     const sc = data && data.scene; if (!sc) return;
     const w = stage.clientWidth, h = stage.clientHeight; if (!w || !h) return;
-    const room = w > 900 ? 316 : 0;                                   // the inspector floats over the right edge: fit into what is left of it
-    const k = Math.min((w - room - 40) / sc.width, (h - 40) / sc.height, 1.6);
-    view = { k: Math.max(0.2, k), x: Math.max(20, (w - room - sc.width * k) / 2), y: Math.max(20, (h - sc.height * k) / 2) };
+    const top = 64;                                                   // the tool strip floats over the top edge (the inspector is docked beside the stage)
+    const k = Math.min((w - 48) / sc.width, (h - top - 28) / sc.height, 1.6);
+    view = { k: Math.max(0.2, k), x: Math.max(24, (w - sc.width * k) / 2), y: Math.max(top, top + (h - top - 28 - sc.height * k) / 2) };
     setView();
   }
+  if (window.ResizeObserver) new ResizeObserver(() => { if (autoFit && fitted) fit(); }).observe(stage);
   stage.addEventListener('wheel', ev => {
-    ev.preventDefault();
+    ev.preventDefault(); autoFit = false;
     const r = stage.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top;
     const k2 = Math.min(4, Math.max(0.15, view.k * Math.exp(-ev.deltaY * (ev.ctrlKey ? 0.01 : 0.0015))));
     view.x = mx - (mx - view.x) * (k2 / view.k); view.y = my - (my - view.y) * (k2 / view.k); view.k = k2; setView();
   }, { passive: false });
-  root.querySelector('[data-f="fit"]').onclick = fit;
+  root.querySelector('[data-f="fit"]').onclick = () => { autoFit = true; fit(); };
 
   // ---------------------------------------------------------------- selection and highlight
   const groups = (kind, id) => [...paper.querySelectorAll(`g[data-kind="${kind}"]`)].filter(g => g.dataset.id === id);
@@ -86,7 +88,8 @@ export function createHarnessEditor(host, api) {
   async function loadSvg(rev) {
     if (svgBusy) return; svgBusy = true;
     try {
-      const txt = await fetch('harness.svg?r=' + rev, { cache: 'no-store' }).then(r => r.ok ? r.text() : Promise.reject(new Error('no diagram yet')));
+      const url = api.diagramUrl || 'harness.svg';                  // api.diagramUrl: a read-only share page names a route it may load
+      const txt = await fetch(url + (url.includes('?') ? '&' : '?') + 'r=' + rev, { cache: 'no-store' }).then(r => r.ok ? r.text() : Promise.reject(new Error('no diagram yet')));
       paper.innerHTML = txt; shownRev = rev; empty.style.display = 'none';
       const svg = paper.querySelector('svg'); if (svg) { svg.removeAttribute('width'); svg.removeAttribute('height'); svg.style.width = data.scene.width + 'px'; svg.style.height = data.scene.height + 'px'; }
       if (!fitted) { fitted = true; fit(); }
@@ -115,12 +118,12 @@ export function createHarnessEditor(host, api) {
       api.send({ op: 'add_wire', a, b: ep, gauge: 18, color: 'BK', length_mm: 300 }).then(r => { if (r && r.ok) { setMode('select'); } else selectLast = false; });
       defaultHint(); return;
     }
-    if (g && (g.dataset.kind === 'conn' || g.dataset.kind === 'splice')) {
+    if (g && !api.readOnly && (g.dataset.kind === 'conn' || g.dataset.kind === 'splice')) {
       drag = { kind: g.dataset.kind, id: g.dataset.id, g, x0: ev.clientX, y0: ev.clientY, dx: 0, dy: 0, moved: false };
-    } else if (g && g.dataset.kind === 'wire') {
-      select({ kind: 'wire', id: g.dataset.id }); return;
+    } else if (g && (g.dataset.kind === 'wire' || api.readOnly)) {                // a read-only view: select, never drag (nothing can be saved)
+      select({ kind: g.dataset.kind, id: g.dataset.id }); return;
     } else {
-      drag = { pan: true, x0: ev.clientX, y0: ev.clientY, vx: view.x, vy: view.y, moved: false };
+      drag = { pan: true, x0: ev.clientX, y0: ev.clientY, vx: view.x, vy: view.y, moved: false }; autoFit = false;
     }
     stage.setPointerCapture(ev.pointerId);
   });

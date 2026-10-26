@@ -11,7 +11,7 @@
 //   POST print/plan    settings -> parts (orientation, size, plate, checks, thumb) + plate pictures
 //   POST print/export  settings + formats -> files, problems by part, a zip
 //   GET  print/file    thumbnails, plate pictures, exported files
-// Loads assets/print.css itself; builds on assets/eitri.css (tokens, .btn, .input, .badge, ...).
+// Loads assets/print.css itself; builds on the design tokens and assets/app.css (.btn, .input, .badge, ...).
 
 const ICONS = 'assets/icons.svg';
 const STORE = 'eitri.print.settings';

@@ -56,6 +56,20 @@ def title_from(text: str, limit: int = 60) -> str:
     return line[:1].upper() + line[1:]
 
 
+def _version() -> str:
+    from .. import __version__
+    return __version__
+
+
+def _kind_of(model: Path) -> str:
+    """cad, harness, mechanism, pneumatics or firmware: what the model file imports (eitri.domains), for the project list's tool badges."""
+    try:
+        from ..domains import kind_of_source
+        return kind_of_source(model.read_text(encoding="utf-8")) or "cad" if model.is_file() else "cad"
+    except (OSError, UnicodeDecodeError):
+        return "cad"
+
+
 def project_title(folder: Path) -> str | None:
     try:
         title = json.loads((folder / ".eitri" / "web.json").read_text(encoding="utf-8")).get("title")
@@ -255,7 +269,7 @@ class Workspace:
                 "modified": max(times) if times else folder.stat().st_mtime, "revision": state.get("revision", 0),
                 "note": (last_ok or {}).get("note", ""), "last_message": self._last_message(folder),
                 "thumb": self.thumb(pid, folder) is not None, "busy": bool(app and app.hub.busy),
-                "url": f"/p/{pid}/"}
+                "kind": _kind_of(model), "url": f"/p/{pid}/"}
 
     @staticmethod
     def _last_message(folder: Path) -> str:
@@ -476,6 +490,17 @@ def make_web_handler(ws: Workspace):
         def _json(self, obj, code: int = 200) -> None:
             self._send(code, json.dumps(obj, default=str).encode(), "application/json")
 
+        def _not_found(self, text: bytes, title: str, message: str) -> None:
+            """404: a page in the shell for a browser, the same plain text as before for everything else."""
+            if "text/html" not in (self.headers.get("Accept") or ""):
+                self._send(404, text, "text/plain")
+                return
+            import html
+            page = (_HERE / "message.html").read_text(encoding="utf-8")
+            for k, v in (("TITLE", title), ("MESSAGE", message), ("PATH", unquote(self.path.partition("?")[0])[:300])):
+                page = page.replace("{{" + k + "}}", html.escape(v))
+            self._send(404, page.encode("utf-8"), "text/html; charset=utf-8")
+
         def _delegate(self, method: str) -> None:
             raw, qs, query = self.path.partition("?")
             pid, sep, tail = raw[len("/p/"):].partition("/")
@@ -486,7 +511,7 @@ def make_web_handler(ws: Workspace):
             try:
                 app = ws.app(pid)
             except KeyError:
-                self._send(404, b"no such project", "text/plain")
+                self._not_found(b"no such project", "No such project", "There is no project with that name in this workspace. It may have been moved to the trash or renamed.")
                 return
             self.path = "/" + tail + (qs + query if qs else "")
             self.__class__ = app.handler_cls              # the project's own handler serves the rest of this request
@@ -510,7 +535,7 @@ def make_web_handler(ws: Workspace):
                 self._send(200, (_HERE / "home.html").read_bytes(), "text/html; charset=utf-8")
             elif path == "/api/projects":
                 self._json({"projects": ws.list(), "demos": ws.demo_list(), "workspace": str(ws.root), "agent": ws.agent,
-                            "usage": ws.usage()})
+                            "usage": ws.usage(), "version": _version()})
             elif path == "/api/setup":
                 self._json(setup_status(ws))
             elif path.startswith("/thumb/"):
@@ -522,7 +547,7 @@ def make_web_handler(ws: Workspace):
             elif path == "/favicon.ico":
                 self._send(204, b"", "image/x-icon")
             else:
-                self._send(404, b"not found", "text/plain")
+                self._not_found(b"not found", "Page not found", "eitri has no page at this address.")
 
         def do_POST(self):
             if not local_request(self, post=True):

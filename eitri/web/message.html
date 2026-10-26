@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}} · eitri</title>
+<link rel="icon" href="/assets/mark.svg">
+<link rel="stylesheet" href="/assets/design/fonts.css">
+<link rel="stylesheet" href="/assets/design/tokens.css">
+<link rel="stylesheet" href="/assets/design/shell.css">
+<link rel="stylesheet" href="/assets/app.css">
+<script src="/assets/design/glyphs.js"></script>
+<!-- eitri:host-head -->
+<script src="/assets/shell-host.js" data-root="/"></script>
+<script src="/assets/design/shell.js"></script>
+<style>.msgpage { max-width: 560px; margin: 12vh auto 0; text-align: center; } .msgpage e-glyph { width: 40px; height: 40px; color: var(--muted); }
+  .msgpage h1 { font: 600 var(--t-2xl)/1.2 var(--font-ui); margin: 12px 0 6px; } .msgpage p { color: var(--fg-2); margin: 0 0 18px; }
+  .msgpage code { font-size: var(--t-sm); color: var(--muted); overflow-wrap: anywhere; }</style>
+</head>
+<body class="app" data-tool="all">
+<a class="skip" href="#main">Skip to the content</a>
+<eitri-topbar crumbs='[["eitri","/"],["not found"]]'></eitri-topbar>
+<eitri-rail></eitri-rail>
+<main id="main" class="canvas single gridbg"><div class="page"><div class="msgpage">
+  <e-glyph name="search"></e-glyph>
+  <h1>{{TITLE}}</h1>
+  <p>{{MESSAGE}}</p>
+  <p><code>{{PATH}}</code></p>
+  <a class="btn primary" href="/">Your projects</a>
+</div></div></main>
+<footer class="status"><span><span class="dot" aria-hidden="true"></span>eitri</span><span>local</span><span class="sp"></span><a href="https://eitri.io" target="_blank" rel="noopener">combined workspace: eitri.io</a></footer>
+</body>
+</html>
