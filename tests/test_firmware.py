@@ -40,7 +40,7 @@ void loop() {
 
 def project(code=GOOD, board_key="uno") -> Firmware:
     fw = Firmware("test", board=board_key)
-    fw.servo("PAN", pin="D9")
+    fw.servo("PAN", pin="D9", power="external")
     fw.limit_switch("BUTTON", pin="D2")
     fw.pin("D13", "out", "digital_out", net="LED")
     fw.pin("A0", "in", "analog_in", net="POT")

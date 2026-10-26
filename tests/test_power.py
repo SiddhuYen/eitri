@@ -127,7 +127,9 @@ def test_firmware_servo_on_the_5v_pin_fails_and_on_its_own_supply_passes():
     good = _power_checks(analyze_fw(_fw(power="external", current_A=MG996R_STALL_A)))
     assert list(good) == ["loads on their own supply"] and good["loads on their own supply"].severity == "pass"
     assert "GND" in good["loads on their own supply"].measured
-    assert not _power_checks(analyze_fw(_fw()))                             # nothing declared: nothing graded
+    loose = _power_checks(analyze_fw(_fw()))                                # no power= at all: a warning that says where to declare it
+    assert list(loose) == ["servo supply declared"] and loose["servo supply declared"].severity == "warn"
+    assert 'power="external"' in loose["servo supply declared"].expected and "ARM" in loose["servo supply declared"].measured
 
 
 def test_firmware_loads_add_up_and_unknowns_warn():

@@ -269,6 +269,14 @@ def _power_budget(fw: Firmware) -> list[Check]:
         pw = per.params.get("power")
         if pw in ("5V", "3V3"):
             by_pin.setdefault(pw, []).append(per)
+    loose = [p for p in fw.peripherals if p.kind == "servo" and p.params.get("power") is None]
+    if loose:
+        out.append(_check("power", "servo supply declared", "warn",
+                          f"{', '.join(p.name for p in loose)}: no power= given, so nothing checks what feeds {'it' if len(loose) == 1 else 'them'}. "
+                          "A hobby servo's stall current is more than a board pin gives (an MG996R stalls at 2.5 A; the Uno's 5V pin on "
+                          "USB gives 0.5 A)",
+                          'servo(..., power="external") with GND shared with the board, or power="5V" / "3V3" with current_A',
+                          [p.name for p in loose]))
     ext = [p for p in fw.peripherals if p.params.get("power") == "external"]
     if ext:
         out.append(_check("power", "loads on their own supply", "pass",

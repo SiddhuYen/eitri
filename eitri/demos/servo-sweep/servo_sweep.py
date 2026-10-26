@@ -42,7 +42,7 @@ void loop() {
 
 def build(p):
     fw = Firmware("Servo sweep", board="uno", description="sweep a servo while a button is held")
-    fw.servo("PAN", pin="D9")
+    fw.servo("PAN", pin="D9", power="external")    # its own 5-6 V supply, GND shared with the Uno
     fw.button("START", pin="D2")
     fw.pin("D13", "out", "digital_out", net="LED")
     fw.serial(115200)

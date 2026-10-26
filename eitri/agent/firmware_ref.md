@@ -18,7 +18,8 @@ fw.pin(pin, direction="out" | "in" | "inout", role=None, net="", pullup=False)
     serial_tx, serial_rx, i2c_sda, i2c_scl (default: digital_out / digital_in by direction); net: the name the code uses as
     PIN_<net> (default: the pin's name)
 fw.servo(name, pin, min_us=544, max_us=2400, power=None, current_A=None)   a hobby servo: pin role servo, net = name;
-    power: "5V" / "3V3" (from the board's pin) or "external" (its own supply, ground shared with the board), current_A its stall current
+    power: "5V" / "3V3" (from the board's pin) or "external" (its own supply, ground shared with the board), current_A its stall current;
+    without power= the build warns (a servo's stall current is more than a board pin gives: say where it is powered from)
 fw.pwm_motor(name, pwm, dir, dir2=None, enable=None)             a DC motor driver: <name>_PWM (pwm), <name>_DIR (digital_out), ...
 fw.button(name, pin, pullup=True, active_low=True, interrupt=False)          a push button to ground (a user input): digital_in (or interrupt)
 fw.limit_switch(name, pin, pullup=True, active_low=True, interrupt=False)    a limit / end-stop switch the mechanism trips: digital_in (or interrupt)
@@ -111,7 +112,7 @@ void loop() {
 
 def build(p):
     fw = Firmware("Servo sweep", board="uno", description="sweep a servo while a button is held")
-    fw.servo("PAN", pin="D9")
+    fw.servo("PAN", pin="D9", power="external")    # its own 5-6 V supply, GND shared with the board
     fw.button("START", pin="D2")
     fw.pin("D13", "out", "digital_out", net="LED")
     fw.serial(115200)
