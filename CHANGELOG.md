@@ -3,6 +3,55 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
+## 0.5.1: checks you can trust, with their sources
+
+Every number a check grades against now has a recorded source (a datasheet, a standard, or a vendor page), and several checks
+that passed when they should not now fail or warn. Designs that were wrong before can report differently after upgrading: that
+is the point of this release. eitri stays API-key only (it never uses a Claude.ai or Claude Code login).
+
+### Changed results (read before upgrading)
+
+- **quad-power demo: 28 pass, 5 warn** (was 32 pass, 0 warn). The XT60 battery lead carries a 44.5 A peak, above its 30 A
+  continuous rating (within its 60 A short-time rating), and each XT30 runs at its full 20 A. The flight-controller lead is now
+  24 AWG: 22 AWG does not fit a JST PH contact.
+- **servo-sweep demo: 12 pass** (was 11): the servo now declares its own supply (`power="external"`).
+- **pan-tilt demo: 12 pass** (was 11), and **air-clamp demo: 23 pass, 1 warn** (was 20 pass): new checks that pass.
+- **Voltage drop is about 20 % higher everywhere.** Copper is taken at 75 C (K = 12.9, NEC Chapter 9 Table 8) instead of 29 C
+  (10.75). A net near its limit may now fail.
+- **Servo continuous torque.** Without a rated value, an actuator is graded against 1/3 of stall (was 1/2), an assumption the
+  message names; actuators in the new catalog use their datasheet's continuous rating (Feetech STS3215: 6.5 kg·cm). Joints that
+  passed between 1/3 and 1/2 of stall now warn.
+- **Connector ratings are continuous, not burst.** XT30 20 A, XT60 30 A, XT90 45 A (Amass), Micro-Fit 3.0 by the wire crimped in
+  (18 AWG 8.5 A, 20-30 AWG 5 A), spades by the wire crimped in (TE FASTON spec), Dupont 3 A (Amphenol FCI Mini-PV).
+
+### New checks
+
+- **Wires.** Power budget on Arduino Uno / Nano supply pins (5V on USB 500 mA, on VIN the regulator's thermal limit, 3.3V 50 mA)
+  with a shared-ground check; a wire must fit the contacts it is crimped into (JST XH, PH, Dupont, Micro-Fit ranges); peaks
+  between a connector's continuous and short-time rating warn.
+- **Firmware.** The same power budget; a servo with no declared supply warns; an output pin declared with `current_A` is graded
+  against the 20 mA per I/O pin; a `PIN_` constant the pinout does not define fails; a declared pin written as a number warns.
+- **Motion.** "stays above its base plane": a mechanism that reaches below its base warns; `m.mount("edge" | "ceiling" | "wall")`
+  turns it off for one meant to.
+- **Pneumatics.** Pressure ratings: each supply and regulator against the lowest-rated component it reaches; over is a FAIL naming
+  it (`max_bar=` from the part's datasheet, else vendor defaults: valve 7 bar, cylinder 10, regulator inlet 16, ...). A cylinder's
+  CAP and ROD on one line fails.
+
+### Improved
+
+- **Diagrams.** Pneumatic tubes are routed at right angles into their named ports, never along each other; labels in every domain
+  sit beside their own line and never overlap a label, a line or a component; a planar mechanism draws one view; a slide draws its
+  stroke; the FRL symbol draws a lubricator only when fitted; tube sizes say "ID"; small currents read in µA.
+- **Firmware inputs are named as built:** `fw.button()` and `fw.potentiometer()` beside `fw.limit_switch()`.
+- **Clearer messages:** the editor counts warnings apart from passes ("27 of 32 checks pass, 5 warn"); a chamber that cannot vent
+  names the undeclared exhaust ports; the mass rollup says where the payload is counted; a misused `payload()` says how to call it.
+- **BOM part numbers:** Micro-Fit housings (43645, 2-12 circuits) and terminals chosen per wire size and gender.
+
+### Breaking for hosts
+
+None. `state.json` gains fields (`current_A` on firmware pins, `max_bar` on pneumatic components); existing fields, routes, export
+formats, the build-extension API and the shell slots are unchanged.
+
 ## 0.5.0: the eitri app shell
 
 Every page the core serves now uses the eitri design system (copied into `eitri/web/assets/design/`, nothing loaded from elsewhere
