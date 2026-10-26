@@ -43,7 +43,7 @@ void loop() {
 def build(p):
     fw = Firmware("Servo sweep", board="uno", description="sweep a servo while a button is held")
     fw.servo("PAN", pin="D9")
-    fw.limit_switch("START", pin="D2")
+    fw.button("START", pin="D2")
     fw.pin("D13", "out", "digital_out", net="LED")
     fw.serial(115200)
     fw.source("servo_sweep.ino", SKETCH.replace("{step_ms}", str(p.step_ms)).replace("{sweep_deg}", str(p.sweep_deg)))

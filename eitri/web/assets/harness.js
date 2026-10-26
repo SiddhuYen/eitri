@@ -14,8 +14,17 @@ const HEX = { BK: '#1c1c1c', BN: '#7b4a2a', RD: '#d62828', OG: '#f77f00', YE: '#
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const el = (tag, attrs = {}, html) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === 'class') e.className = v; else if (v !== false && v != null) e.setAttribute(k, v === true ? '' : v); } if (html != null) e.innerHTML = html; return e; };
-const bez = (p, t) => { const u = 1 - t; return [0, 1].map(i => u * u * u * p[0][i] + 3 * u * u * t * p[1][i] + 3 * u * t * t * p[2][i] + t * t * t * p[3][i]); };
-const pathD = p => `M${p[0][0].toFixed(1)},${p[0][1].toFixed(1)} C${p[1][0].toFixed(1)},${p[1][1].toFixed(1)} ${p[2][0].toFixed(1)},${p[2][1].toFixed(1)} ${p[3][0].toFixed(1)},${p[3][1].toFixed(1)}`;
+// a wire's path: a cubic Bezier (4 points), or a straight lead, a cubic and a straight lead (6 points; eitri/diagram.py _bez)
+const LEAD_T = 0.12;
+const cubic = (p, t) => { const u = 1 - t; return [0, 1].map(i => u * u * u * p[0][i] + 3 * u * u * t * p[1][i] + 3 * u * t * t * p[2][i] + t * t * t * p[3][i]); };
+const lerp = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
+const bez = (p, t) => p.length === 6
+  ? (t <= LEAD_T ? lerp(p[0], p[1], t / LEAD_T) : t >= 1 - LEAD_T ? lerp(p[4], p[5], (t - 1 + LEAD_T) / LEAD_T) : cubic(p.slice(1, 5), (t - LEAD_T) / (1 - 2 * LEAD_T)))
+  : cubic(p, t);
+const f1 = q => `${q[0].toFixed(1)},${q[1].toFixed(1)}`;
+const pathD = p => p.length === 6
+  ? `M${f1(p[0])} L${f1(p[1])} C${f1(p[2])} ${f1(p[3])} ${f1(p[4])} L${f1(p[5])}`
+  : `M${f1(p[0])} C${f1(p[1])} ${f1(p[2])} ${f1(p[3])}`;
 const nodeOf = e => e.connector || e.splice;
 const ref = e => e.connector ? `${e.connector}.${e.pin}` : e.splice;
 const num = v => (v === '' || v == null) ? null : Number(v);
@@ -160,7 +169,8 @@ export function createHarnessEditor(host, api) {
     for (const w of data.wires || []) {
       const A = nodeOf(w.a) === node, B = nodeOf(w.b) === node; if (!A && !B) continue;
       const s = sc.wires[w.id]; if (!s) continue;
-      const p = s.pts.map((q, i) => [q[0] + ((i < 2 ? A : B) ? dx : 0), q[1] + ((i < 2 ? A : B) ? dy : 0)]);
+      const half = s.pts.length / 2;                             // the first half of the points moves with end A, the rest with B
+      const p = s.pts.map((q, i) => [q[0] + ((i < half ? A : B) ? dx : 0), q[1] + ((i < half ? A : B) ? dy : 0)]);
       for (const g of groups('wire', w.id)) {
         for (const path of g.querySelectorAll('path')) path.setAttribute('d', pathD(p));
         const [lx, ly] = bez(p, s.t), [ox, oy] = s.label || bez(s.pts, s.t);

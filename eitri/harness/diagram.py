@@ -11,12 +11,14 @@ overrides the automatic place of a node: these are the editor's drag positions, 
 from __future__ import annotations
 
 
+from ..diagram import place_labels, text_box  # noqa: E402
 from ..diagram import (BORDER, BOX, FAIL, FONT, HEADER, INK, MUTED, WARN, Scene, _bez, _overlap, _wrap, footer_from,   # noqa: F401
                        scene_to_png, scene_to_svg, status_from, text_w)
 from .catalog import color_hex, stripe_hex
 from .model import Harness, Link, PinRef, SpliceRef
 
-ROW = 18
+LEAD = 36          # the straight run of a wire out of a connector pin
+ROW = 32           # a pin row: tall enough for a two-line wire label between the leads of neighbouring pins
 HEAD = 38
 PAD = 14
 MARGIN = 28
@@ -122,12 +124,17 @@ def build_scene(h: Harness, status: dict[str, str] | None = None, footer: list[t
 
     xs: dict[int, float] = {}
     x = float(MARGIN)
+    crossing = {k: 0 for k in cols}                          # wires between column k and the next: the more, the wider the gap (room for labels)
+    for l in h.links:
+        ka, kb = layer[_node_key(l.a)], layer[_node_key(l.b)]
+        for k in range(min(ka, kb), max(ka, kb)):
+            crossing[k] = crossing.get(k, 0) + 1
     for k in sorted(cols):
         xs[k] = x
-        x += max(sizes[n][0] for n in cols[k]) + (GAP if k + 1 in cols else 0)
+        x += max(sizes[n][0] for n in cols[k]) + ((GAP + max(0, crossing.get(k, 0) - 4) * 18) if k + 1 in cols else 0)
     top = MARGIN + (22 if title is not False else 0)
     pos: dict[str, tuple[float, float]] = {}                 # top-left corner
-    gap_of = lambda n: 28 if n in h.connectors else 16
+    gap_of = lambda n: 58 if n in h.connectors else 16          # a connector's gap holds a wire label above and one below
     for k in sorted(cols):                                   # first: every column stacked from the top
         y = float(top)
         for n in cols[k]:
@@ -196,9 +203,9 @@ def build_scene(h: Harness, status: dict[str, str] | None = None, footer: list[t
                 ry = y0 + HEAD + ROW * i
                 if i % 2:
                     items.append({"t": "rect", "x": x0 + 1, "y": ry, "w": w - 2, "h": ROW, "rx": 0, "fill": "#f1f4f7", "stroke": "none", "sw": 0, "g": g, "cls": "band"})
-                items.append({"t": "text", "x": x0 + PAD, "y": ry + 13, "s": pin, "size": FONT, "weight": "700", "fill": INK, "g": g})
+                items.append({"t": "text", "x": x0 + PAD, "y": ry + ROW / 2 + 4, "s": pin, "size": FONT, "weight": "700", "fill": INK, "g": g})
                 if label:
-                    items.append({"t": "text", "x": x0 + PAD + text_w(pin + "  "), "y": ry + 13, "s": label, "size": FONT, "fill": MUTED, "g": g})
+                    items.append({"t": "text", "x": x0 + PAD + text_w(pin + "  "), "y": ry + ROW / 2 + 4, "s": label, "size": FONT, "fill": MUTED, "g": g})
                 items.append({"t": "rect", "x": x0, "y": ry, "w": w, "h": ROW, "rx": 0, "fill": "#ffffff", "stroke": "none", "sw": 0, "g": g, "cls": "pinhit", "pin": pin, "alpha_fill": 0.0})
                 scene.pins[f"{n}.{pin}"] = {"y": ry + ROW / 2, "xl": x0, "xr": x0 + w}
             scene.nodes[n] = {"kind": "connector", "x": x0, "y": y0, "w": w, "h": ht}
@@ -207,7 +214,11 @@ def build_scene(h: Harness, status: dict[str, str] | None = None, footer: list[t
             cx, cy = x0 + w / 2, y0 + ht / 2
             col = FAIL if st == "fail" else WARN if st == "warn" else INK
             items.append({"t": "circle", "cx": cx, "cy": cy, "r": SPLICE_R, "fill": col, "stroke": "#ffffff", "sw": 1.5, "g": f"splice:{n}", "cls": "dot"})
-            items.append({"t": "text", "x": cx, "y": cy - SPLICE_R - 5, "s": n, "size": FONT - 1, "weight": "700", "fill": col, "anchor": "middle", "g": f"splice:{n}"})
+            r = SPLICE_R
+            items.append({"t": "text", "x": cx, "y": cy - r - 5, "s": n, "size": FONT - 1, "weight": "700", "fill": col, "anchor": "middle", "g": f"splice:{n}",
+                          "bg": "#ffffff", "cands": [(cx, cy - r - 5, "middle"), (cx, cy + r + 13, "middle"), (cx - r - 6, cy - r - 3, "end"),
+                                                     (cx - r - 6, cy + r + 11, "end"), (cx - r - 8, cy + 4, "end"), (cx, cy - r - 16, "middle"),
+                                                     (cx, cy + r + 24, "middle"), (cx - r - 20, cy - r - 10, "end"), (cx - r - 20, cy + r + 18, "end")]})
             scene.pins[n] = {"y": cy, "xl": cx, "xr": cx}
             scene.nodes[n] = {"kind": "splice", "x": x0, "y": y0, "w": w, "h": ht}
 
@@ -233,28 +244,59 @@ def build_scene(h: Harness, status: dict[str, str] | None = None, footer: list[t
         sa, sb = ("r", "l") if xb > xa + 1 else ("l", "r") if xb < xa - 1 else ("r", "r")
         (x1, y1), (x2, y2) = _anchor(scene, l.a, sa), _anchor(scene, l.b, sb)
         d = max(40.0, min(150.0, abs(x2 - x1) * 0.5)) if sa != sb or abs(x2 - x1) > 1 else 70.0
-        c1 = (x1 + (d if sa == "r" else -d), y1)
-        c2 = (x2 + (d if sb == "r" else -d), y2)
-        pts = [(x1, y1), c1, c2, (x2, y2)]
+        # a wire leaves a splice in the fan and arrives flat at a connector pin (long handle there): crossings happen mid-span,
+        # and each pin gets a straight lead where its label sits
+        steep = 1.0 + min(1.0, abs(y2 - y1) / 300.0)           # a wire coming from far above or below: a longer flat lead at the pin
+        da = d * (0.6 if isinstance(l.a, SpliceRef) and isinstance(l.b, PinRef) else 1.0)
+        db = d * (1.6 * steep if isinstance(l.a, SpliceRef) and isinstance(l.b, PinRef) else 1.0) if sa != sb else d
+        if isinstance(l.b, SpliceRef) and isinstance(l.a, PinRef) and sa != sb:
+            da, db = d * 1.6 * steep, d * 0.6
+        # a wire enters a connector straight: a lead out of each pin (not out of a splice: the fan stays a fan), the curve between
+        la = LEAD if isinstance(l.a, PinRef) and sa != sb else 0.0
+        lb = LEAD if isinstance(l.b, PinRef) and sa != sb else 0.0
+        a2 = (x1 + (la if sa == "r" else -la), y1)
+        b2 = (x2 + (lb if sb == "r" else -lb), y2)
+        c1 = (a2[0] + (da if sa == "r" else -da), y1)
+        c2 = (b2[0] + (db if sb == "r" else -db), y2)
+        pts = [(x1, y1), a2, c1, c2, b2, (x2, y2)]
         cur = h.wire_current(l)
         line1 = f"{l.id}  {l.gauge.label}  {l.color}"
         line2 = f"{l.length_mm:g} mm" + (f" · {cur:g} A" if cur is not None else "") + (f" · {l.net}" if l.net else "")
-        lw = max(text_w(line1, FONT - 1), text_w(line2, FONT - 1)) + 10
         t0 = 0.5                                               # where the label would like to sit along the wire
         if isinstance(l.a, SpliceRef) != isinstance(l.b, SpliceRef):    # wires fan out of a splice: label them where they are apart
             t0 = 0.7 if isinstance(l.a, SpliceRef) else 0.3
-        t, (mx, my) = t0, _bez(pts, t0)
-        for cand in [t0] + sorted((0.2 + 0.05 * i for i in range(13)), key=lambda v: abs(v - t0)):      # the nearest free spot
-            cx, cy = _bez(pts, cand)
-            if not any(_overlap((cx - lw / 2, cy - 14, lw, 28), r) for r in labels):
-                t, (mx, my) = cand, (cx, cy)
-                break
-        else:                                                  # no free spot along the wire: nudge it down
-            for k in range(1, 8):
-                if not any(_overlap((mx - lw / 2, my + 30 * k - 14, lw, 28), r) for r in labels):
-                    my += 30 * k
-                    break
-        labels.append((mx - lw / 2, my - 14, lw, 28))
+        ts = [t0] + sorted((0.1 + 0.04 * i for i in range(22)), key=lambda v: abs(v - t0))
+        # beside the wire, never on it: the two lines above the wire (or below it), at the nearest free point along it
+        cands = []
+        # first: where the wire runs flat into a connector, the label right-aligned just before the connector (or left-aligned just
+        # after it), above the wire or below it
+        for end, side, tt in (((x2, y2), sb, 0.97), ((x1, y1), sa, 0.03)):
+            if (end == (x2, y2) and isinstance(l.b, PinRef)) or (end == (x1, y1) and isinstance(l.a, PinRef)):
+                ex, ey = end
+                for dy_up, dy_dn in ((19, 13), (22, 15), (32, 25), (44, 37)):     # between neighbouring leads, then further off the wire
+                    for k in range(4):                         # along the lead, nearest the connector first
+                        if side == "l":
+                            cands += [(ex - 12 - 36 * k, ey - dy_up, "end", tt - 0.03 * k), (ex - 12 - 36 * k, ey + dy_dn, "end", tt - 0.03 * k)]
+                        else:
+                            cands += [(ex + 12 + 36 * k, ey - dy_up, "start", tt + 0.03 * k), (ex + 12 + 36 * k, ey + dy_dn, "start", tt + 0.03 * k)]
+        for tt in ts:
+            cx, cy = _bez(pts, tt)
+            cands += [(cx, cy - 21, "middle", tt), (cx, cy + 17, "middle", tt)]
+        lw = max(text_w(line1, FONT - 1), text_w(line2, FONT - 1))
+        flat = [_bez(pts, i / 64) for i in range(65)]
+
+        def wire_y(x):                                        # the wire's height where the label's middle is
+            return min(flat, key=lambda p: abs(p[0] - x))[1]
+
+        def tether(c):                                        # from the label's facing edge straight to its own wire
+            x, y, anchor = c[0], c[1], c[2]
+            mid = x - 6 if anchor == "end" else x + 6 if anchor == "start" else x       # its connector-side end (or its middle)
+            wy = wire_y(mid)
+            edge = y + 12 + 3 if wy > y else y - (FONT - 1) * 0.8   # below the second line, or above the first
+            return (mid, edge, mid, wy)
+        cands = [c[:4] + (tether(c),) for c in cands]
+        mx, my = _bez(pts, t0)
+        t = t0
         st = status.get(l.id)
         scene.wires[l.id] = {"pts": pts, "t": t, "sides": [sa, sb], "label": [mx, my]}
         g = f"wire:{l.id}"
@@ -265,16 +307,25 @@ def build_scene(h: Harness, status: dict[str, str] | None = None, footer: list[t
         visible.append({"t": "path", "pts": pts, "stroke": base, "sw": 3.4, "g": g, "cls": "core"})
         if stripe:
             visible.append({"t": "path", "pts": pts, "stroke": stripe, "sw": 3.4, "dash": "7 7", "g": g, "cls": "stripe"})
-        w = lw
         col = FAIL if st == "fail" else "#b25e00" if st == "warn" else INK
-        tags.append({"t": "rect", "x": mx - w / 2, "y": my - 14, "w": w, "h": 28, "rx": 4, "fill": "#ffffff", "stroke": col if st else "#c5ccd6", "sw": 1.4 if st else 0.8, "alpha_fill": 0.92, "g": g, "cls": "labelbox"})
-        tags.append({"t": "text", "x": mx, "y": my - 3, "s": line1, "size": FONT - 1, "weight": "700", "fill": col, "anchor": "middle", "g": g, "cls": "label"})
-        tags.append({"t": "text", "x": mx, "y": my + 9, "s": line2, "size": FONT - 1, "fill": col if st else MUTED, "anchor": "middle", "g": g, "cls": "label2"})
+        second = {"t": "text", "x": mx, "y": my - 6, "s": line2, "size": FONT - 1, "fill": col if st else MUTED, "anchor": "middle", "g": g, "cls": "label2",
+                  "bg": "#ffffff", "dx": 0, "dy": 12}
+        first = {"t": "text", "x": mx, "y": my - 18, "s": line1, "size": FONT - 1, "weight": "700", "fill": col, "anchor": "middle", "g": g, "cls": "label",
+                 "bg": "#ffffff", "cands": cands, "follow": [second]}
+        tags += [first, second]
         hits.append({"t": "path", "pts": pts, "stroke": "#000000", "sw": 14, "alpha": 0.0, "g": g, "cls": "hit"})
-        scene.height = max(scene.height, my + 20)
+        scene.height = max(scene.height, my + 44)
     items.extend(hits)
     items.extend(visible)
     items.extend(tags)
+    place_labels(scene)
+    for it in tags:                                            # where each wire's label ended up (the editor moves it with the wire)
+        if it.get("cls") == "label":
+            wid = it["g"].split(":", 1)[1]
+            c = it["cands"][it.get("cand_index", 0)]
+            scene.wires[wid]["t"], scene.wires[wid]["label"] = c[3], [it["x"], it["y"] + 12]
+    bottom = max((text_box(it)[1] + text_box(it)[3] for it in items if it["t"] == "text"), default=scene.height)
+    scene.height = max(scene.height - 30, bottom + 10)
 
     if footer:
         y = scene.height + 6

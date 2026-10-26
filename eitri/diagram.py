@@ -93,7 +93,21 @@ def _overlap(a, b, pad: float = 2.0) -> bool:
     return a[0] < b[0] + b[2] + pad and b[0] < a[0] + a[2] + pad and a[1] < b[1] + b[3] + pad and b[1] < a[1] + a[3] + pad
 
 
+LEAD_T = 0.12        # a six-point wire path: the straight leads at each end take this share of t each
+
+
 def _bez(pts, t: float) -> tuple[float, float]:
+    """A point along a wire path: a cubic Bezier (4 points), or a straight lead, a cubic and a straight lead (6 points:
+    A, A', c1, c2, B', B)."""
+    if len(pts) == 6:
+        a, a2, c1, c2, b2, b = pts
+        if t <= LEAD_T:
+            k = t / LEAD_T
+            return (a[0] + (a2[0] - a[0]) * k, a[1] + (a2[1] - a[1]) * k)
+        if t >= 1 - LEAD_T:
+            k = (t - (1 - LEAD_T)) / LEAD_T
+            return (b2[0] + (b[0] - b2[0]) * k, b2[1] + (b[1] - b2[1]) * k)
+        return _bez((a2, c1, c2, b2), (t - LEAD_T) / (1 - 2 * LEAD_T))
     (x0, y0), (x1, y1), (x2, y2), (x3, y3) = pts
     u = 1 - t
     return (u ** 3 * x0 + 3 * u * u * t * x1 + 3 * u * t * t * x2 + t ** 3 * x3,
@@ -129,6 +143,9 @@ def footer_from(report, limit: int = 14) -> list[tuple[str, str]]:
 
 
 def _bezier_d(pts) -> str:
+    if len(pts) == 6:
+        (x0, y0), (xa, ya), (x1, y1), (x2, y2), (xb, yb), (x3, y3) = pts
+        return f"M{x0:.1f},{y0:.1f} L{xa:.1f},{ya:.1f} C{x1:.1f},{y1:.1f} {x2:.1f},{y2:.1f} {xb:.1f},{yb:.1f} L{x3:.1f},{y3:.1f}"
     (x0, y0), (x1, y1), (x2, y2), (x3, y3) = pts
     return f"M{x0:.1f},{y0:.1f} C{x1:.1f},{y1:.1f} {x2:.1f},{y2:.1f} {x3:.1f},{y3:.1f}"
 
@@ -212,6 +229,8 @@ def _font(size: float):
 
 
 def _flatten(pts, n: int = 28) -> list[tuple[float, float]]:
+    if len(pts) == 6:                                      # the leads exactly, the curve sampled
+        return [pts[0]] + [_bez(tuple(pts[1:5]), i / n) for i in range(n + 1)] + [pts[5]]
     return [_bez(pts, i / n) for i in range(n + 1)]
 
 

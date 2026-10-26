@@ -13,6 +13,23 @@ ROLE_COLOR = {"digital_out": "#2b6cd4", "digital_in": "#2e9e4f", "pwm": "#7d3fc4
               "servo": "#d6336c", "serial_tx": "#6b7686", "serial_rx": "#6b7686", "i2c_sda": "#6b7686", "i2c_scl": "#6b7686"}
 
 
+def _per_lines(per) -> list[str]:
+    lines = [f"{fn}: {pin}" + (f"  {per.params['baud']} baud" if per.kind == "serial" and k == 0 else "") for k, (fn, pin) in enumerate(per.pins.items())]
+    pw = per.params.get("power")
+    if pw:
+        cur = per.params.get("current_A")
+        lines.append(("power: own supply, GND shared" if pw == "external" else f"power: board {pw} pin") + (f", {cur:g} A" if cur is not None else ""))
+    return lines
+
+
+def _per_widths(per) -> list[float]:
+    return [text_w(f"{per.name} · {KIND_LABEL.get(per.kind, per.kind)}", FONT - 1) + 22] + [text_w(ln, FONT - 2) + 22 for ln in _per_lines(per)]
+
+
+KIND_LABEL = {"limit_switch": "limit switch", "button": "push button", "potentiometer": "potentiometer", "pwm_motor": "PWM motor driver",
+              "servo": "servo", "serial": "serial", "load": "load"}
+
+
 def build_scene(fw: Firmware, rep=None, status: dict[str, str] | None = None, footer: list[tuple[str, str]] | None = None, title: str | None = None) -> Scene:
     status = status or {}
     b = fw.board
@@ -20,7 +37,9 @@ def build_scene(fw: Firmware, rep=None, status: dict[str, str] | None = None, fo
     top = MARGIN + 30
     n = max(len(fw.pins), 1)
     board_h = 44 + ROW * n + 26
-    width = MARGIN * 2 + BOARD_W + 90 + PER_W
+    per_w = max([PER_W] + [w for per in fw.peripherals for w in _per_widths(per)])
+    n_wired = sum(1 for per in fw.peripherals for d in fw.pins if d.peripheral == per.name)
+    width = MARGIN * 2 + BOARD_W + 46 + 12 * max(1, n_wired) + per_w
     sc = Scene(width, top + board_h + MARGIN)
     items = sc.items
     items.append({"t": "text", "x": MARGIN, "y": 22, "s": title or fw.name, "size": 14, "weight": "700", "fill": INK, "g": "title"})
@@ -52,21 +71,28 @@ def build_scene(fw: Firmware, rep=None, status: dict[str, str] | None = None, fo
         items.append({"t": "text", "x": x0 + 14, "y": y0 + 60, "s": "no pins declared", "size": FONT, "fill": MUTED, "g": "board"})
     free = (len([p for p in b.pins.values() if not p.forbidden]) - len({(b.resolve(d.pin) or d).name if b.resolve(d.pin) else d.pin for d in fw.pins})) if b else 0
     items.append({"t": "text", "x": x0 + 14, "y": y0 + board_h - 9, "s": f"{max(free, 0)} other pin(s) free" if b else "", "size": FONT - 2, "fill": MUTED, "g": "board"})
-    # peripherals, wired to their pins
-    px = x0 + BOARD_W + 90
+    # peripherals, wired to their pins: each wire in its own lane, ending at its own row in the peripheral
+    wired = [d for per in fw.peripherals for d in fw.pins if d.peripheral == per.name and d.net in anchors]
+    lane = {d.net: i for i, d in enumerate(wired)}
+    px = x0 + BOARD_W + 46 + 12 * max(1, len(wired))
     py = y0
     for per in fw.peripherals:
         nets = [d for d in fw.pins if d.peripheral == per.name]
-        h = 30 + 14 * max(1, len(per.pins))
+        lines = _per_lines(per)
+        h = 30 + 14 * max(1, len(lines))
         g = f"peripheral:{per.name}"
-        items.append({"t": "rect", "x": px, "y": py, "w": PER_W, "h": h, "rx": 5, "fill": "#fbfcfd", "stroke": "#3a4656", "sw": 1.2, "g": g, "cls": "peripheral"})
-        items.append({"t": "text", "x": px + 10, "y": py + 17, "s": f"{per.name} · {per.kind.replace('_', ' ')}", "size": FONT - 1, "weight": "700", "fill": INK, "g": g})
-        for k, (fn, pin) in enumerate(per.pins.items()):
-            items.append({"t": "text", "x": px + 10, "y": py + 32 + 14 * k, "s": f"{fn}: {pin}" + (f"  {per.params['baud']} baud" if per.kind == "serial" and k == 0 else ""), "size": FONT - 2, "fill": MUTED, "g": g})
+        items.append({"t": "rect", "x": px, "y": py, "w": per_w, "h": h, "rx": 5, "fill": "#fbfcfd", "stroke": "#3a4656", "sw": 1.2, "g": g, "cls": "peripheral"})
+        items.append({"t": "text", "x": px + 10, "y": py + 17, "s": f"{per.name} · {KIND_LABEL.get(per.kind, per.kind.replace('_', ' '))}", "size": FONT - 1, "weight": "700", "fill": INK, "g": g})
+        for k, ln in enumerate(lines):
+            items.append({"t": "text", "x": px + 10, "y": py + 32 + 14 * k, "s": ln, "size": FONT - 2, "fill": MUTED, "g": g})
+        fns = list(per.pins)
         for d in nets:
             if d.net in anchors:
                 ax, ay = anchors[d.net]
-                items.append({"t": "polyline", "pts": [(ax, ay), (ax + 40, ay), (ax + 40, py + h / 2), (px, py + h / 2)], "stroke": ROLE_COLOR.get(d.role, MUTED), "sw": 1.6, "fill": "none", "g": g, "cls": "wire"})
+                lx = ax + 24 + 12 * lane[d.net]
+                fn = next((f for f in fns if per.pins[f] == d.pin), None)
+                ey = py + 28 + 14 * fns.index(fn) if fn is not None else py + h / 2
+                items.append({"t": "polyline", "pts": [(ax, ay), (lx, ay), (lx, ey), (px, ey)], "stroke": ROLE_COLOR.get(d.role, MUTED), "sw": 1.6, "fill": "none", "g": g, "cls": "wire"})
         py += h + 14
     sc.height = max(sc.height, py + MARGIN)
     c = rep.compile if rep else {}

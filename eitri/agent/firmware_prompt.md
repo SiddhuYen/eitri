@@ -16,6 +16,8 @@ For follow-up requests, edit the existing model (read it with `read_model` if yo
 - The checks are the specification: a compile error, a pin used differently from its declaration, an undeclared pin, a PWM role on a pin without PWM all fail. Fix the firmware; never delete, loosen or replace a check so that it passes, and never weaken the pinout (declaring a pin `inout`, a role it is not used as) to make the usage check pass.
 - eitri compiles; it never uploads. Never flash or upload to a board, never run `arduino-cli upload` or any other tool that talks to hardware, and do not offer to: the person flashes the board themselves from the sketch folder.
 - One role per physical pin. Keep the hardware serial pins free while Serial is in use (D0/D1 on the Uno and Nano, GPIO1/3 on the ESP32). On the ESP32 never use GPIO6-11, use GPIO34-39 only as inputs, avoid the strapping pins 0/2/5/12/15 for anything that must be in a known state at boot, and keep analog inputs on ADC1 (GPIO32-39) when Wi-Fi is on.
+- Name parts as what they are: a push button the user presses is `fw.button`, a switch the mechanism trips (an end stop) is `fw.limit_switch`, a knob is `fw.potentiometer`. The pinout drawing and the report show these names.
+- Power: a servo or a motor never runs from a board pin. Declare its supply (`power="external"` with its stall current, ground shared with the board); the power-budget check grades anything on the 5V / 3V3 pins.
 - Write firmware that keeps running: no blocking delays longer than the request allows, debounce switches, set every output's mode in setup().
 - The compile proves the code builds for the board; it does not prove the logic. Say so, and say what should be tested on the bench.
 

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ..diagram import FAIL, FONT, INK, MUTED, WARN, Scene, footer_from, scene_to_png, scene_to_svg, status_from, text_w   # noqa: F401
+from ..diagram import FAIL, FONT, INK, MUTED, WARN, Scene, footer_from, place_labels, scene_to_png, scene_to_svg, status_from, text_w   # noqa: F401
 from .model import Mechanism
 
 MARGIN = 28
@@ -29,10 +29,11 @@ class _View:
     scale: float
     cx: float                      # world centre
     cy: float
+    w: float = PANEL_W             # the panel's width (one view alone takes the width of two)
 
     def to(self, p) -> tuple[float, float]:
         u, v = float(p[self.ax[0]]), float(p[self.ax[1]])
-        return (self.x0 + PANEL_W / 2 + (u - self.cx) * self.scale, self.y0 + PANEL_H / 2 - (v - self.cy) * self.scale)
+        return (self.x0 + self.w / 2 + (u - self.cx) * self.scale, self.y0 + PANEL_H / 2 - (v - self.cy) * self.scale)
 
 
 def _bounds(points: list[np.ndarray], ax: tuple[int, int]) -> tuple[float, float, float, float]:
@@ -41,11 +42,52 @@ def _bounds(points: list[np.ndarray], ax: tuple[int, int]) -> tuple[float, float
     return min(us), max(us), min(vs), max(vs)
 
 
-def _view(name: str, ax: tuple[int, int], points: list[np.ndarray], x0: float, y0: float) -> _View:
+def _view(name: str, ax: tuple[int, int], points: list[np.ndarray], x0: float, y0: float, w: float = PANEL_W) -> _View:
     lo_u, hi_u, lo_v, hi_v = _bounds(points, ax)
     span_u, span_v = max(hi_u - lo_u, 1.0), max(hi_v - lo_v, 1.0)
-    scale = min((PANEL_W - 70) / span_u, (PANEL_H - 70) / span_v)
-    return _View(name, ax, x0, y0, scale, (lo_u + hi_u) / 2, (lo_v + hi_v) / 2)
+    scale = min((w - 70) / span_u, (PANEL_H - 70) / span_v)
+    return _View(name, ax, x0, y0, scale, (lo_u + hi_u) / 2, (lo_v + hi_v) / 2, w)
+
+
+PLANAR_TOL_MM = 0.5
+
+
+def views_needed(m: Mechanism, home) -> tuple[bool, bool]:
+    """(side, plan): which views add information. A mechanism whose points all lie in the X-Z plane and whose revolute joints all
+    turn about Y (prismatic ones slide in X-Z) is planar in the side view: its plan view is a line and adds nothing. One that lies
+    flat in the X-Y plane with Z axes is planar in the plan view. Anything else needs both."""
+    pts = list(home["joints"].values()) + list(home["ends"].values()) + [home["tip"]] + list(home["masses"].values())
+    axes = [(j, np.asarray(home["axes"][j.name], float)) for j in m.order()]
+    ys = [float(p[1]) for p in pts] or [0.0]
+    zs = [float(p[2]) for p in pts] or [0.0]
+
+    def planar(span, normal):
+        if span > PLANAR_TOL_MM:
+            return False
+        for j, a in axes:
+            if j.type == "revolute" and abs(abs(a[normal]) - 1.0) > 1e-6:
+                return False                                  # turns out of the plane
+            if j.type == "prismatic" and abs(a[normal]) > 1e-6:
+                return False                                  # slides out of the plane
+            if j.type not in ("revolute", "prismatic"):
+                return False
+        return True
+
+    if planar(max(ys) - min(ys), 1):
+        return True, False
+    if planar(max(zs) - min(zs), 2):
+        return False, True
+    return True, True
+
+
+def _around(x: float, y: float, r: float) -> list[tuple[float, float, str]]:
+    """Label positions around a symbol of radius r: right, left, above, below, then the diagonals, then further out."""
+    out = []
+    for k in (0, 10, 22):
+        out += [(x + r + 4 + k, y + 4, "start"), (x - r - 4 - k, y + 4, "end"), (x, y - r - 5 - k, "middle"), (x, y + r + 13 + k, "middle"),
+                (x + r + 3 + k, y - r - 2 - k, "start"), (x - r - 3 - k, y - r - 2 - k, "end"), (x + r + 3 + k, y + r + 11 + k, "start"),
+                (x - r - 3 - k, y + r + 11 + k, "end")]
+    return out
 
 
 def worst_pose(m: Mechanism, rep) -> dict[str, float] | None:
@@ -76,19 +118,30 @@ def build_scene(m: Mechanism, rep=None, status: dict[str, str] | None = None, fo
     if ghost:
         all_pts += list(ghost["joints"].values()) + list(ghost["ends"].values()) + [ghost["tip"]]
     top = MARGIN + 22
-    side = _view("side view  (X right, Z up)", (0, 2), all_pts, MARGIN, top)
-    plan = _view("plan view  (X right, Y up)", (0, 1), all_pts, MARGIN + PANEL_W + GAP, top)
+    want_side, want_plan = views_needed(m, home)
+    w = PANEL_W if (want_side and want_plan) else PANEL_W * 2 + GAP      # one view alone takes the whole width
+    views = []
+    if want_side:
+        views.append(_view("side view  (X right, Z up)" + ("  ·  planar: the plan view adds nothing" if not want_plan else ""), (0, 2), all_pts, MARGIN, top, w))
+    if want_plan:
+        views.append(_view("plan view  (X right, Y up)" + ("  ·  planar: the side view adds nothing" if not want_side else ""), (0, 1), all_pts,
+                           MARGIN + (w + GAP if want_side else 0), top, w))
+    side = views[0] if want_side else None
+    return _draw(m, rep, status, footer, title, home, ghost, views, side, order, top)
+
+
+def _draw(m, rep, status, footer, title, home, ghost, views, side, order, top) -> Scene:
     width = MARGIN * 2 + PANEL_W * 2 + GAP
     sc = Scene(width, top + PANEL_H + MARGIN)
     items = sc.items
     items.append({"t": "text", "x": MARGIN, "y": 22, "s": title or m.name, "size": 14, "weight": "700", "fill": INK, "g": "title"})
-    for v in (side, plan):
-        items.append({"t": "rect", "x": v.x0, "y": v.y0, "w": PANEL_W, "h": PANEL_H, "rx": 6, "fill": "#fbfcfd", "stroke": "#c5ccd6", "sw": 1, "g": "frame"})
+    for v in views:
+        items.append({"t": "rect", "x": v.x0, "y": v.y0, "w": v.w, "h": PANEL_H, "rx": 6, "fill": "#fbfcfd", "stroke": "#c5ccd6", "sw": 1, "g": "frame", "cls": "view"})
         items.append({"t": "text", "x": v.x0 + 10, "y": v.y0 + 16, "s": v.name, "size": FONT - 1, "fill": MUTED, "g": "frame"})
         # scale bar: a round length
-        bar = 10 ** np.floor(np.log10(max(PANEL_W / v.scale / 4, 1e-6)))
+        bar = 10 ** np.floor(np.log10(max(v.w / v.scale / 4, 1e-6)))
         for k in (5, 2, 1):
-            if bar * k * v.scale <= PANEL_W / 3:
+            if bar * k * v.scale <= v.w / 3:
                 bar *= k
                 break
         bx, by = v.x0 + 10, v.y0 + PANEL_H - 12
@@ -117,11 +170,12 @@ def build_scene(m: Mechanism, rep=None, status: dict[str, str] | None = None, fo
             a, b = v.to(np.zeros(3)), v.to(pts["ends"][m.base])
             items.append({"t": "line", "x1": a[0], "y1": a[1], "x2": b[0], "y2": b[1], "stroke": color, "sw": width, "g": f"link:{m.base}" if group else "ghost", "cls": "link", **({"dash": dash} if dash else {})})
 
-    for v in (side, plan):
+    for v in views:
         if ghost and v is side:
             chain(v, ghost, GHOST, LINK_W - 1.5, False, "6 5")
             tp = v.to(ghost["tip"])
-            items.append({"t": "text", "x": tp[0] + 8, "y": tp[1] + 4, "s": "worst-load pose", "size": FONT - 2, "fill": GHOST, "g": "ghost"})
+            items.append({"t": "text", "x": tp[0] + 8, "y": tp[1] + 4, "s": "worst-load pose", "size": FONT - 2, "fill": GHOST, "g": "ghost",
+                          "bg": "#fbfcfd", "cands": _around(tp[0], tp[1], 6)})
         chain(v, home, LINK, LINK_W, True)
         # masses
         for name, p in home["masses"].items():
@@ -129,7 +183,8 @@ def build_scene(m: Mechanism, rep=None, status: dict[str, str] | None = None, fo
             q = v.to(p)
             r = 4 + min(8, pm.mass_g ** 0.5 / 3)
             items.append({"t": "circle", "cx": q[0], "cy": q[1], "r": r, "fill": "#f08c00" if pm.kind == "payload" else "#8d99ae", "stroke": "#ffffff", "sw": 1, "g": f"mass:{name}", "cls": "mass"})
-            items.append({"t": "text", "x": q[0] + r + 3, "y": q[1] + 4, "s": f"{name} {pm.mass_g:g} g", "size": FONT - 2, "fill": MUTED, "g": f"mass:{name}"})
+            items.append({"t": "text", "x": q[0] + r + 3, "y": q[1] + 4, "s": f"{name} {pm.mass_g:g} g", "size": FONT - 2, "fill": MUTED, "g": f"mass:{name}",
+                          "bg": "#fbfcfd", "cands": _around(q[0], q[1], r)})
         # centres of mass
         for name, l in m.links.items():
             if l.mass_g > 0:
@@ -156,11 +211,16 @@ def build_scene(m: Mechanism, rep=None, status: dict[str, str] | None = None, fo
                     label += f"  {ji.required:.1f}/{ji.stall:.1f} {ji.load_unit}"
                 elif ji and ji.required is not None:
                     label += f"  {ji.required:.1f} {ji.load_unit}"
-                items.append({"t": "text", "x": q[0] + 10, "y": q[1] - 9, "s": label, "size": FONT - 1, "weight": "700", "fill": col, "g": g, "cls": "label"})
+                follow = []
                 if j.limit:
-                    items.append({"t": "text", "x": q[0] + 10, "y": q[1] + 17, "s": f"{j.limit[0]:g}..{j.limit[1]:g} {j.unit}", "size": FONT - 3, "fill": MUTED, "g": g})
+                    follow = [{"t": "text", "x": q[0] + 10, "y": q[1] + 3, "s": f"{j.limit[0]:g}..{j.limit[1]:g} {j.unit}", "size": FONT - 3, "fill": MUTED, "g": g,
+                               "bg": "#fbfcfd", "dx": 0, "dy": 12}]
+                items.append({"t": "text", "x": q[0] + 10, "y": q[1] - 9, "s": label, "size": FONT - 1, "weight": "700", "fill": col, "g": g, "cls": "label",
+                              "bg": "#fbfcfd", "cands": _around(q[0], q[1] - (6 if follow else 0), 8), "follow": follow})
+                items += follow
             else:
-                items.append({"t": "text", "x": q[0] + 10, "y": q[1] + 4, "s": j.name, "size": FONT - 2, "fill": col, "g": g, "cls": "label"})
+                items.append({"t": "text", "x": q[0] + 10, "y": q[1] + 4, "s": j.name, "size": FONT - 2, "fill": col, "g": g, "cls": "label",
+                              "bg": "#fbfcfd", "cands": _around(q[0], q[1], 8)})
             sc.nodes[j.name] = {"kind": "joint", "x": q[0], "y": q[1], "w": 14, "h": 14}
         # the tip
         tp = v.to(home["tip"])
@@ -174,7 +234,10 @@ def build_scene(m: Mechanism, rep=None, status: dict[str, str] | None = None, fo
             items.append({"t": "line", "x1": q[0] - 6, "y1": q[1] - 6, "x2": q[0] + 6, "y2": q[1] + 6, "stroke": col, "sw": 2, "g": g, "cls": "target"})
             items.append({"t": "line", "x1": q[0] - 6, "y1": q[1] + 6, "x2": q[0] + 6, "y2": q[1] - 6, "stroke": col, "sw": 2, "g": g, "cls": "target"})
             items.append({"t": "circle", "cx": q[0], "cy": q[1], "r": max(3.0, t.tol_mm * v.scale), "fill": "none", "stroke": col, "sw": 1, "dash": "2 2", "g": g, "cls": "target"})
-            items.append({"t": "text", "x": q[0] + 9, "y": q[1] + 4, "s": t.name + ("" if reached else " (missed)" if reached is False else ""), "size": FONT - 2, "fill": col, "g": g, "cls": "label"})
+            rr = max(6.0, t.tol_mm * v.scale)
+            items.append({"t": "text", "x": q[0] + 9, "y": q[1] + 4, "s": t.name + ("" if reached else " (missed)" if reached is False else ""), "size": FONT - 2, "fill": col, "g": g, "cls": "label",
+                          "bg": "#fbfcfd", "cands": _around(q[0], q[1], rr)})
+    place_labels(sc)
     if footer:
         y = sc.height + 6
         sc.footer_top = y
