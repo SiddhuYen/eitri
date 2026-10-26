@@ -352,3 +352,19 @@ def test_demo_passes_statically():
     lm = load_model(demo)
     fw = lm.build()
     assert analyze(fw, lm.verify(fw)).ok
+
+
+def test_a_pin_constant_the_pinout_does_not_define_fails():
+    fw = Firmware("f", board="uno")
+    fw.source("f.ino", '#include "eitri_pins.h"\nvoid setup(){ pinMode(PIN_NOPE, OUTPUT); }\nvoid loop(){}\n')
+    c = one(analyze(fw), "no undeclared pins")
+    assert c.severity == "fail" and "PIN_NOPE: not in the pinout" in c.measured
+    assert not [x for x in analyze(fw).checks if x.name == "pin calls resolved"]      # not mistaken for a pin held in a variable
+
+
+def test_a_declared_pin_written_as_a_number_is_a_warning():
+    fw = Firmware("g", board="uno")
+    fw.pin("D9", "out", "digital_out", net="X")
+    fw.source("g.ino", '#include "eitri_pins.h"\nvoid setup(){ pinMode(9, OUTPUT); }\nvoid loop(){ digitalWrite(PIN_X, HIGH); }\n')
+    c = one(analyze(fw), "pins named by their PIN_ constants")
+    assert c.severity == "warn" and "pinMode(9) at g.ino:2: write PIN_X" in c.measured

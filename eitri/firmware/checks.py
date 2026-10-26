@@ -166,16 +166,21 @@ def run_checks(fw: Firmware, compiled: CompileResult | None = None) -> tuple[lis
     by_symbol = {d.symbol: d for d in fw.pins}
     calls = scan_calls(fw)
     used: dict[int, list[dict]] = {}
-    undeclared, unresolved = [], []
+    undeclared, unresolved, literals = [], [], []
     for c in calls:
         d, cap, understood = _resolve_arg(c["arg"], fw, b, by_symbol)
         where = f"{c['file']}:{c['line']}"
+        if not understood and re.fullmatch(r"PIN_\w+", c["arg"]):        # a PIN_ constant the pinout does not define
+            undeclared.append(f"{c['fn']}({c['arg']}: not in the pinout, so eitri_pins.h has no such constant) at {where}")
+            continue
         if not understood:
             unresolved.append(f"{c['fn']}({c['arg']}) at {where}")
             continue
         if d is None:
             undeclared.append(f"{c['fn']}({c['arg']}" + (f" = {cap.name}" if cap else "") + f") at {where}")
             continue
+        if c["arg"] not in by_symbol:                                  # a declared pin written as a number: it will not follow the pinout
+            literals.append(f"{c['fn']}({c['arg']}) at {where}: write {d.symbol}")
         used.setdefault(id(d), []).append({**c, "where": where})
     for c in calls:
         pass
@@ -233,6 +238,10 @@ def run_checks(fw: Firmware, compiled: CompileResult | None = None) -> tuple[lis
                              "declare every pin in the pinout and use its PIN_ constant", []))
     elif calls:
         checks.append(_check("usage", "no undeclared pins", "pass", f"{len(calls) - len(unresolved)} pin call(s) resolved to declared pins"))
+    if literals:
+        checks.append(_check("usage", "pins named by their PIN_ constants", "warn",
+                             "a declared pin written as a number does not move when the pinout does: " + "; ".join(literals[:6]),
+                             "PIN_<NET> constants from eitri_pins.h", []))
     if unresolved:
         checks.append(_check("usage", "pin calls resolved", "warn", "not followed (a pin held in another variable): " + "; ".join(unresolved[:6]), "PIN_<NET> constants from eitri_pins.h", []))
 
