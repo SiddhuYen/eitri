@@ -27,7 +27,10 @@ LAMBDA_TUBE = 0.025          # ESTIMATE: Darcy friction factor, turbulent flow i
 FITTING_EQ_DIAMETERS = 30.0  # ESTIMATE: equivalent length per fitting, in bore diameters (Crane TP-410 order of magnitude for an elbow)
 S_PER_C = 5.0                # SMC: effective area S [mm^2] = 5 x C [L/(s·bar)]
 TUBE_B = 0.5                 # ESTIMATE: critical pressure ratio of tubing
-DEFAULT_C = {"valve": (1.0, 0.30), "regulator": (1.5, 0.35), "frl": (1.5, 0.35), "flow_control": (0.5, 0.30), "silencer": (3.0, 0.30)}   # ESTIMATE: small (1/8" - 1/4") hobby components
+# Defaults when a component gives no C, b (reported as estimated). The valve's is a small 5/2 valve of the SMC SY3000 size: SMC's
+# catalog gives C 1.1 dm^3/(s.bar), b 0.28-0.30 (smcworld SY series list; SY3000/5000 datasheet), rounded down to 1.0. The
+# others are ESTIMATEs for small (1/8" - 1/4") components with no datasheet behind them.
+DEFAULT_C = {"valve": (1.0, 0.30), "regulator": (1.5, 0.35), "frl": (1.5, 0.35), "flow_control": (0.5, 0.30), "silencer": (3.0, 0.30)}
 NPA = 0.1                    # N/mm^2 per bar
 
 
