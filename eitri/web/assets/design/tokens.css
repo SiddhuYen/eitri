@@ -1,0 +1,48 @@
+/* eitri design system: tokens. Dark by default; light follows prefers-color-scheme; data-theme="dark|light" on <html> forces one.
+   One accent per tool (--c-<tool>) and a neutral "all" for the combined workspace. [data-tool="<tool>"] on any element sets --tool,
+   which every component uses for its accent (focus rings, active rail item, primary buttons, chips). */
+:root {
+  color-scheme: dark;
+  --bg: #0b0e13; --bg-2: #0f1319; --panel: #12171e; --raised: #181e27; --raised-2: #1f2631;
+  --line: #222a35; --line-2: #2e3744; --fg: #e6e9ee; --fg-2: #c3c9d2; --muted: #8f99a7; --faint: #5c6675;
+  --ok: #3fb950; --ok-soft: rgba(63, 185, 80, .13); --bad: #f85149; --bad-soft: rgba(248, 81, 73, .13); --warn: #d29922; --warn-soft: rgba(210, 153, 34, .14);
+  --grid-dot: rgba(160, 175, 195, .16); --grid-line: rgba(160, 175, 195, .05); --vignette: rgba(11, 14, 19, .9);
+  --scrim: rgba(5, 8, 12, .66); --shadow-2: 0 8px 24px rgba(0, 0, 0, .38), 0 1px 3px rgba(0, 0, 0, .3);
+  --c-cad: #ff8a3d; --c-wires: #f472b6; --c-motion: #a78bfa; --c-pneumatics: #38bdf8; --c-firmware: #a3e635; --c-all: #e6e9ee;
+  --tool: var(--c-all); --tool-ink: #0b0e13;
+  --font-ui: "IBM Plex Sans", -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  --t-2xs: 10.5px; --t-xs: 11px; --t-sm: 12px; --t-md: 13px; --t-lg: 15px; --t-xl: 19px; --t-2xl: 24px; --t-hero: clamp(26px, 2.6vw, 34px);
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px;
+  --r1: 6px; --r2: 8px; --r3: 12px;
+  --top-h: 44px; --rail-w: 56px; --status-h: 26px; --inspector-w: 380px;
+  --ease: cubic-bezier(.2, .7, .2, 1);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg: #f3f4f6; --bg-2: #eceef1; --panel: #ffffff; --raised: #ffffff; --raised-2: #f4f5f7;
+    --line: #dfe2e7; --line-2: #c9ced6; --fg: #1a1e24; --fg-2: #353c46; --muted: #5d6673; --faint: #8c95a1;
+    --ok: #116329; --ok-soft: rgba(17, 99, 41, .1); --bad: #c0392b; --bad-soft: rgba(192, 57, 43, .09); --warn: #9a6700; --warn-soft: rgba(154, 103, 0, .1);
+    --grid-dot: rgba(40, 55, 75, .16); --grid-line: rgba(40, 55, 75, .05); --vignette: rgba(243, 244, 246, .92);
+    --scrim: rgba(20, 30, 45, .28); --shadow-2: 0 6px 20px rgba(20, 30, 45, .12), 0 1px 3px rgba(20, 30, 45, .08);
+    --c-cad: #c2410c; --c-wires: #be185d; --c-motion: #6d28d9; --c-pneumatics: #0369a1; --c-firmware: #4d7c0f; --c-all: #1a1e24;
+    --tool-ink: #ffffff;
+  }
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f3f4f6; --bg-2: #eceef1; --panel: #ffffff; --raised: #ffffff; --raised-2: #f4f5f7;
+  --line: #dfe2e7; --line-2: #c9ced6; --fg: #1a1e24; --fg-2: #353c46; --muted: #5d6673; --faint: #8c95a1;
+  --ok: #116329; --ok-soft: rgba(17, 99, 41, .1); --bad: #c0392b; --bad-soft: rgba(192, 57, 43, .09); --warn: #9a6700; --warn-soft: rgba(154, 103, 0, .1);
+  --grid-dot: rgba(40, 55, 75, .16); --grid-line: rgba(40, 55, 75, .05); --vignette: rgba(243, 244, 246, .92);
+  --scrim: rgba(20, 30, 45, .28); --shadow-2: 0 6px 20px rgba(20, 30, 45, .12), 0 1px 3px rgba(20, 30, 45, .08);
+  --c-cad: #c2410c; --c-wires: #be185d; --c-motion: #6d28d9; --c-pneumatics: #0369a1; --c-firmware: #4d7c0f; --c-all: #1a1e24;
+  --tool-ink: #ffffff;
+}
+[data-tool="cad"] { --tool: var(--c-cad); }
+[data-tool="wires"] { --tool: var(--c-wires); }
+[data-tool="motion"] { --tool: var(--c-motion); }
+[data-tool="pneumatics"] { --tool: var(--c-pneumatics); }
+[data-tool="firmware"] { --tool: var(--c-firmware); }
+[data-tool="all"], [data-tool="multi"] { --tool: var(--c-all); }
