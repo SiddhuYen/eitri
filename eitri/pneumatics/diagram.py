@@ -26,7 +26,7 @@ def _size(comp) -> tuple[float, float]:
     if k == "valve":
         return VBOX * len(comp.positions) + 36.0, 32.0
     if k == "frl":
-        return 76.0, 30.0
+        return (76.0 if comp.lubricator else 52.0), 30.0
     if k == "regulator":
         return 30.0, 30.0
     if k == "supply":
@@ -265,7 +265,7 @@ def build_scene(c: Circuit, rep=None, status: dict[str, str] | None = None, foot
         col = FAIL if st == "fail" else WARN if st == "warn" else TUBE
         g = f"tube:{t.name}"
         items.append({"t": "polyline", "pts": pts, "stroke": col, "sw": 2.2 if not st else 3.2, "fill": "none", "g": g, "cls": "tube"})
-        label = f"{t.name}  {t.id_mm:g} mm · {t.length_m:g} m"
+        label = f"{t.name}  {t.id_mm:g} mm ID · {t.length_m:g} m"
         items.append({"t": "text", "x": pts[0][0], "y": pts[0][1], "s": label, "size": FONT - 2, "fill": col if st else MUTED, "anchor": "middle",
                       "g": g, "cls": "label", "bg": "#ffffff", "cands": _beside(pts, label, FONT - 2)})
     for sname, pts in leaders:                                       # a silencer screwed onto its exhaust port
@@ -363,7 +363,7 @@ def _short(comp) -> str:
     if k == "valve":
         return f"{comp.cls} {comp.actuation}"
     if k == "frl":
-        return f"FRL {comp.set_bar:g} bar"
+        return f"{'FRL' if comp.lubricator else 'FR'} {comp.set_bar:g} bar"
     if k == "regulator":
         return f"{comp.set_bar:g} bar"
     if k == "supply":
@@ -462,7 +462,7 @@ def _symbol(items, comp, cx, cy, w, h, col, g) -> None:
     if k in ("frl", "regulator"):
         sq = 22.0
         x0 = cx - w / 2
-        cells = ["filter", "regulator", "lubricator"] if k == "frl" else ["regulator"]
+        cells = (["filter", "regulator"] + (["lubricator"] if comp.lubricator else [])) if k == "frl" else ["regulator"]   # draw what is fitted
         if k == "frl":
             items.append({"t": "rect", "x": x0 - 2, "y": cy - h / 2, "w": w + 4, "h": h, "rx": 0, "fill": "none", "stroke": col, "sw": 0.8, "dash": "3 2", "g": g, "cls": "sym"})
         gap = (w - sq * len(cells)) / (len(cells) + 1)

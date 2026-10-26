@@ -158,3 +158,20 @@ def test_a_manifold_tee_and_two_valves(monkeypatch):
             for (ka, lo1, hi1) in runs[a]:
                 for (kb, lo2, hi2) in runs[b]:
                     assert not (ka == kb and lo1 < hi2 - 0.5 and lo2 < hi1 - 0.5), f"{a} and {b} share a run on {ka}"
+
+
+def test_the_frl_symbol_draws_only_what_is_fitted():
+    from eitri.pneumatics import diagram
+    from eitri.pneumatics.report import analyze
+
+    def cells(lub):
+        c = cyl25()
+        c.components["FRL"].lubricator = lub
+        sc = diagram.build_scene(c, analyze(c))
+        frl = [it for it in sc.items if it.get("g") == "component:FRL" and it["t"] == "rect" and it.get("w") == 22.0]
+        titles = [it["s"] for it in sc.items if it["t"] == "text" and it.get("g") == "component:FRL"]
+        return len(frl), titles
+    n, titles = cells(False)                    # a filter-regulator: two squares, titled FR
+    assert n == 2 and any("FR 6 bar" in t for t in titles) and not any("FRL" in t.split("·")[-1] for t in titles)
+    n, titles = cells(True)                     # with a lubricator: three, titled FRL
+    assert n == 3 and any("FRL 6 bar" in t for t in titles)

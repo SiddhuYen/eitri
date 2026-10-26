@@ -308,7 +308,7 @@ def test_schematic_svg_and_png(tmp_path):
     ids = {(g.get("data-kind"), g.get("data-id")) for g in root.iter(ns + "g") if g.get("data-id")}
     assert {("component", "C1"), ("component", "V1"), ("component", "FRL"), ("component", "AIR"), ("component", "FC1"), ("tube", "T3"), ("component", "S_V1_R")} <= ids
     texts = " ".join("".join(t.itertext()) for t in root.iter(ns + "text"))
-    assert "C1 · D32x100" in texts and "V1 · 5/2 solenoid" in texts and "T3  6 mm · 1.5 m" in texts
+    assert "C1 · D32x100" in texts and "V1 · 5/2 solenoid" in texts and "T3  6 mm ID · 1.5 m" in texts
     assert sc.nodes["C1"]["kind"] == "component" and sc.nodes["AIR"]["y"] > sc.nodes["C1"]["y"]      # supply below the cylinder
     c.place("V1", 400, 300)
     assert diagram.build_scene(c, rep).nodes["V1"]["x"] == 400

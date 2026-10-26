@@ -31,7 +31,7 @@ export function createEditor(host, api) {
       }
       for (const t of data.tubes || []) {
         const r = el('div', { class: 'hnr pneu' });
-        r.append(el('b', {}, esc(t.name)), el('span', { class: 'hsub' }, `${esc(t.a)} → ${esc(t.b)} · ${t.id_mm} mm · ${t.length_m} m`), el('span', {}, ''));
+        r.append(el('b', {}, esc(t.name)), el('span', { class: 'hsub' }, `${esc(t.a)} → ${esc(t.b)} · ${t.id_mm} mm ID · ${t.length_m} m`), el('span', {}, ''));
         r.style.cursor = 'pointer'; r.onclick = () => h.pick({ kind: 'tube', id: t.name });
         list.appendChild(r);
       }

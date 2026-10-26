@@ -57,10 +57,10 @@ def bom(c: Circuit) -> list[dict]:
         tubes.setdefault(t.id_mm, []).append(t)
     for bore, ts in tubes.items():
         total = sum(t.length_m for t in ts)
-        add("tube", f"pneumatic tube {bore:g} mm bore", round(total * (1 + SERVICE_LOOP), 2), "m", part_number=ts[0].part_number, notes=f"{len(ts)} run(s), {total:g} m cut + {int(SERVICE_LOOP * 100)}% service loop")
+        add("tube", f"pneumatic tube, {bore:g} mm bore (ID)", round(total * (1 + SERVICE_LOOP), 2), "m", part_number=ts[0].part_number, notes=f"{len(ts)} run(s), {total:g} m cut + {int(SERVICE_LOOP * 100)}% service loop")
         n_fit = sum(t.fittings for t in ts)
         if n_fit:
-            add("fitting", f"push-in fitting for {bore:g} mm tube", n_fit, notes="one per tube end (and inline fittings as declared)")
+            add("fitting", f"push-in fitting for the {bore:g} mm-bore tube (fittings are sized by the tube's OD)", n_fit, notes="one per tube end (and inline fittings as declared)")
     for i, r in enumerate(rows, 1):
         r["item"] = i
     return rows

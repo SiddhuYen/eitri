@@ -117,6 +117,6 @@ def test_cli(tmp_path, capsys):
     assert capsys.readouterr().out.startswith("Pneumatic circuit 'Pusher'")
     assert main(["bom", str(pr.folder)]) == 0
     out = capsys.readouterr().out
-    assert out.startswith("# Bill of materials: Pusher") and "pneumatic tube 6 mm bore" in out
+    assert out.startswith("# Bill of materials: Pusher") and "pneumatic tube, 6 mm bore (ID)" in out and "sized by the tube's OD" in out
     assert main(["bom", str(pr.folder), "--csv"]) == 0
     assert capsys.readouterr().out.startswith("item,category,description")
