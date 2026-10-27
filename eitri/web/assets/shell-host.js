@@ -9,6 +9,12 @@
 //     railBottom: [{key, href, name, short, line, glyph}],   rail, bottom slot (hosted: Projects; OSS: the local project list)
 //     status(footer, info) {},                     status bar items, called after the page's own items are drawn (info: {tool, version, page})
 //     rail, palette, home, mark, brand             as in the design README (the OSS rail is the five tools, nothing else)
+//     place(state) {},                             the editor's place in the shell: {crumb: [label, href], railKey, toolName}, any of them, or
+//                                                  nothing for the default (the current model file's tool)
+//     switchModel(file) {},                        make another of the project's model files (state.models) current; may return a promise.
+//                                                  With it the editor shows a tab per file; without it, no tabs (the OSS default)
+//     models(state) {},                            optional: the files to show as tabs (default state.models; null or [] shows none)
+//     addModel(kind) {},                           optional: an "Add" control beside the tabs, one entry per kind the project has no file of
 //   }
 (function () {
   'use strict';

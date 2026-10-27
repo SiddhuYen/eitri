@@ -7,7 +7,11 @@ Layout:
       eitri.json         state: current model, revision counter, history
       DESIGN.md            the agent's running design notes (requirements, assumptions)
       out/                 latest outputs (<name>.step/.glb/.png, result.json)
-      revisions/NNN/       a copy of the model file + outputs after every successful build
+      revisions/NNN/       a copy of the model file + outputs after every build (and its result.json after a good one)
+
+A folder may hold several model files (a host's project with a CAD part, its wiring and its firmware); one is current
+(set_model_file). Revisions are numbered across the project, and each belongs to the file it was built from: the last
+good build, undo, restore and compare are per file.
 """
 from __future__ import annotations
 
@@ -135,6 +139,17 @@ class Project:
         self.state["model"] = filename
         self._save()
 
+    def model_files(self) -> list[str]:
+        """Every model file in the folder (a .py with a build()), the current one included even before it is written."""
+        names = {p.name for p in self.folder.glob("*.py") if _looks_like_model(p)}
+        names.add(self.model_path.name)
+        return sorted(names)
+
+    def revisions_of(self, model: str | None = None, history: list[Revision] | None = None) -> list[Revision]:
+        """The revisions built from one model file (default: the current one), oldest first."""
+        name = model or self.model_path.name
+        return [h for h in (self.history if history is None else history) if revision_file(h) == name]
+
     # -- building --------------------------------------------------------------
     def build(self, note: str = "", params: Mapping[str, str] | None = None, render: bool = True,
               formats: tuple[str, ...] = (), timeout: float = 240.0, **kw) -> BuildResult:
@@ -198,6 +213,8 @@ class Project:
                 shutil.copy2(src, dst)
                 outputs[fmt] = str(dst)
         (rev_dir / "summary.txt").write_text(result.summary or (result.error or ""), encoding="utf-8")
+        if result.ok and (self.out_dir / "result.json").is_file():     # its report, for when another model file is current
+            shutil.copy2(self.out_dir / "result.json", rev_dir / "result.json")
         rev = Revision(number=n, model=str(model_copy.relative_to(self.folder)), note=note, ok=result.ok,
                        created=time.time(), summary=(result.summary or "")[:4000], outputs=outputs,
                        params=dict(result.params))
@@ -216,10 +233,14 @@ class Project:
         diff, and per part the volume / bounding box before and after (added, removed, changed)."""
         import difflib
         from .model import load_model
-        ok_hist = [h for h in self.history if h.ok]
-        if not ok_hist:
+        hist = self.history
+        ok_hist = [h for h in hist if h.ok]
+        mine = [h for h in self.revisions_of(history=hist) if h.ok]   # the defaults: the current model file's builds
+        rb = (next((h for h in ok_hist if h.number == b), None) if b else None) or (mine[-1] if mine else None)
+        if rb is None:
             raise ValueError("no successful build to compare")
-        rb = next((h for h in ok_hist if h.number == b), ok_hist[-1]) if b else ok_hist[-1]
+        if not a:
+            ok_hist = [h for h in ok_hist if revision_file(h) == revision_file(rb)]
         earlier = [h for h in ok_hist if h.number < rb.number]
         ra = next((h for h in ok_hist if h.number == a), None) if a else (earlier[-1] if earlier else None)
         if ra is None:
@@ -274,9 +295,12 @@ class Project:
         return {"a": ra.number, "b": rb.number, "source_diff": diff, "parts": rows, "summary": "\n".join(lines)}
 
     def restore(self, number: int) -> Revision:
-        """Copy a revision's model file back as the current model (does not rebuild)."""
+        """Copy a revision's model file back as the current model (does not rebuild). Only a revision of the current model
+        file: another file's would overwrite this one with it."""
         for h in self.history:
             if h.number == number:
+                if revision_file(h) != self.model_path.name:
+                    raise ValueError(f"revision {number} is of {revision_file(h)}, not of the current model file {self.model_path.name}")
                 src = self.folder / h.model
                 if not src.exists():
                     raise FileNotFoundError(src)
@@ -284,9 +308,31 @@ class Project:
                 return h
         raise KeyError(f"no revision {number}")
 
-    def last_ok_revision(self, before: int | None = None) -> Revision | None:
-        hist = [h for h in self.history if h.ok and (before is None or h.number < before)]
+    def last_ok_revision(self, before: int | None = None, model: str | None = None) -> Revision | None:
+        """The newest good build of a model file (default: the current one), optionally before revision `before`."""
+        hist = [h for h in self.revisions_of(model) if h.ok and (before is None or h.number < before)]
         return hist[-1] if hist else None
+
+    def build_result(self, rev: Revision | None = None, history: list[Revision] | None = None) -> dict | None:
+        """What a good build wrote to result.json (default: the current file's last good build): out/result.json for the
+        newest file's last good build, as for a project with one file (a replay may rewrite it), else the revision's copy."""
+        hist = self.history if history is None else history
+        if rev is None:
+            mine = [h for h in self.revisions_of(history=hist) if h.ok]
+            rev = mine[-1] if mine else None
+        if rev is None:
+            return None
+        name = revision_file(rev)
+        newest_is_mine = bool(hist) and revision_file(hist[-1]) == name
+        last_mine = [h for h in hist if h.ok and revision_file(h) == name]
+        if newest_is_mine and last_mine and last_mine[-1].number == rev.number:
+            f = self.out_dir / "result.json"
+        else:
+            f = self.folder / Path(rev.model).parent / "result.json"
+        try:
+            return json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
 
     # -- parameters ------------------------------------------------------------
     def current_params(self) -> dict[str, Any]:
@@ -473,6 +519,11 @@ PARAMS = {}
 def build(p):
     return {}   # a blank design: sketch on the grid in the viewer, or describe a part to eitri
 '''
+
+
+def revision_file(rev: Revision) -> str:
+    """The model file a revision was built from (its copy in revisions/NNN/ keeps the name)."""
+    return Path(rev.model).name
 
 
 def _looks_like_model(path: Path) -> bool:

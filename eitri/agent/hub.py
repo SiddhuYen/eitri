@@ -315,10 +315,7 @@ class AgentHub:
         kind = self.project.kind
         if kind != "cad":                                   # wire:W3 / conn:J2 / joint:elbow ... from a domain editor
             from ..domains import module as domain_module
-            try:
-                result = json.loads((self.project.out_dir / "result.json").read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                result = {}
+            result = self.project.build_result() or {}       # the current model file's last good build
             rev = self.project.last_ok_revision()
             lines = domain_module(kind).describe_selection(result.get(kind) or {}, [str(x) for x in selection], (result.get("report") or {}).get("checks"))
             return f"Selected in the editor (revision {rev.number if rev else '?'}):\n{lines}\n\n{text}"

@@ -537,11 +537,12 @@ class ProjectPrinter:
         return self.project.out_dir / "print"
 
     def _report(self) -> dict | None:
-        res = self.project.out_dir / "result.json"
+        rev = self.project.last_ok_revision()            # the current model file's last good build, if the file has not changed since
         try:
-            if res.stat().st_mtime >= self.project.model_path.stat().st_mtime:
-                return json.loads(res.read_text(encoding="utf-8")).get("report")
-        except (OSError, json.JSONDecodeError):
+            data = self.project.build_result(rev) if rev else None
+            if data and rev.created >= self.project.model_path.stat().st_mtime:
+                return data.get("report")
+        except OSError:
             pass
         return None
 

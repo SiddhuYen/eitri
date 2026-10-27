@@ -19,6 +19,7 @@
 <eitri-topbar id="topbar" crumbs='[["eitri","/"],["cad"]]'></eitri-topbar>
 <eitri-rail id="rail" active="cad"></eitri-rail>
 <main id="main" class="canvas editor">
+  <div id="filebar" hidden><div id="filetabs" role="tablist" aria-label="Model files"></div><button id="fileadd" class="small" hidden><svg class="i sm" aria-hidden="true"><use href="assets/icons.svg#i-plus"/></svg>Add</button></div>
   <div id="canvas" class="viewport" tabindex="-1" aria-label="The model">
     <div id="tools">
       <button data-tool="select" class="on" title="Select (V, Esc): click a part, face or edge to select it · shift-click adds · click empty space to clear · drag to orbit"><svg class="i"><use href="assets/icons.svg#i-mouse-pointer-2"/></svg><span class="t-label">Select</span></button>
@@ -3591,16 +3592,18 @@ async function harnessTick(s) {
   document.body.classList.add('domain', s.kind);
   if (!harnessEd && !harnessLoading) {
     harnessLoading = true;
+    const gen = fileGen;
     try {
       const host = document.createElement('div'); host.id = 'hostharness'; $('canvas').appendChild(host);
       const m = await import(`./assets/${s.kind}.js`);
+      if (gen !== fileGen) { host.remove(); return; }           // another model file is current now: its own tick makes its editor
       harnessEd = (m.createHarnessEditor || m.createEditor)(host, { send: e => sendEdit(e), call: (path, body) => rebuildCall(path, body), hint: t => hint(t),
         diagramUrl: readOnly() ? 'download?fmt=svg' : null, readOnly: readOnly() });
       const insp = host.querySelector('.hinspector'); if (insp) $('domaininsp').appendChild(insp);   // the selection and the domain's tables, docked
       window.__harness = harnessEd; window.__domain = harnessEd;
       hideLoading();
-    } catch (e) { window.__eitriProblem('the ' + s.kind + ' editor could not start: ' + e.message); }
-    harnessLoading = false;
+    } catch (e) { if (gen === fileGen) window.__eitriProblem('the ' + s.kind + ' editor could not start: ' + e.message); }
+    finally { if (gen === fileGen) harnessLoading = false; }
   }
   if (harnessEd) harnessEd.update(s);
   if (s.ok_revision && s.ok_revision !== currentRev) {
@@ -3609,10 +3612,116 @@ async function harnessTick(s) {
     renderReport(); renderRevisions();
   }
 }
+// ---------------------------------------------------------------- a project with several model files (a host's CAD part, its wiring, its firmware)
+// state.models lists them and state.file is the current one; every build, check and export on the page is that file's. When the host
+// can switch files (EITRI_SHELL.switchModel(file); optionally models(state) to choose the tabs and addModel(kind)), a tab strip shows
+// one tab per file. Locally there is no switch function and no strip.
+let shownFile = null, shownKind = null, fileGen = 0, filesKey = '', switchingTo = null, addMenu = null;
+const shellCfg = () => window.EITRI_SHELL || {};
+function hostFiles(s) {
+  const c = shellCfg();
+  if (typeof c.switchModel !== 'function') return null;
+  const list = typeof c.models === 'function' ? c.models(s) : s.models;
+  return Array.isArray(list) && list.length ? list : null;
+}
+function checksSaid(m) {
+  const ck = m.checks || {}, n = (ck.pass || 0) + (ck.warn || 0) + (ck.fail || 0);
+  if (!m.ok_revision) return ['none', 'not built yet'];
+  if (ck.fail) return ['bad', `${ck.fail} of ${n} checks failing`];
+  if (ck.warn) return ['warn', `${n - ck.warn} of ${n} checks pass, ${ck.warn} warn`];
+  return n ? ['ok', n === 1 ? '1 check passes' : `${n} checks pass`] : ['none', 'built'];
+}
+function renderFiles() {
+  const s = state, list = hostFiles(s), c = shellCfg(), tools = window.eitriTools;
+  const canAdd = !!list && typeof c.addModel === 'function' && !readOnly();
+  const key = JSON.stringify([list, canAdd, switchingTo, s.file]);
+  if (key === filesKey) return;
+  filesKey = key;
+  const bar = $('filebar'), tabs = $('filetabs');
+  bar.hidden = !list;
+  if (!list) return;
+  const focused = tabs.contains(document.activeElement) ? document.activeElement.dataset.file : null;
+  tabs.textContent = '';
+  const perKind = {}; for (const m of list) perKind[m.kind] = (perKind[m.kind] || 0) + 1;
+  for (const m of list) {
+    const t = tools ? tools.ofKind(m.kind) : { key: 'cad', short: 'CAD' }, [verdict, said] = checksSaid(m), cur = m.file === s.file;
+    const b = document.createElement('button');
+    b.type = 'button'; b.setAttribute('role', 'tab'); b.dataset.file = m.file; b.dataset.tool = t.key;
+    b.setAttribute('aria-selected', String(cur)); b.tabIndex = cur ? 0 : -1; b.title = `${m.file} · ${said}`;
+    if (switchingTo === m.file) { b.classList.add('busy'); b.setAttribute('aria-busy', 'true'); }
+    const g = document.createElement('e-glyph'); g.setAttribute('name', t.key); b.appendChild(g);
+    const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = perKind[m.kind] > 1 ? `${t.short} · ${m.name || m.file}` : t.short; b.appendChild(nm);
+    const v = document.createElement('span'); v.className = 'v ' + verdict; v.setAttribute('aria-hidden', 'true'); b.appendChild(v);
+    const sr = document.createElement('span'); sr.className = 'vh'; sr.textContent = `, ${m.file}: ${said}`; b.appendChild(sr);
+    b.onclick = () => switchFile(m.file);
+    tabs.appendChild(b);
+  }
+  if (focused) { const f = [...tabs.children].find(x => x.dataset.file === focused); if (f) f.focus(); }
+  // Add: a file of a kind the project has none of (the host makes it, and usually makes it current)
+  const missing = canAdd && tools ? tools.list.filter(t => !list.some(m => m.kind === t.kind)) : [];
+  const add = $('fileadd'); add.hidden = !missing.length;
+  if (!missing.length) return;
+  if (!addMenu) {
+    addMenu = document.createElement('div'); addMenu.className = 'filemenu';
+    if (window.eitriShell) eitriShell.menu(add, addMenu);
+  }
+  addMenu.textContent = '';
+  const head = document.createElement('div'); head.className = 'head'; head.textContent = 'Add a model file'; addMenu.appendChild(head);
+  for (const t of missing) {
+    const it = document.createElement('button'); it.type = 'button'; it.setAttribute('role', 'menuitem'); it.dataset.tool = t.key; it.dataset.kind = t.kind;
+    const g = document.createElement('e-glyph'); g.setAttribute('name', t.key); it.appendChild(g);
+    const nm = document.createElement('span'); nm.textContent = t.name; it.appendChild(nm);
+    const ln = document.createElement('small'); ln.textContent = t.line; it.appendChild(ln);
+    it.onclick = () => addFile(t.kind);
+    addMenu.appendChild(it);
+  }
+}
+async function switchFile(file) {
+  if (switchingTo || file === state.file) return;
+  switchingTo = file; renderFiles();
+  try { await shellCfg().switchModel(file); }
+  catch (e) { toast('Could not open ' + file + ': ' + (e && e.message || e)); }
+  switchingTo = null; filesKey = '';
+  pollSoon(0);
+}
+async function addFile(kind) {
+  try { await shellCfg().addModel(kind); }
+  catch (e) { toast('Could not add the file: ' + (e && e.message || e)); }
+  filesKey = ''; pollSoon(0);
+}
+$('filetabs').addEventListener('keydown', ev => {                 // arrows move between the tabs; Enter or Space opens one
+  const tabs = [...$('filetabs').children], i = tabs.indexOf(document.activeElement);
+  if (i < 0) return;
+  const to = ev.key === 'ArrowRight' ? (i + 1) % tabs.length : ev.key === 'ArrowLeft' ? (i - 1 + tabs.length) % tabs.length : ev.key === 'Home' ? 0 : ev.key === 'End' ? tabs.length - 1 : -1;
+  if (to < 0) return;
+  ev.preventDefault(); tabs.forEach((t, k) => { t.tabIndex = k === to ? 0 : -1; }); tabs[to].focus();
+});
+// another file became current (a tab, the host, or the agent's use_model): nothing of the last file's view stays
+function resetForFile() {
+  fileGen++;
+  if (harnessEd && harnessEd.destroy) { try { harnessEd.destroy(); } catch (e) { /* it is gone either way */ } }
+  harnessEd = null; harnessLoading = false; window.__harness = null; window.__domain = null;
+  const host = $('hostharness'); if (host) host.remove();
+  $('domaininsp').textContent = '';
+  document.body.classList.remove('domain', 'harness', 'mechanism', 'pneumatics', 'firmware');
+  stopJointAnim(); if (cageMode) endCage(); cancelTool(true);
+  selected.clear(); hidden.clear(); hovered = null;
+  if (model) { scene.remove(model); model = null; }
+  topo = null; bbox = null; faceObjs = []; edgeObjs = []; partOf = new Map(); partMeshes = {}; partNodes = {};
+  for (const g of [interfGroup, bendGroup, camGroup, compareGroup, pendingGroup]) for (const o of [...g.children]) g.remove(o);
+  compareRev = null; deferredLoad = null; previewBusy = false;
+  currentRev = -1; loadedRev = -1; shownPreview = 0;
+  checkBase = null; checkNow = null; checkRev = null; checkVerdict = null; checksKey = ''; exportsKey = ''; shellKey = '';
+  hud.textContent = '';
+  renderSelection(); renderParts(); renderHoleLabels();
+}
 async function pollOnce() {
   {
     const s = await fetch('state.json').then(r => r.json());
     state = s;
+    const fileChanged = shownFile !== null && (s.file !== shownFile || s.kind !== shownKind);
+    if (fileChanged) resetForFile();
+    shownFile = s.file; shownKind = s.kind;
     const title = s.title || s.name || 'eitri'; if ($('title').textContent !== title) $('title').textContent = title;
     if (document.title !== title + ' · eitri') document.title = title + ' · eitri';
     const status = s.ok_revision ? `revision ${s.ok_revision}` + (s.last_ok ? '' : ' (latest build failed)') + (s.last_note ? ' — ' + s.last_note : '') : 'waiting for the first build…';
@@ -3644,7 +3753,8 @@ async function pollOnce() {
       if (ck !== checksKey) { const first = !checksKey; checksKey = ck; if (!first && s.ok_revision === currentRev) renderReport(); }
     }
     renderParams(); renderEdits(); renderJoints(); renderBom(); renderBends(); renderMfgParts();
-    renderDemo(); renderKeyNote(); renderEngine(); renderHosted(); renderShell();
+    renderDemo(); renderKeyNote(); renderEngine(); renderHosted(); renderShell(); renderFiles();
+    if (fileChanged) { showSheet(s); renderReport(); renderRevisions(); }
     if (!s.ok_revision || !(s.parts || []).length) hideLoading();
     if (!autoReplay && s.demo) { autoReplay = true; const q = new URLSearchParams(location.search); if (q.get('replay') === '1') { history.replaceState(null, '', location.pathname); if (!s.busy) startReplay(parseFloat(q.get('speed')) || 1); } }
   }
@@ -3694,18 +3804,30 @@ function showSheet(s) {
 // a download is offered when it can be had: CAD formats are written on demand, a domain's files by its last good build
 const available = x => !x.output || !!((state.outputs || {})[x.output]);
 let shellKey = '', exportsKey = '', checksKey = '';
+// where the page sits in the shell: by default the current file's tool (crumb, rail item, status bar name); a host's
+// EITRI_SHELL.place(state) -> {crumb: [label, href], railKey, toolName} replaces any of the three (a project of several files)
+function shellPlace(s) {
+  const c = shellCfg();
+  if (typeof c.place !== 'function') return null;
+  try { const p = c.place(s); return p && typeof p === 'object' ? p : null; } catch (e) { console.error('[eitri] EITRI_SHELL.place', e); return null; }
+}
 function renderShell() {
   const s = state, tool = window.eitriTools ? eitriTools.ofKind(s.kind) : { key: 'cad', name: 'eitri CAD', short: 'CAD' };
-  const title = s.title || s.name || 'eitri', home = s.home || (s.hosted ? '/' : null);
-  const key = JSON.stringify([tool.key, title, home]);
+  const title = s.title || s.name || 'eitri', home = s.home || (s.hosted ? '/' : null), place = shellPlace(s);
+  const key = JSON.stringify([tool.key, title, home, place]);
   if (key !== shellKey) {
     shellKey = key;
     document.body.dataset.tool = tool.key;
-    const crumbs = [['eitri', home || '/'], [tool.key, home ? (home + (home.endsWith('/') ? '' : '/') + '?tool=' + tool.key) : null], [title]];
-    $('topbar').setAttribute('crumbs', JSON.stringify(s.hosted || !home ? [['eitri', home || null], [tool.key], [title]] : crumbs));
-    $('rail').querySelectorAll('a[data-tool]').forEach(a => { if (a.dataset.tool === tool.key && !a.classList.contains('neutral')) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+    const pc = place && place.crumb != null ? (Array.isArray(place.crumb) ? place.crumb : [place.crumb]) : null;
+    const mid = pc ? [String(pc[0]), pc[1] || null] : s.hosted || !home ? [tool.key] : [tool.key, home + (home.endsWith('/') ? '' : '/') + '?tool=' + tool.key];
+    $('topbar').setAttribute('crumbs', JSON.stringify([['eitri', s.hosted || !home ? (home || null) : home], mid, [title]]));
+    const railKey = place && place.railKey != null ? String(place.railKey) : null;
+    $('rail').querySelectorAll('a[data-tool]').forEach(a => {
+      const on = railKey != null ? (a.dataset.key || a.dataset.tool) === railKey : a.dataset.tool === tool.key && !a.classList.contains('neutral');
+      if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+    });
     $('kindtag').textContent = tool.short; $('kindline').textContent = s.hosted && s.hosted.mode === 'share' ? 'shared · read only' : 'project';
-    $('st-tool').textContent = tool.name;
+    $('st-tool').textContent = place && place.toolName ? String(place.toolName) : tool.name;
   }
   $('st-version').textContent = s.version ? 'core v' + s.version : '';
   if (s.hosted && !(window.EITRI_SHELL || {}).host) {           // served by a host that did not fill the slots: no OSS-only defaults

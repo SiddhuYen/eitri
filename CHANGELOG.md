@@ -3,6 +3,39 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
+## 0.5.2: projects with several model files
+
+A host can show a project that holds several model files (a CAD part, its wiring, its firmware) in one editor, a tab per file. The
+open-source core never switches files on its own, so locally there are no tabs, and a project with one model file looks and answers
+exactly as in 0.5.1.
+
+### Changed
+
+- **Each model file keeps its own last good build.** `Project.last_ok_revision()` is the current file's (`model=` asks for another),
+  and `state.json`, the downloads, undo and redo, the Revisions panel and `compare()` follow the current file. After a switch the page
+  shows that file's own geometry or diagram, checks and exports, or no build if it has none: never the last file's build under the
+  new file's editor. `restore()` refuses a revision of another file (it would have copied that file's source over this one).
+  A good build keeps its `result.json` in `revisions/NNN/`.
+- **The editor follows the current file.** When it changes (a tab, the host, the agent's `use_model`), the page clears the last
+  file's view and draws the new one; before, going from CAD to a harness and back left the harness editor over the 3D view.
+
+### New for hosts
+
+- `state.json`: `file` (the current model file) and `models`, every model file in the project:
+  `[{file, kind, name, current, ok_revision, checks: {pass, warn, fail}}]`.
+- `EITRI_SHELL.switchModel(file)`: with it the editor shows a tab strip, one tab per file with the domain's glyph, accent and check
+  verdict; `models(state)` chooses the tabs, and `addModel(kind)` adds an "Add" menu of the kinds the project has no file of.
+- `EITRI_SHELL.place(state)` → `{crumb, railKey, toolName}`: the editor's crumb, marked rail item and status bar name, instead of the
+  current file's tool.
+- Python: `Project.model_files()`, `Project.revisions_of(model)`, `Project.build_result(rev)` (what a build wrote to result.json; read it
+  instead of `out/result.json`, which holds whichever file was built last). The domain editors have `destroy()`; rail items carry
+  `data-key`. All of it is in `eitri/web/assets/design/README.md`.
+
+### Breaking for hosts
+
+None: additive only. Existing `state.json` fields, routes, export formats, the build-extension API and the shell slots are unchanged,
+and for a project with one model file every field and route answers as in 0.5.1.
+
 ## 0.5.1: checks you can trust, with their sources
 
 Every number a check grades against now has a recorded source (a datasheet, a standard, or a vendor page), and several checks

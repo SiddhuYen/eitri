@@ -69,7 +69,8 @@ export function createHarnessEditor(host, api) {
     view = { k: Math.max(0.2, k), x: Math.max(24, (w - sc.width * k) / 2), y: Math.max(top, top + (h - top - 28 - sc.height * k) / 2) };
     setView();
   }
-  if (window.ResizeObserver) new ResizeObserver(() => { if (autoFit && fitted) fit(); }).observe(stage);
+  const gone = new AbortController();                               // destroy(): the page switched to another model file
+  const ro = window.ResizeObserver ? new ResizeObserver(() => { if (autoFit && fitted) fit(); }) : null; if (ro) ro.observe(stage);
   stage.addEventListener('wheel', ev => {
     ev.preventDefault(); autoFit = false;
     const r = stage.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top;
@@ -187,7 +188,7 @@ export function createHarnessEditor(host, api) {
     else if (ev.key === 'v' && !ev.metaKey && !ev.ctrlKey) setMode('select');
     else if (ev.key === 'w' && !ev.metaKey && !ev.ctrlKey) setMode('wire');
     else if (ev.key === 'f' && !ev.metaKey && !ev.ctrlKey) fit();
-  });
+  }, { signal: gone.signal });
   function setMode(m) {
     mode = m; wirePick = null; paintPick();
     root.querySelectorAll('.htools [data-t]').forEach(b => b.classList.toggle('on', b.dataset.t === m));
@@ -333,6 +334,8 @@ export function createHarnessEditor(host, api) {
 
   return {
     update,
+    /** Take the editor off the page: its diagram, its docked inspector, its key and resize listeners. */
+    destroy() { gone.abort(); if (ro) ro.disconnect(); root.remove(); inspector.remove(); },
     selected: () => sel,
     /** The selection as the ids the chat sends with a message ("wire:W3", "conn:J2", "splice:PDB"). */
     selectionIds: () => sel ? [`${sel.kind}:${sel.id}`] : [],

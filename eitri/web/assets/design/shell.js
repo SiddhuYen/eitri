@@ -71,7 +71,7 @@
 
   // ---------------------------------------------------------------- <eitri-rail>
   function railItem(it, active) {
-    var a = el('a', { href: it.href, 'data-tool': it.tool || it.key, 'class': it.neutral ? 'neutral' : null, 'aria-current': it.key === active ? 'page' : null });
+    var a = el('a', { href: it.href, 'data-tool': it.tool || it.key, 'data-key': it.key, 'class': it.neutral ? 'neutral' : null, 'aria-current': it.key === active ? 'page' : null });
     a.appendChild(glyph(it.glyph || it.key));
     var tip = el('span', { 'class': 'tip' });
     tip.appendChild(el('span', { 'class': 'long' }, it.name));

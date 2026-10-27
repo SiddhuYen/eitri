@@ -42,7 +42,8 @@ _HERE = Path(__file__).parent
 
 def _state(project: Project, hub=None, home: str | None = None) -> dict:
     revision, history = project.snapshot()
-    ok_hist = [h for h in history if h.ok]
+    mine = project.revisions_of(history=history)            # the current model file's builds (a project may hold several files)
+    ok_hist = [h for h in mine if h.ok]
     rev = ok_hist[-1] if ok_hist else None
     summary = ""
     parts: list[dict] = []
@@ -57,10 +58,9 @@ def _state(project: Project, hub=None, home: str | None = None) -> dict:
     forms: dict = {}
     if rev is not None:
         summary = rev.summary
-        result_file = project.out_dir / "result.json"
-        if result_file.exists():
+        data = project.build_result(rev, history)
+        if data is not None:
             try:
-                data = json.loads(result_file.read_text(encoding="utf-8"))
                 report = data.get("report")
                 edit_notes = data.get("edit_notes", [])
                 joints = data.get("joints", []) or []
@@ -75,11 +75,14 @@ def _state(project: Project, hub=None, home: str | None = None) -> dict:
         if report:
             parts = [{"name": p["name"], "color": p["color"], "volume": p["volume"], "size": p["size"],
                       "valid": p["valid"], "material": p.get("material"), "mass_g": p.get("mass_g"), "solids": p.get("solids"), "group": p.get("group") or groups.get(p["name"])} for p in report.get("parts", [])]
-    last = history[-1] if history else None
+    last = mine[-1] if mine else None
     from ..edits import describe
     edits = project.edits()
+    checks = (report or {}).get("checks", []) if report else []
     return {
         "name": project.name,
+        "file": project.model_path.name,
+        "models": _models(project, history, checks),
         "kind": project.kind,
         "harness": harness,
         "domain": domain,
@@ -93,7 +96,7 @@ def _state(project: Project, hub=None, home: str | None = None) -> dict:
         "configs": list(project.configs()),
         "parts": parts,
         "summary": summary,
-        "checks": (report or {}).get("checks", []) if report else [],
+        "checks": checks,
         "issues": ((report or {}).get("issues", []) + [i for p in (report or {}).get("parts", []) for i in p.get("issues", [])]) if report else [],
         "glb": f"view.glb?r={rev.number if rev else 0}",
         "topology": f"topology.json?r={rev.number if rev else 0}",
@@ -123,6 +126,54 @@ def _state(project: Project, hub=None, home: str | None = None) -> dict:
         "exports": _exports(project.kind),
         "version": _version(),
     }
+
+
+MODEL_ORDER = ("cad", "harness", "mechanism", "pneumatics", "firmware")
+_RESULT_CHECKS: dict[str, tuple[int, list]] = {}          # result.json path -> (mtime, its checks): read once per build
+
+
+def _models(project: Project, history, current_checks: list) -> list[dict]:
+    """Every model file of the project: the file, its domain, a name to show, its last good revision and that build's
+    check counts. One entry for a project with one model; a host may switch between several (EITRI_SHELL.switchModel)."""
+    from ..domains import kind_of_source
+    current = project.model_path.name
+    out = []
+    for f in project.model_files():
+        try:
+            code = (project.folder / f).read_text(encoding="utf-8")
+        except OSError:
+            code = None
+        ok = [h for h in project.revisions_of(f, history) if h.ok]
+        rev = ok[-1] if ok else None
+        checks = current_checks if f == current else _checks_of(project, rev, history)
+        out.append({"file": f, "kind": kind_of_source(code), "name": Path(f).stem, "current": f == current,
+                    "ok_revision": rev.number if rev else 0, "checks": _tally(checks)})
+    out.sort(key=lambda m: (MODEL_ORDER.index(m["kind"]) if m["kind"] in MODEL_ORDER else len(MODEL_ORDER), m["file"]))
+    return out
+
+
+def _checks_of(project: Project, rev, history) -> list:
+    if rev is None:
+        return []
+    f = project.folder / Path(rev.model).parent / "result.json"
+    try:
+        mtime = f.stat().st_mtime_ns
+    except OSError:
+        return ((project.build_result(rev, history) or {}).get("report") or {}).get("checks", [])
+    hit = _RESULT_CHECKS.get(str(f))
+    if hit is None or hit[0] != mtime:
+        hit = (mtime, ((project.build_result(rev, history) or {}).get("report") or {}).get("checks", []))
+        if len(_RESULT_CHECKS) > 256:
+            _RESULT_CHECKS.clear()
+        _RESULT_CHECKS[str(f)] = hit
+    return hit[1]
+
+
+def _tally(checks: list) -> dict:
+    """pass / warn / fail, counted as the editor counts them (a warning is a check that passed with severity "warn")."""
+    fail = sum(1 for c in checks if not c.get("ok"))
+    warn = sum(1 for c in checks if c.get("ok") and c.get("severity") == "warn")
+    return {"pass": len(checks) - fail - warn, "warn": warn, "fail": fail}
 
 
 def _exports(kind: str | None) -> list[dict]:
@@ -449,7 +500,7 @@ def make_handler(project: Project, lock: threading.Lock, hub=None, home: str | N
                     self._json({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, 400)
             elif path == "/revisions":
                 self._json([{"number": h.number, "ok": h.ok, "note": h.note, "created": h.created,
-                             "summary": (h.summary or "").splitlines()[0] if h.summary else ""} for h in project.history])
+                             "summary": (h.summary or "").splitlines()[0] if h.summary else ""} for h in project.revisions_of()])
             else:
                 self._send(404, b"not found", "text/plain")
 
@@ -533,6 +584,9 @@ def make_handler(project: Project, lock: threading.Lock, hub=None, home: str | N
                     self._json({"ok": res.ok, "error": res.error, "state": _st()})
                 elif path == "/redo":
                     with lock:
+                        mine = {h.number for h in project.revisions_of()}
+                        while redo_stack and redo_stack[-1] not in mine:   # undone in another model file
+                            redo_stack.pop()
                         if not redo_stack:
                             self._json({"ok": False, "error": "nothing to redo"})
                             return
@@ -545,7 +599,7 @@ def make_handler(project: Project, lock: threading.Lock, hub=None, home: str | N
                         prev = project.last_ok_revision(before=project.revision)
                         # the previous *different* model: skip revisions whose file equals the current one
                         current = project.read_model()
-                        hist = [h for h in project.history if h.ok]
+                        hist = [h for h in project.revisions_of() if h.ok]
                         target = None
                         for h in reversed(hist[:-1] if hist and hist[-1].ok else hist):
                             f = project.folder / h.model

@@ -3,7 +3,7 @@
 The look and the shell every eitri page shares: tokens, fonts, glyphs, and the app chrome (top bar, rail, status bar, panels, buttons,
 ⌘K palette, menus, dialogs). Plain CSS and plain JavaScript (custom elements), no build step and no dependencies. eitri.io uses it, and the
 open-source core is meant to copy this folder as it is, so it knows nothing about accounts, projects storage, usage, or the
-combined workspace. A host fills those in through three slots (see "Slots").
+combined workspace. A host fills those in through slots (see "Slots").
 
 ```
 design/
@@ -118,7 +118,12 @@ window.EITRI_SHELL = {
   rail: [{ key: 'cad', href: '/cad', name: 'eitri CAD', short: 'CAD', line: 'Mechanical parts' }, …],  // sep: true draws a divider after one
   railBottom: [{ key: 'projects', href: '/projects', name: 'Projects', short: 'Projects', line: '…', glyph: 'projects' }],
   palette: function () { return [{ g: 'Tools', n: 'eitri CAD', d: 'Mechanical parts', href: '/cad', tool: 'cad' }, …]; },
-  topbarEnd: function (end, topbar) { /* fill the top bar's right-hand slot (end), after the page is parsed */ }
+  topbarEnd: function (end, topbar) { /* fill the top bar's right-hand slot (end), after the page is parsed */ },
+  // the editor only (eitri/viewer/index.html), all optional:
+  place: function (state) { return { crumb: ['workspace', '/workspace'], railKey: 'all', toolName: 'eitri workspace' }; },
+  switchModel: function (file) { /* make state.models[i].file current; may return a promise */ },
+  models: function (state) { return state.models; },     // the files to show as tabs (null or [] for none)
+  addModel: function (kind) { /* make a new model file of this kind ("cad", "harness", ...) */ }
 };
 ```
 
@@ -130,7 +135,45 @@ window.EITRI_SHELL = {
 | Rail, bottom (`railBottom`) | Projects (`/app`) | the local project list |
 | Status bar (the `<footer class="status">` items) | tool, "free", core version, links | tool, core version, project path, build state |
 
+| The editor's place (`place(state)`) | its own crumb, rail item and status name for a project of several files | none: the current file's tool |
+| Model file tabs (`switchModel(file)`, `models(state)`, `addModel(kind)`) | a tab per file, and Add | none: no tabs |
+
 The palette is a host function for the same reason: eitri.io adds Projects, Account and Sign out when someone is signed in.
+
+### The editor's place: `place(state)`
+
+By default the editor takes its crumb (`eitri / <tool> / <title>`), the rail item it marks and the status bar's tool name (`#st-tool`)
+from the current model file's kind. `place(state)` is called with the editor's state on every redraw; when it returns an object, each
+field it has replaces one of the three, and when it returns nothing the defaults stay:
+
+- `crumb`: `[label, href]` (or a label) for the middle crumb;
+- `railKey`: the `key` of the rail item to mark `aria-current="page"`, a bottom item included (every other is cleared);
+- `toolName`: the status bar's tool name.
+
+The page keeps the current file's accent (`data-tool`), its inspector and its Export menu: only where the page sits changes.
+
+### More than one model file: tabs
+
+A project folder may hold several model files (a CAD part, its wiring, its firmware): `state.models` lists them and `state.file` is
+the current one. Every build, check and export the editor shows is the current file's: each file keeps its own last good build, so a
+file that has never been built shows no build, whatever the others have. The open-source core never switches files itself (the agent's
+host does, or `Project.set_model_file`), so locally there are no tabs and a project with one file looks as it always did.
+
+When the host defines `switchModel(file)`, the editor draws a tab strip across the top of the canvas: one tab per file (`models(state)`,
+default `state.models`), with the domain's glyph, its short name (and the file's name when two files share a kind), a dot for its last
+build's checks (pass, warn, fail, or a ring before the first build) and the counts in its accessible name. It is a `role="tablist"`:
+arrows move, Enter or Space opens. Opening a tab calls `switchModel(file)`, waits for it, then reloads the state; the page then clears
+the last file's view (its geometry, domain editor, selection, checks baseline) and draws the new file's. The page follows a switch made
+anywhere else too (the agent's `use_model`, another tab): it watches `state.file`. With `addModel(kind)` an "Add" button beside the tabs
+opens a menu of the kinds the project has no file of; choosing one calls `addModel(kind)`, and the page follows whatever file the host
+makes current.
+
+`state.json` fields for this (additive: every other field is unchanged, and is the current file's):
+
+| Field | |
+|---|---|
+| `file` | the current model file, e.g. `"wiring.py"` |
+| `models` | `[{file, kind, name, current, ok_revision, checks: {pass, warn, fail}}]`, in the tools' order (CAD, wires, motion, pneumatics, firmware), then by file: `kind` is the domain (`"cad"`, `"harness"`, `"mechanism"`, `"pneumatics"`, `"firmware"`), `name` the file without `.py`, `ok_revision` its last good build (0: none), `checks` that build's verdicts counted as the editor counts them. One entry for a project with one file |
 
 ## Accessibility
 

@@ -43,7 +43,8 @@ export function createDiagramEditor(host, api, spec) {
     view = { k: Math.max(0.2, k), x: Math.max(24, (w - sc.width * k) / 2), y: Math.max(top, top + (h - top - 28 - sc.height * k) / 2) };
     setView();
   }
-  if (window.ResizeObserver) new ResizeObserver(() => { if (autoFit && fitted) fit(); }).observe(stage);
+  const gone = new AbortController();                               // destroy(): the page switched to another model file
+  const ro = window.ResizeObserver ? new ResizeObserver(() => { if (autoFit && fitted) fit(); }) : null; if (ro) ro.observe(stage);
   stage.addEventListener('wheel', ev => {
     ev.preventDefault(); autoFit = false;
     const r = stage.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top;
@@ -113,7 +114,7 @@ export function createDiagramEditor(host, api, spec) {
     if (ev.key === 'Escape') { if (mode !== (spec.tools || [{ t: 'select' }])[0].t) setMode((spec.tools || [{ t: 'select' }])[0].t); else select(null); }
     else if (ev.key === 'f' && !ev.metaKey && !ev.ctrlKey) fit();
     else if (spec.onKey) spec.onKey(ev, sel, h);
-  });
+  }, { signal: gone.signal });
   function setMode(m) { mode = m; root.querySelectorAll('.htools [data-t]').forEach(b => b.classList.toggle('on', b.dataset.t === m)); stage.classList.toggle('wiring', m !== (spec.tools || [{ t: 'select' }])[0].t); if (spec.onTool) spec.onTool(m); defaultHint(); }
   root.querySelectorAll('.htools [data-t]').forEach(b => b.onclick = () => setMode(b.dataset.t));
 
@@ -154,6 +155,8 @@ export function createDiagramEditor(host, api, spec) {
 
   return {
     update, fit, select, mode: () => mode, setMode,
+    /** Take the editor off the page: its diagram, its docked inspector, its key and resize listeners. */
+    destroy() { gone.abort(); if (ro) ro.disconnect(); root.remove(); inspector.remove(); },
     selected: () => sel,
     selectionIds: () => sel ? [`${sel.kind}:${sel.id}`] : [],
     highlight(check) { if (hl && hl.name === check.name) hl = null; else hl = { name: check.name, refs: check.refs || [] }; if (hl) { sel = null; paintSelection(); renderInspector(true); } paintHighlight(); return !!hl; },
