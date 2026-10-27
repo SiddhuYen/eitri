@@ -3,6 +3,18 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
+## 0.5.3: the share card follows the file
+
+### Fixed
+
+- **The read-only share page's "Shared view" card follows the current file.** It was drawn once, from the first file, and never
+  again: on a share page with several model files, a Wires tab still offered the CAD file's STEP / STL downloads. The card is now
+  drawn again whenever the file or its available downloads change.
+
+### Breaking for hosts
+
+None. `state.json`, routes, export formats, the build-extension API and the shell slots are unchanged.
+
 ## 0.5.2: projects with several model files
 
 A host can show a project that holds several model files (a CAD part, its wiring, its firmware) in one editor, a tab per file. The

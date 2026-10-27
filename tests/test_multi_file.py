@@ -306,3 +306,53 @@ def test_no_tabs_without_a_host_switch(tmp_path):
                 assert "wires" in page.inner_text("eitri-topbar .crumbs") and page.inner_text("#st-tool") == "eitri Wires"
             assert not errors, errors
             b.close()
+
+
+class _SharePolicy:
+    """A read-only share page, as eitri-hosted serves one (GET only)."""
+    def host_ok(self, handler, post):
+        return not post
+
+    def blocked(self, method, path):
+        return None if method == "GET" else "This is a read-only shared view."
+
+    def state(self, st):
+        st = dict(st)
+        st["hosted"] = {"mode": "share", "public_id": "abc", "owner": "maker", "title": "Rig", "domain": "multi"}
+        st.update(has_agent=False, home="/", needs_key=False, demo=None)
+        return st
+
+
+def test_the_share_card_follows_the_file(tmp_path):
+    """The read-only share card lists the current file's downloads: after a switch to the harness it never offers STEP/STL."""
+    import threading
+    from http.server import ThreadingHTTPServer
+    from eitri.viewer.server import make_handler
+    pr = _three(tmp_path / "rig")
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(pr, threading.Lock(), policy=_SharePolicy()))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{srv.server_address[1]}/"
+    fmts = "() => [...document.querySelectorAll('#sharedl a')].map(a => a.dataset.fmt)"
+    try:
+        with pw.sync_playwright() as p:
+            b, page, errors = _open(p, url, HOST % "", pr)
+            page.wait_for_function(CAD_READY, timeout=60000)
+            page.wait_for_selector("#sharedl a[data-fmt='step']", timeout=30000)
+            assert {"step", "stl"} <= set(page.evaluate(fmts)) and "Orbit it" in page.inner_text("#sharebar .d")
+            page.click("#filetabs [data-file='wiring.py']")
+            _wait_file(page, "wiring.py", "() => document.body.classList.contains('harness') && !!document.querySelector('#sharedl a[data-fmt=svg]')")
+            shown = page.evaluate(fmts)
+            assert "svg" in shown and not {"step", "stl", "3mf", "glb"} & set(shown), shown
+            assert "diagram" in page.inner_text("#sharebar .d") and page.locator("#sharebar .t").count() == 1
+            # each link downloads this file's build
+            assert page.get_attribute("#sharedl a[data-fmt='svg']", "href") == "download?fmt=svg"
+            page.click("#filetabs [data-file='fw.py']")
+            _wait_file(page, "fw.py", "() => document.body.classList.contains('firmware') && !!document.querySelector('#sharedl a[data-fmt=header]')")
+            assert not {"step", "stl", "bom"} & set(page.evaluate(fmts))
+            page.click("#filetabs [data-file='model.py']")
+            _wait_file(page, "model.py", "() => !!document.querySelector('#sharedl a[data-fmt=step]')")
+            assert "header" not in page.evaluate(fmts)
+            assert not errors, errors
+            b.close()
+    finally:
+        srv.shutdown()

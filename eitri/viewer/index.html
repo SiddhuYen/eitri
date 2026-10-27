@@ -3904,7 +3904,9 @@ function renderHosted() {
   const h = state.hosted; if (!h) return;
   if (h.mode === 'share') {
     document.body.classList.add('readonly');
-    const b = $('sharebar'); if (b.dataset.done) return; b.dataset.done = '1';
+    // drawn again when the file (a host's tab) or what it can download changes: a Wires file never offers the CAD formats
+    const b = $('sharebar'), key = JSON.stringify([state.file, (state.exports || []).filter(available).map(x => x.fmt)]);
+    if (b.dataset.key === key) return; b.dataset.key = key;
     b.innerHTML = `<div class="t">${icon('eye')}<span>Shared view</span><span class="badge neutral" style="margin-left:auto">read only</span></div>
       <div class="d"></div><div class="acts" id="sharedl"></div>
       <div class="stats"><a href="/">Design your own with eitri</a></div>`;
