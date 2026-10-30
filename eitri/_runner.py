@@ -146,7 +146,11 @@ def main(argv: list[str] | None = None) -> int:
             if not note.ok:
                 report.issues.append(f"direct edit failed: {note.line()}")
         result["report"] = report.to_dict()
+        from .anchors import describe as describe_anchors, to_json as anchors_json
+        result["anchors"] = anchors_json(parts)
         summary = summarize(report) + (f"\n{export_note}" if export_note else "")
+        if result["anchors"]:
+            summary += "\n" + describe_anchors(result["anchors"])
         if model.edit_notes:
             summary += "\nDirect edits (EDITS in the model file):\n" + "\n".join("  " + n.line() for n in model.edit_notes)
         result["summary"] = summary

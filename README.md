@@ -560,7 +560,10 @@ def verify(parts, p, c):
 
 `build(p)` returns build123d geometry (or a dict of named parts for an
 assembly). `verify()` is where the agent encodes what you asked for; its results
-show up in every report and in the viewer. You can edit the file yourself at any
+show up in every report and in the viewer. `anchor("UNO", at=(50, 0, 10),
+z=(0, 0, 1), part="base")` inside `build()` declares a named point or frame of
+the model (where a board, a connector or a probe goes); anchors are recorded with
+the build and listed in its report, and a host can place things at them. You can edit the file yourself at any
 time - `eitri build` rebuilds it. Builds run in a warm worker process (the CAD
 kernel is imported once per session): a parameter change rebuilds in about half
 a second, a crash or runaway model just restarts the worker, and nothing is

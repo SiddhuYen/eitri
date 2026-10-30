@@ -39,6 +39,7 @@ class BuildResult:
     domain: dict | None = None             # any non-CAD domain's editor data (result[kind])
     extensions: dict = field(default_factory=dict)    # data returned by build extensions, by name (eitri.extensions)
     guards: dict = field(default_factory=dict)        # what the extensions declared this build, for the project to remember
+    anchors: list = field(default_factory=list)       # a CAD model's named points and frames (eitri.anchors), as plain data
 
     @property
     def image(self) -> str | None:
@@ -111,7 +112,7 @@ def build_model(model_path: str | Path, out_dir: str | Path, params: Mapping[str
             kind=kind, harness_report=data.get("report") if is_harness else None,
             harness=data.get("harness") if is_harness else None,
             domain_report=data.get("report") if kind != "cad" else None, domain=data.get(kind) if kind != "cad" else None,
-            extensions=data.get("extensions") or {}, guards=data.get("guards") or {},
+            extensions=data.get("extensions") or {}, guards=data.get("guards") or {}, anchors=data.get("anchors") or [],
         )
     # the runner died before writing a result (crash, import error)
     tail = (stderr or stdout).strip().splitlines()[-25:]

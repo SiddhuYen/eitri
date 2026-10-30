@@ -506,7 +506,12 @@ class LoadedModel:
         if cached is not None and cached[0] == key:
             parts, reused = _clone_parts(cached[1]), True
         else:
-            result = self.module.build(self.params)
+            from . import anchors as _anchors
+            _anchors.begin()                          # anchor() calls inside build(p) are collected onto the Parts
+            try:
+                result = self.module.build(self.params)
+            finally:
+                declared = _anchors.take()
             from .domains import kind_of_object, module as domain_module
             kind = kind_of_object(result)
             if kind:                                  # another domain (harness, mechanism, ...), with its own direct edits
@@ -515,6 +520,7 @@ class LoadedModel:
                     dom.apply_layout(result, getattr(self.module, "LAYOUT", None))
                 return result, dom.apply_edits(result, self.edits), False
             parts = result if isinstance(result, Parts) else normalize_result(result, self.path.stem)
+            parts.anchors = declared
             if key:                                   # the kept copy is never handed out
                 _BASE_BUILDS[str(self.path)] = (key, _clone_parts(parts))
         mats = getattr(self.module, "MATERIALS", None) or {}

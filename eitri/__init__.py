@@ -11,5 +11,6 @@ from build123d import *  # noqa: F401,F403  - bare build123d names for model fil
 from .model import PALETTE, Params, Parts, Checker, srgb  # noqa: F401
 from .measure import *  # noqa: F401,F403
 from .lib import *  # noqa: F401,F403
+from .anchors import anchor  # noqa: F401  - named points and frames of the model (eitri.anchors)
 
-__version__ = "0.5.3"
+__version__ = "0.5.4"

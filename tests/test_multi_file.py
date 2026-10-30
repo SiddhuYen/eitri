@@ -356,3 +356,50 @@ def test_the_share_card_follows_the_file(tmp_path):
             b.close()
     finally:
         srv.shutdown()
+
+
+# ---------------------------------------------------------------- a host's own view beside the file tabs, and the viewer for its scripts
+VIEWS = """, views: function (s) { return [{ key: 'assembly', name: 'Assembly', short: 'Assembly', glyph: 'all', active: !!window.__viewOn, verdict: 'ok', said: '3 checks pass' }]; },
+  switchView: function (key) { window.__viewOn = key === 'assembly'; (window.__views = window.__views || []).push(key); }"""
+
+
+def test_a_host_view_beside_the_file_tabs_and_the_viewer_api(tmp_path):
+    pr = _three(tmp_path / "rig")
+    url = start_viewer(pr)
+    with pw.sync_playwright() as p:
+        b, page, errors = _open(p, url, HOST % VIEWS, pr)
+        page.wait_for_selector("#filetabs [role=tab]")
+        page.wait_for_function(CAD_READY, timeout=60000)
+        tabs = page.eval_on_selector_all("#filetabs [role=tab]", "els => els.map(t => [t.dataset.file || 'view:' + t.dataset.view, t.dataset.tool, t.querySelector('.nm').textContent, t.getAttribute('aria-selected'), t.tabIndex])")
+        assert tabs == [["model.py", "cad", "CAD", "true", 0], ["wiring.py", "wires", "Wires", "false", -1], ["fw.py", "firmware", "Firmware", "false", -1],
+                        ["view:assembly", "all", "Assembly", "false", -1]]
+        assert page.get_attribute("#filetabs [data-view='assembly'] .v", "class") == "v ok" and "3 checks pass" in page.get_attribute("#filetabs [data-view='assembly']", "title")
+        # the viewer for a host's scripts: the scene, its own group in it, the loaded parts, framing, labels, and the state event
+        assert page.evaluate("() => Object.keys(window.eitriViewer).sort()") == sorted(["scene", "renderer", "controls", "hostGroup", "camera", "model", "bbox", "radius", "centre", "parts", "meshes", "rev", "state", "busy", "interacting", "setView", "frame", "addLabel", "clearLabels", "labelLayer", "light", "hideLoading"])
+        assert page.evaluate("() => window.eitriViewer.hostGroup.parent === window.eitriViewer.scene && Object.keys(window.eitriViewer.parts())") == ["model"]
+        page.evaluate("""() => { window.__st = []; document.addEventListener('eitri:state', e => window.__st.push(e.detail.file)); window.__md = []; document.addEventListener('eitri:model', e => window.__md.push(e.detail));
+                               const V = window.eitriViewer, b = V.bbox(); V.frame(b, 'hero', 3, false); window.__cam = V.camera().position.toArray(); V.addLabel(b.max, 'here', 'host'); }""")
+        page.wait_for_function("() => window.__st.length > 0 && window.__st[0] === 'model.py'", timeout=10000)
+        assert page.evaluate("() => window.__cam[0] > 0 && window.__cam[1] < 0 && window.__cam[2] > 0") and page.inner_text("#labels .lbl.host") == "here"
+        # opening the view tells the host, selects no file tab, and marks the body; the host redraws the strip with 'eitri:views'
+        page.click("#filetabs [data-view='assembly']")
+        page.wait_for_function("() => document.body.dataset.view === 'assembly'")
+        assert page.evaluate("() => window.__views") == ["assembly"]
+        assert page.eval_on_selector_all("#filetabs [role=tab][aria-selected=true]", "els => els.map(t => t.dataset.view || t.dataset.file)") == ["assembly"]
+        assert page.evaluate("() => window.__eitri_debug().faces") > 0                 # the page keeps the current file underneath
+        page.evaluate("() => { window.__viewOn = false; document.dispatchEvent(new Event('eitri:views')); }")
+        page.wait_for_function("() => !document.body.dataset.view")
+        assert page.eval_on_selector_all("#filetabs [role=tab][aria-selected=true]", "els => els.map(t => t.dataset.file)") == ["model.py"]
+        # a file tab while the view is up: the view is closed first, then the file switched; the model event says the geometry went
+        page.click("#filetabs [data-view='assembly']")
+        page.wait_for_function("() => document.body.dataset.view === 'assembly'")
+        page.click("#filetabs [data-file='wiring.py']")
+        _wait_file(page, "wiring.py", "() => document.body.classList.contains('harness') && !!document.querySelector('#hedit .hpaper svg g[data-id]')")
+        assert page.evaluate("() => window.__views") == ["assembly", "assembly", None] and not page.evaluate("() => document.body.dataset.view")
+        assert page.evaluate("() => window.__md.some(d => d.rev === null && d.parts.length === 0)")
+        # the keyboard moves onto the view tab like any other
+        page.focus("#filetabs [data-file='fw.py']")
+        page.keyboard.press("ArrowRight")
+        assert page.evaluate("() => document.activeElement.dataset.view") == "assembly"
+        assert not errors, errors
+        b.close()

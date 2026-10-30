@@ -123,7 +123,9 @@ window.EITRI_SHELL = {
   place: function (state) { return { crumb: ['workspace', '/workspace'], railKey: 'all', toolName: 'eitri workspace' }; },
   switchModel: function (file) { /* make state.models[i].file current; may return a promise */ },
   models: function (state) { return state.models; },     // the files to show as tabs (null or [] for none)
-  addModel: function (kind) { /* make a new model file of this kind ("cad", "harness", ...) */ }
+  addModel: function (kind) { /* make a new model file of this kind ("cad", "harness", ...) */ },
+  views: function (state) { return [{ key: 'assembly', name: 'Assembly', glyph: 'all', active: false }]; },   // the host's own views, as tabs
+  switchView: function (key) { /* show that view (null: back to the files); may return a promise */ }
 };
 ```
 
@@ -137,6 +139,7 @@ window.EITRI_SHELL = {
 
 | The editor's place (`place(state)`) | its own crumb, rail item and status name for a project of several files | none: the current file's tool |
 | Model file tabs (`switchModel(file)`, `models(state)`, `addModel(kind)`) | a tab per file, and Add | none: no tabs |
+| The host's own views (`views(state)`, `switchView(key)`) and the viewer (`window.eitriViewer`) | an Assembly view of a combined project, drawn into the editor's scene | none |
 
 The palette is a host function for the same reason: eitri.io adds Projects, Account and Sign out when someone is signed in.
 
@@ -174,6 +177,28 @@ makes current.
 |---|---|
 | `file` | the current model file, e.g. `"wiring.py"` |
 | `models` | `[{file, kind, name, current, ok_revision, checks: {pass, warn, fail}}]`, in the tools' order (CAD, wires, motion, pneumatics, firmware), then by file: `kind` is the domain (`"cad"`, `"harness"`, `"mechanism"`, `"pneumatics"`, `"firmware"`), `name` the file without `.py`, `ok_revision` its last good build (0: none), `checks` that build's verdicts counted as the editor counts them. One entry for a project with one file |
+
+### A host's own view beside the tabs: `views(state)` and `switchView(key)`
+
+A host may have something to show that is not one model file (eitri.io shows a combined project's domains together). `views(state)`
+returns `[{key, name, short, glyph, active, verdict, said}]` and the editor draws one tab per entry after the file tabs: `glyph` names
+the `<e-glyph>` (default `all`), `short` is the tab's text (default `name`), `verdict` (`ok`, `warn`, `bad`, `none`) draws the dot and
+`said` goes in the title and the accessible name. Opening one calls `switchView(key)`; the editor then selects no file tab and sets
+`<body data-view="key">`, and keeps drawing the current file underneath (its geometry, domain editor and inspector are untouched: the
+host decides what covers them). A file tab while a view is up calls `switchView(null)` first, then `switchModel`. The host dispatches
+`eitri:views` on the document when its views changed (a view opened or closed by its own controls), and the strip is drawn again.
+
+### The viewer for a host's scripts: `window.eitriViewer`
+
+The editor exposes its three.js scene to scripts the host adds to the page, so a host can draw into the 3D view instead of making
+another: `scene`, `renderer`, `controls`, `camera()` (the one in use), `hostGroup` (a group of the host's own in the scene, kept across
+model loads; everything else is the page's), `model()` (the loaded GLB), `parts()` (part name -> node) and `meshes()`, `bbox()`,
+`centre()`, `radius()`, `rev()`, `state()`, `busy()`, `interacting()`, `setView(name)`, `frame(box, dir, factor, animate)` (look at a
+`Box3` from `iso`, `hero`, `front`, `top`, ... or a direction), `addLabel(pos, text, cls)` / `clearLabels(cls)` (the HTML labels
+layer, `labelLayer`), `light()` and `hideLoading()`. Three events on the document carry what the page learns: `eitri:state` (every
+state poll; `detail` is the state), `eitri:events` (every agent poll; `detail` is the `events` answer, with `busy`, `live` and
+`running`) and `eitri:model` (geometry placed or cleared; `detail` is `{rev, preview, parts}`, `rev` null when cleared). three.js
+itself is on the page's import map (`import * as THREE from 'three'` in a module script gets the same instance).
 
 ## Accessibility
 

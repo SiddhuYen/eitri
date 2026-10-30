@@ -50,6 +50,7 @@ def _state(project: Project, hub=None, home: str | None = None) -> dict:
     report = None
     edit_notes: list = []
     joints: list = []
+    anchors: list = []
     harness: dict | None = None
     domain: dict | None = None
     groups: dict = {}
@@ -64,6 +65,7 @@ def _state(project: Project, hub=None, home: str | None = None) -> dict:
                 report = data.get("report")
                 edit_notes = data.get("edit_notes", [])
                 joints = data.get("joints", []) or []
+                anchors = data.get("anchors", []) or []
                 groups = data.get("groups", {}) or {}
                 sheets = data.get("sheets", {}) or {}
                 flats = data.get("flats", {}) or {}
@@ -101,6 +103,7 @@ def _state(project: Project, hub=None, home: str | None = None) -> dict:
         "glb": f"view.glb?r={rev.number if rev else 0}",
         "topology": f"topology.json?r={rev.number if rev else 0}",
         "outputs": rev.outputs if rev else {},
+        "anchors": anchors,
         "edits": [{"index": i, "description": describe(e), "op": e.get("op"), "part": e.get("part")} for i, e in enumerate(edits)],
         "edit_notes": edit_notes,
         "edits_full": edits,

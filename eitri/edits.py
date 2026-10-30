@@ -1993,6 +1993,7 @@ def apply_edits(parts: Parts, edits: Sequence[dict]) -> tuple[Parts, list[EditNo
                         break
         current[pname] = _with(part, face_colors=fmap)
     out = Parts([current[n] for n in order])
+    out.anchors = list(getattr(parts, "anchors", None) or [])         # declared in build(p): a direct edit never moves one
     out.joints = [j.to_dict() for j in joints]
     out.sheets = {n: st.to_dict() for n, st in sheets.items() if n in current}
     out.sheet_states = {n: st for n, st in sheets.items() if n in current}

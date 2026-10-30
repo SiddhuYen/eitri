@@ -3,6 +3,28 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
+## 0.5.4: anchors, and a host's own view in the editor
+
+### New
+
+- **Anchors.** A CAD model declares named points and frames inside `build(p)`: `anchor("UNO", at=(50, 0, 10), z=(0, 0, 1),
+  x=(1, 0, 0), part="base")` (a `Location` gives all three; `part` says which part it belongs to, so it moves with it). They are
+  recorded with the build (`result.json` and `state.json` `anchors`: `[{name, at, z, x, part}]`, `BuildResult.anchors`), listed in
+  the build summary so the agent sees them, kept across direct edits, and documented in the agent's model contract. The core
+  attaches no meaning to a name: a host places purchased parts, connectors or probes at them.
+
+### New for hosts
+
+- `EITRI_SHELL.views(state)` and `switchView(key)`: a host's own views as tabs beside the model-file tabs (`<body data-view>` while
+  one is up; `eitri:views` on the document redraws the strip).
+- `window.eitriViewer`: the editor's three.js scene for a host's scripts (scene, camera, controls, a `hostGroup` of the host's own,
+  the parts by name, labels, framing), with `eitri:state`, `eitri:events` and `eitri:model` events on the document. See
+  `eitri/web/assets/design/README.md`.
+
+### Breaking for hosts
+
+None. `state.json` gains `anchors`; existing fields, routes, export formats, the build-extension API and the shell slots are unchanged.
+
 ## 0.5.3: the share card follows the file
 
 ### Fixed

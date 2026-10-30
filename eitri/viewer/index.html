@@ -488,7 +488,9 @@ function placeModel(gltf, url, rev, newTopo, opts) {
         if (changed.length) flashParts(changed);
       }
     }
+    document.dispatchEvent(new CustomEvent('eitri:model', { detail: { rev, preview: isPreviewRev(rev), parts: Object.keys(partNodes) } }));   // a host drawing into the scene
 }
+function isPreviewRev(rev) { return typeof rev === 'string'; }
 
 // ---------------------------------------------------------------- picking
 const raycaster = new THREE.Raycaster();
@@ -3505,6 +3507,7 @@ async function pollEvents() {
       const r = await fetch('events?since=' + lastEvent).then(r => r.json());
       if (r.last < lastEvent) { $('messages').innerHTML = ''; lastEvent = 0; }       // a restarted server with a fresh log
       for (const ev of r.events || []) { renderEvent(ev); lastEvent = ev.id; }
+      document.dispatchEvent(new CustomEvent('eitri:events', { detail: r }));         // a host's own view of the turn (the same answer)
       const busy = !!r.busy;
       if (busy && !agentBusy) { lcHiddenTurn = false; }           // a new turn
       agentBusy = busy;
@@ -3631,20 +3634,30 @@ function checksSaid(m) {
   if (ck.warn) return ['warn', `${n - ck.warn} of ${n} checks pass, ${ck.warn} warn`];
   return n ? ['ok', n === 1 ? '1 check passes' : `${n} checks pass`] : ['none', 'built'];
 }
+// A host may add views beside the file tabs: EITRI_SHELL.views(state) -> [{key, name, short, glyph, active, verdict, said}] and
+// switchView(key) (null: back to the current file). While a view is active no file tab is selected and <body data-view="key"> is set;
+// what the view shows is the host's (the page keeps drawing the current file underneath). The host dispatches 'eitri:views' on the
+// document when its views changed, so the strip is drawn again.
+function hostViews(s) {
+  const c = shellCfg();
+  if (typeof c.views !== 'function' || typeof c.switchView !== 'function') return [];
+  try { const v = c.views(s); return Array.isArray(v) ? v.filter(x => x && x.key) : []; } catch (e) { console.error('[eitri] EITRI_SHELL.views', e); return []; }
+}
 function renderFiles() {
-  const s = state, list = hostFiles(s), c = shellCfg(), tools = window.eitriTools;
+  const s = state, list = hostFiles(s), c = shellCfg(), tools = window.eitriTools, views = hostViews(s), active = views.find(v => v.active) || null;
   const canAdd = !!list && typeof c.addModel === 'function' && !readOnly();
-  const key = JSON.stringify([list, canAdd, switchingTo, s.file]);
+  const key = JSON.stringify([list, canAdd, switchingTo, s.file, views]);
   if (key === filesKey) return;
   filesKey = key;
   const bar = $('filebar'), tabs = $('filetabs');
-  bar.hidden = !list;
-  if (!list) return;
-  const focused = tabs.contains(document.activeElement) ? document.activeElement.dataset.file : null;
+  bar.hidden = !list && !views.length;
+  if (active) document.body.dataset.view = active.key; else delete document.body.dataset.view;
+  if (!list && !views.length) return;
+  const focused = tabs.contains(document.activeElement) ? (document.activeElement.dataset.file || 'view:' + document.activeElement.dataset.view) : null;
   tabs.textContent = '';
-  const perKind = {}; for (const m of list) perKind[m.kind] = (perKind[m.kind] || 0) + 1;
-  for (const m of list) {
-    const t = tools ? tools.ofKind(m.kind) : { key: 'cad', short: 'CAD' }, [verdict, said] = checksSaid(m), cur = m.file === s.file;
+  const perKind = {}; for (const m of list || []) perKind[m.kind] = (perKind[m.kind] || 0) + 1;
+  for (const m of list || []) {
+    const t = tools ? tools.ofKind(m.kind) : { key: 'cad', short: 'CAD' }, [verdict, said] = checksSaid(m), cur = !active && m.file === s.file;
     const b = document.createElement('button');
     b.type = 'button'; b.setAttribute('role', 'tab'); b.dataset.file = m.file; b.dataset.tool = t.key;
     b.setAttribute('aria-selected', String(cur)); b.tabIndex = cur ? 0 : -1; b.title = `${m.file} · ${said}`;
@@ -3656,7 +3669,18 @@ function renderFiles() {
     b.onclick = () => switchFile(m.file);
     tabs.appendChild(b);
   }
-  if (focused) { const f = [...tabs.children].find(x => x.dataset.file === focused); if (f) f.focus(); }
+  for (const vw of views) {
+    const b = document.createElement('button'), cur = vw === active;
+    b.type = 'button'; b.setAttribute('role', 'tab'); b.dataset.view = vw.key; b.dataset.tool = String(vw.glyph || 'all'); b.classList.add('view');
+    b.setAttribute('aria-selected', String(cur)); b.tabIndex = cur ? 0 : -1; b.title = String(vw.name || vw.key) + (vw.said ? ' · ' + vw.said : '');
+    const g = document.createElement('e-glyph'); g.setAttribute('name', String(vw.glyph || 'all')); b.appendChild(g);
+    const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = String(vw.short || vw.name || vw.key); b.appendChild(nm);
+    if (vw.verdict) { const v = document.createElement('span'); v.className = 'v ' + String(vw.verdict); v.setAttribute('aria-hidden', 'true'); b.appendChild(v); }
+    if (vw.said) { const sr = document.createElement('span'); sr.className = 'vh'; sr.textContent = ', ' + String(vw.said); b.appendChild(sr); }
+    b.onclick = () => switchView(vw.key);
+    tabs.appendChild(b);
+  }
+  if (focused) { const f = [...tabs.children].find(x => (x.dataset.file || 'view:' + x.dataset.view) === focused); if (f) f.focus(); }
   // Add: a file of a kind the project has none of (the host makes it, and usually makes it current)
   const missing = canAdd && tools ? tools.list.filter(t => !list.some(m => m.kind === t.kind)) : [];
   const add = $('fileadd'); add.hidden = !missing.length;
@@ -3677,13 +3701,23 @@ function renderFiles() {
   }
 }
 async function switchFile(file) {
-  if (switchingTo || file === state.file) return;
+  if (switchingTo) return;
+  if (hostViews(state).some(v => v.active)) await switchView(null);     // a file tab while a host view is up: back to the files first
+  if (file === state.file) return;
   switchingTo = file; renderFiles();
   try { await shellCfg().switchModel(file); }
   catch (e) { toast('Could not open ' + file + ': ' + (e && e.message || e)); }
   switchingTo = null; filesKey = '';
   pollSoon(0);
 }
+async function switchView(key) {
+  const c = shellCfg();
+  if (typeof c.switchView !== 'function') return;
+  try { await c.switchView(key); }
+  catch (e) { toast('Could not open the view: ' + (e && e.message || e)); }
+  filesKey = ''; renderFiles();
+}
+document.addEventListener('eitri:views', () => { filesKey = ''; renderFiles(); });
 async function addFile(kind) {
   try { await shellCfg().addModel(kind); }
   catch (e) { toast('Could not add the file: ' + (e && e.message || e)); }
@@ -3714,6 +3748,7 @@ function resetForFile() {
   checkBase = null; checkNow = null; checkRev = null; checkVerdict = null; checksKey = ''; exportsKey = ''; shellKey = '';
   hud.textContent = '';
   renderSelection(); renderParts(); renderHoleLabels();
+  document.dispatchEvent(new CustomEvent('eitri:model', { detail: { rev: null, preview: false, parts: [] } }));
 }
 async function pollOnce() {
   {
@@ -3756,11 +3791,33 @@ async function pollOnce() {
     renderDemo(); renderKeyNote(); renderEngine(); renderHosted(); renderShell(); renderFiles();
     if (fileChanged) { showSheet(s); renderReport(); renderRevisions(); }
     if (!s.ok_revision || !(s.parts || []).length) hideLoading();
+    document.dispatchEvent(new CustomEvent('eitri:state', { detail: s }));             // a host follows the state without a second poll
     if (!autoReplay && s.demo) { autoReplay = true; const q = new URLSearchParams(location.search); if (q.get('replay') === '1') { history.replaceState(null, '', location.pathname); if (!s.busy) startReplay(parseFloat(q.get('speed')) || 1); } }
   }
 }
 setTool('select'); poll(); pollEvents();
 
+// The viewer for a host's own scripts (eitri-hosted draws a combined project's other domains into this scene): the scene, camera and
+// controls themselves, the loaded parts by name, labels, and framing. `hostGroup` is a group of the host's own, kept across model
+// loads; everything else the page owns. Events on the document: 'eitri:state' (every state poll, detail: the state), 'eitri:events'
+// (every agent poll, detail: the events answer), 'eitri:model' (geometry placed or cleared, detail: {rev, preview, parts}).
+const hostGroup = new THREE.Group(); hostGroup.name = 'host'; scene.add(hostGroup);
+function frameBox(box, dir, factor, animate) {         // look at a box (a three.js Box3) from a named or given direction
+  if (!box || box.isEmpty()) return;
+  const c = box.getCenter(new THREE.Vector3()), r = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1e-3), d = r * (factor || 3.5);
+  const dirs = { iso: [1, -1, 0.8], hero: [1.2, -1, 0.65], front: [0, -1, 0], top: [0, 0, 1], right: [1, 0, 0], back: [0, 1, 0], left: [-1, 0, 0] };
+  const v = new THREE.Vector3(...(dirs[dir] || dir || dirs.iso)).normalize().multiplyScalar(d), pos = c.clone().add(v);
+  const up = dir === 'top' ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1);
+  if (camera === ortho) { ortho.userData.dist = d; setOrthoFrustum(); ortho.zoom = 1; ortho.updateProjectionMatrix(); }
+  persp.near = Math.max(r / 200, 0.01); persp.far = Math.max(persp.far, r * 200); persp.updateProjectionMatrix();
+  if (animate === false || navigator.webdriver) { viewTween = null; camera.position.copy(pos); camera.up.copy(up); controls.target.copy(c); controls.update(); return; }
+  viewTween = { p0: camera.position.clone(), t0: controls.target.clone(), u0: camera.up.clone(), p1: pos, t1: c.clone(), u1: up, start: performance.now(), dur: 420 };
+}
+window.eitriViewer = {
+  scene, renderer, controls, hostGroup, camera: () => camera, model: () => model, bbox: () => bbox, radius: () => radius, centre: () => centre,
+  parts: () => partNodes, meshes: () => partMeshes, rev: () => loadedRev, state: () => state, busy: () => agentBusy, interacting,
+  setView, frame: frameBox, addLabel, clearLabels, labelLayer: $('labels'), light: isLight, hideLoading,
+};
 window.__eitri_debug = () => ({ rev: loadedRev, bbox: bbox ? { min: bbox.min.toArray(), max: bbox.max.toArray() } : null, centre: centre.toArray(), radius,
   camera: camera.position.toArray(), target: controls.target.toArray(), ortho: camera === ortho, tool, sketch: sketch ? { face: sketch.face.id, sub: sketch.sub, profile: sketch.profile, shape: sketch.simple, model: sketch.model, status: sketch.status, profiles: sketch.preview.profiles, open: sketch.preview.open, distance: sketch.distance, mode: sketch.mode, sel: [...sketch.sel], editing: sketch.editing ? sketch.editing.index : null, busy: skBusy || !!skQueue } : null,
   meshes: Object.fromEntries(Object.entries(partMeshes).map(([k, v]) => [k, v.filter(o => o.isMesh).length])), faces: faceObjs.length, edges: edgeObjs.length, selected: [...selected], topo: !!topo, drag: drag ? { kind: drag.kind, value: drag.value } : null,
