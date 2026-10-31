@@ -144,7 +144,7 @@
     <div><h1 id="pagetitle">Projects</h1><p class="sub" id="pagesub">on this computer</p></div>
     <span class="sp"></span>
     <div class="who">
-      <span class="pill" id="agent" title="Checking whether Claude can run"><span class="spinner"></span><span>checking Claude…</span></span>
+      <span class="pill" id="agent" title="Checking whether eitri can run"><span class="spinner"></span><span>checking eitri…</span></span>
       <button class="btn sm" id="keybtn" hidden></button>
       <div class="pop" id="keymenu" role="dialog" aria-label="API key" hidden></div>
     </div>
@@ -154,7 +154,7 @@
   <section class="panel setup" id="setup" aria-labelledby="setuptitle" hidden>
     <button class="btn ghost icon sm setup-close" id="setupclose" title="Close (you can add a key later from the top of this page)" aria-label="Close"><svg class="i"><use href="assets/icons.svg#i-x"/></svg></button>
     <div class="setup-main">
-      <div class="eyebrow"><span class="pill-tag">Connect Claude</span></div>
+      <div class="eyebrow"><span class="pill-tag">Connect eitri</span></div>
       <h2 id="setuptitle">Add your Anthropic API key</h2>
       <p>eitri uses your own Anthropic API key, and requests are billed to it. Create one in the
         <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">Anthropic Console <svg class="i"><use href="assets/icons.svg#i-external-link"/></svg></a>,
@@ -199,7 +199,7 @@
     <div class="empty-state" id="empty" style="display:none">
       <e-glyph name="all" id="emptyglyph"></e-glyph>
       <h3 id="emptytitle">No projects yet</h3>
-      <p id="emptytext">Describe a design above and Claude will build it, or start from a blank model or a file you already have.</p>
+      <p id="emptytext">Describe a design above and eitri will build it, or start from a blank model or a file you already have.</p>
       <div class="acts">
         <button class="btn" id="emptydescribe"><svg class="i"><use href="assets/icons.svg#i-sparkles"/></svg>Describe a design</button>
         <button class="btn" id="emptyblank"><svg class="i"><use href="assets/icons.svg#i-plus"/></svg>Start blank</button>
@@ -213,7 +213,7 @@
     <div class="sect-h"><div>
       <span class="eyebrow">Recorded sessions · no key needed</span>
       <h2 id="demotitle">Try it without a key</h2>
-      <p class="sub">Replays of real Claude sessions, recorded end to end: the chat, every tool call and each model revision, played back in the editor. No API calls, nothing billed.</p>
+      <p class="sub">Replays of real eitri sessions, recorded end to end: the chat, every tool call and each model revision, played back in the editor. No API calls, nothing billed.</p>
     </div></div>
     <div class="cards demos" id="demos"></div>
   </section>
@@ -222,7 +222,7 @@
   <!-- describe a new design -->
   <section class="panel compose" id="compose" aria-labelledby="composetitle">
     <h2 id="composetitle">What do you want to make?</h2>
-    <p class="lede" id="composelede">Describe a part, a harness, a mechanism, an air circuit or firmware. Claude builds it, checks it, and you keep editing it by hand or by chat.</p>
+    <p class="lede" id="composelede">Describe a part, a harness, a mechanism, an air circuit or firmware. eitri builds it, checks it, and you keep editing it by hand or by chat.</p>
     <div class="prompt">
       <label class="sr" for="prompt">Describe the design</label>
       <textarea id="prompt" placeholder="e.g. a wall bracket for a 25 mm pipe, 3 mm thick, two M4 screw holes 40 mm apart"></textarea>
@@ -230,7 +230,7 @@
         <span class="hint" id="kbdhint"><kbd id="modkey">Ctrl</kbd><kbd>Enter</kbd>&nbsp;creates</span>
         <span class="keyneed" id="keyneed" hidden><svg class="i sm"><use href="assets/icons.svg#i-key-round"/></svg>Needs an API key</span>
         <span class="spacer"></span>
-        <button class="btn primary" id="create" title="Create the project and let Claude start (⌘/Ctrl+Enter)"><svg class="i"><use href="assets/icons.svg#i-sparkles"/></svg>Create with Claude</button>
+        <button class="btn primary" id="create" title="Create the project and let eitri start (⌘/Ctrl+Enter)"><svg class="i"><use href="assets/icons.svg#i-sparkles"/></svg>Create with eitri</button>
       </div>
     </div>
     <div class="chips" id="examples"><span class="lbl">Try</span></div>
@@ -285,7 +285,7 @@ let last = '', lastDemos = '', projects = [], demos = [], agent = null, busyCrea
     $('rail').querySelectorAll('a').forEach(a => { if (a.dataset.tool === t.key && !a.classList.contains('neutral')) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
     $('pagetitle').textContent = t.name; document.title = t.name + ' · eitri';
     $('composetitle').textContent = { cad: 'Describe a part', wires: 'Describe a harness', motion: 'Describe a mechanism', pneumatics: 'Describe an air circuit', firmware: 'Describe firmware' }[t.key];
-    $('composelede').textContent = t.line + '. Claude builds it, checks it on every build, and you keep editing it by hand or by chat.';
+    $('composelede').textContent = t.line + '. eitri builds it, checks it on every build, and you keep editing it by hand or by chat.';
     $('st-tool').textContent = t.name;
   }
   $('prompt').placeholder = PLACEHOLDER[tool || 'all'];
@@ -318,7 +318,7 @@ function renderAgent(ag) {
   agent = ag || {};
   const pill = $('agent');
   const cls = ag.available ? 'ok' : ag.needs_key ? 'warn' : 'bad';
-  pill.innerHTML = `<span class="dot ${cls}"></span><span>${esc(ag.label || 'Claude')}</span>`;
+  pill.innerHTML = `<span class="dot ${cls}"></span><span>${esc(ag.label || 'eitri')}</span>`;
   pill.title = ag.detail || '';
   const kb = $('keybtn'); kb.hidden = false;
   if (ag.needs_key) {
@@ -362,7 +362,7 @@ async function loadKeyMenu() {
   if (!env) {
     $('menuforget').onclick = async () => {
       m.hidden = true;
-      if (!await eitriShell.confirm({ title: 'Remove the API key?', body: 'The saved key is deleted from this computer. Claude stops working until you add one again; the demos keep working.', ok: 'Remove key', danger: true })) return;
+      if (!await eitriShell.confirm({ title: 'Remove the API key?', body: 'The saved key is deleted from this computer. eitri stops working until you add one again; the demos keep working.', ok: 'Remove key', danger: true })) return;
       const r = await post('/api/setup/forget', {});
       if (r.ok === false) toast(r.error || 'could not remove the key', 'bad'); else { toast('API key removed'); store(DISMISS_KEY, null); }
       refresh(true);
@@ -407,10 +407,10 @@ $('setupform').onsubmit = async ev => {
   setupBusy = false; $('keysave').disabled = false; $('keyinput').disabled = false;
   if (!r.ok) { setStatus('bad', r.error || 'Anthropic did not accept that key.'); $('keyinput').focus(); $('keyinput').select(); return; }
   $('keyinput').value = '';
-  setStatus('ok', (r.message ? r.message.charAt(0).toUpperCase() + r.message.slice(1) + '. ' : 'Key saved. ') + 'Claude is ready.');
+  setStatus('ok', (r.message ? r.message.charAt(0).toUpperCase() + r.message.slice(1) + '. ' : 'Key saved. ') + 'eitri is ready.');
   if (r.agent) renderAgent(r.agent);
   await refresh(true);
-  if ($('prompt').value.trim()) say('Claude is ready: press Create with Claude to start on your description.');
+  if ($('prompt').value.trim()) say('eitri is ready: press Create with eitri to start on your description.');
   setTimeout(() => { $('setup').hidden = true; setStatus(null); }, 2400);
 };
 
@@ -477,7 +477,7 @@ function render() {
     const tl = toolOf(p);
     const c = document.createElement('div'); c.className = 'card'; c.dataset.id = p.id; c.dataset.tool = tl.key;
     c.innerHTML = `<div class="thumb">${p.thumb ? `<img alt="" loading="lazy" src="/thumb/${encodeURIComponent(p.id)}?t=${Math.round(p.modified)}">` : `<e-glyph name="${tl.key}"></e-glyph>`}</div>
-      <div class="flags">${p.busy ? '<span class="busy"><span class="dot live"></span>Claude is working</span>' : ''}${p.linked ? '<span>linked folder</span>' : ''}</div>
+      <div class="flags">${p.busy ? '<span class="busy"><span class="dot live"></span>eitri is working</span>' : ''}${p.linked ? '<span>linked folder</span>' : ''}</div>
       <div class="body"><a class="name" href="${esc(p.url)}" title="${esc(p.folder)}">${esc(p.title)}</a>
       <div class="meta"><span class="badge"><e-glyph name="${tl.key}"></e-glyph>${esc(tl.short)}</span><span class="when">${esc(ago(p.modified))}${p.revision ? ' · rev ' + p.revision : ''}</span></div>
       <button class="btn more" type="button" aria-label="More actions for ${esc(p.title)}"><e-glyph name="more"></e-glyph></button>
@@ -540,7 +540,7 @@ async function create(prompt, name) {
   if (busyCreate) return; busyCreate = true;
   const btns = document.querySelectorAll('#create, .other button, .empty-state button');
   for (const b of btns) b.disabled = true;
-  $('msg').innerHTML = `<span class="spinner"></span><span>${prompt ? 'Creating the project and starting Claude…' : 'Creating the project…'}</span>`; $('msg').className = '';
+  $('msg').innerHTML = `<span class="spinner"></span><span>${prompt ? 'Creating the project and starting eitri…' : 'Creating the project…'}</span>`; $('msg').className = '';
   const r = await post('/api/projects', { prompt, name });
   busyCreate = false; for (const b of btns) b.disabled = false;
   if (!r.ok) { say(r.error || 'could not create the project', true); return; }
@@ -552,7 +552,7 @@ $('create').onclick = () => {
   if (!t) { say('Describe what to make first, or press Start blank.', true); $('prompt').focus(); return; }
   if (agent && agent.needs_key && agent.available === false) {
     say('');
-    openSetup('Claude needs an API key to build this. Add one and your description stays in the box, ready to go.');
+    openSetup('eitri needs an API key to build this. Add one and your description stays in the box, ready to go.');
     return;
   }
   create(t);

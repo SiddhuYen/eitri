@@ -170,7 +170,7 @@ def test_projects_chat_stop_new_chat_and_history(tmp_path):
 
         # the project's editor and API under /p/<id>/ (the bare id redirects to the trailing slash)
         status, _, page = _call(url, f"/p/{pid}")
-        assert status == 200 and b"Chat with Claude" in page
+        assert status == 200 and b"Chat with eitri" in page
         st = _js(url, f"/p/{pid}/state.json")
         assert st["home"] == "/" and st["glb"].startswith("view.glb?r=") and st["topology"].startswith("topology.json?r=") and st["title"] == "A plate with two holes, please"
         assert [p["name"] for p in st["parts"]] == ["plate"]

@@ -703,7 +703,7 @@ def make_handler(project: Project, lock: threading.Lock, hub=None, home: str | N
                         self._json({"ok": False, "error": "no agent here: start eitri with `eitri web` (or `eitri <project>`), not `eitri serve`"}, 400)
                         return
                     if hub.busy:
-                        self._json({"ok": False, "error": "Claude is still working on the previous message"}, 409)
+                        self._json({"ok": False, "error": "eitri is still working on the previous message"}, 409)
                         return
                     images = []
                     for rel in payload.get("images") or []:
@@ -716,7 +716,7 @@ def make_handler(project: Project, lock: threading.Lock, hub=None, home: str | N
                     self._json({"ok": True, "last": hub.last_event_id})
                 elif path == "/stop":
                     if hub is None or not hub.busy:
-                        self._json({"ok": False, "error": "Claude is not working on anything"}, 409)
+                        self._json({"ok": False, "error": "eitri is not working on anything"}, 409)
                         return
                     self._json({"ok": bool(hub.interrupt())})
                 elif path == "/newchat":

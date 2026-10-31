@@ -2,7 +2,7 @@
  "id": "v8-engine",
  "title": "V8 engine kit",
  "blurb": "A hand-cranked, see-through V8 you print and assemble: 43 parts, cross-plane crank, pistons that move.",
- "outcome": "Claude worked for 23 min; stopped by the user with two thin walls still flagged.",
+ "outcome": "eitri worked for 23 min; stopped by the user with two thin walls still flagged.",
  "order": 0,
  "model": "build_me_a_really_cool_mini.py",
  "last_revision": 11,

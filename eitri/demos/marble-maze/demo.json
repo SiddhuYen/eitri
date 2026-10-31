@@ -2,7 +2,7 @@
  "id": "marble-maze",
  "title": "Marble maze",
  "blurb": "A tilt labyrinth that generates its own maze, with a sliding clear lid and a marble.",
- "outcome": "Claude chased a 0.03 mm sliver through 11 revisions until all checks pass (5 min).",
+ "outcome": "eitri chased a 0.03 mm sliver through 11 revisions until all checks pass (5 min).",
  "order": 2,
  "model": "i_want_to_3d_print_a.py",
  "last_revision": 12,

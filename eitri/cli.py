@@ -353,7 +353,7 @@ def agent_info(backend: str) -> dict:
     cost = MEASURED_COST_PER_REQUEST_USD
     if not source:
         return {"available": False, "backend": backend, "needs_key": True, "label": "No API key yet",
-                "detail": "add an Anthropic API key to chat with Claude; the editor and the demo projects work without one",
+                "detail": "add an Anthropic API key to chat with eitri; the editor and the demo projects work without one",
                 "cost_per_request": cost}
     if backend == "cli":
         from .agent.claude_cli import find_claude_binary
@@ -362,7 +362,7 @@ def agent_info(backend: str) -> dict:
                     "detail": "reinstall eitri (the binary comes with claude-agent-sdk) or use --backend api",
                     "cost_per_request": cost}
     where = "ANTHROPIC_API_KEY" if source == "environment" else "the key saved in eitri's settings"
-    return {"available": True, "backend": backend, "needs_key": False, "key_source": source, "label": "Claude · API key",
+    return {"available": True, "backend": backend, "needs_key": False, "key_source": source, "label": "eitri · API key",
             "detail": f"requests are billed to {where} (about ${cost:.2f} per request on average)",
             "cost_per_request": cost}
 
@@ -408,7 +408,7 @@ def web_main(args) -> int:
     url, server = start_web(ws, port=args.port, background=True)
     print(_c("bold", "eitri web") + f"  {url}")
     print(_c("dim", f"projects: {ws.root}"))
-    print(_c("dim" if agent["available"] else "yellow", f"Claude: {agent['label']} - {agent['detail']}"))
+    print(_c("dim" if agent["available"] else "yellow", f"eitri: {agent['label']} - {agent['detail']}"))
     print(_c("dim", "Ctrl-C stops the server"), flush=True)
     if not args.no_open:
         webbrowser.open(url)
@@ -516,7 +516,7 @@ def bom_main(args) -> int:
 # ----------------------------------------------------------------------------- main
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="eitri", description="A Claude-Code-like agent for parametric CAD.",
+    ap = argparse.ArgumentParser(prog="eitri", description="An AI agent for parametric CAD: describe a part, eitri models and checks it.",
                                  epilog="With no command, eitri opens the local website in your browser "
                                         "(the same as `eitri web`); `eitri chat [project]` is the terminal REPL.")
     sub = ap.add_subparsers(dest="cmd")
@@ -565,11 +565,11 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("--dims", default=None, help='JSON list of your own dimensions, e.g. \'[{"view":"front","from":[0,0],"to":[40,0]}]\'')
     d.add_argument("--out", default=None, help="output folder (default: <model folder>/out)")
 
-    s = sub.add_parser("serve", help="the browser viewer for one project, without chat (`eitri web` adds Claude)")
+    s = sub.add_parser("serve", help="the browser viewer for one project, without chat (`eitri web` adds the agent)")
     s.add_argument("project", nargs="?", default=".")
     s.add_argument("--port", type=int, default=0)
 
-    w = sub.add_parser("web", help="the local website: your projects, the 3D editor and chat with Claude, in the browser")
+    w = sub.add_parser("web", help="the local website: your projects, the 3D editor and chat with eitri, in the browser")
     w.add_argument("workspace", nargs="?", default=None,
                    help="folder of projects (default: $EITRI_WORKSPACE, else ~/eitri-projects)")
     w.add_argument("--port", type=int, default=8765)
@@ -577,7 +577,7 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("--llm", default="opus", help="LLM: opus (default), sonnet, or a full model id")
     w.add_argument("--effort", default="high", help="low|medium|high|xhigh|max")
     w.add_argument("--backend", default="auto", choices=["auto", "cli", "api"])
-    w.add_argument("--max-budget", type=float, default=None, help="USD cap per Claude session (cli backend)")
+    w.add_argument("--max-budget", type=float, default=None, help="USD cap per agent session (cli backend)")
     w.add_argument("-v", "--verbose", action="store_true", help="also print the agents' activity in this terminal")
 
     c = sub.add_parser("cam", help="2.5-D toolpaths and G-code for a part of a model file (no LLM)")

@@ -56,7 +56,7 @@ def test_home_to_project_and_back(tmp_path):
             page.fill("#chatinput", "something slow")
             page.press("#chatinput", "Enter")
             page.wait_for_selector("#stop", state="visible", timeout=10000)
-            page.wait_for_function("() => document.querySelector('#chatstatus').textContent.startsWith('Claude is working')", timeout=10000)
+            page.wait_for_function("() => document.querySelector('#chatstatus').textContent.startsWith('eitri is working')", timeout=10000)
             assert page.is_disabled("#send")
             page.click("#stop")
             page.wait_for_function("() => [...document.querySelectorAll('#messages .msg.tool')].some(m => m.textContent === 'stopped')", timeout=20000)
@@ -145,9 +145,9 @@ def test_live_building_in_the_browser(tmp_path):
             page.wait_for_function("() => { const b = document.querySelector('#messages .msg.live'); return b && /thinking.*tokens/.test(b.textContent); }", timeout=10000)
             # Claude's thinking itself, typed into the chat and into the big panel while the view is empty
             page.wait_for_function("() => { const b = document.querySelector('#messages .msg.live.thinking .tbody'); return b && /plate size/.test(b.textContent); }", timeout=10000)
-            page.wait_for_function("() => { const s = window.__eitri_live.state(); return s.code && s.code.title === 'Claude is thinking' && /hole positions/.test(s.code.text); }", timeout=10000)
+            page.wait_for_function("() => { const s = window.__eitri_live.state(); return s.code && s.code.title === 'eitri is thinking' && /hole positions/.test(s.code.text); }", timeout=10000)
             page.wait_for_function("() => { const b = document.querySelector('#messages .msg.live.text'); return b && b.querySelector('.caret') && b.textContent.length > 3; }", timeout=10000)
-            page.wait_for_function("() => { const s = window.__eitri_live.state(); return s.code && s.code.title === 'Claude is writing the model' && s.code.lines >= 2; }", timeout=15000)
+            page.wait_for_function("() => { const s = window.__eitri_live.state(); return s.code && s.code.title === 'eitri is writing the model' && s.code.lines >= 2; }", timeout=15000)
             mid = page.evaluate("() => window.__eitri_live.state().code")
             assert PLATE.startswith(mid["text"].rstrip()) or mid["text"].strip() in PLATE
             assert "line" in page.inner_text("#lcmeta")

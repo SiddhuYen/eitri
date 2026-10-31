@@ -54,4 +54,4 @@ fi
 echo
 echo "Done. Next: run   eitri"
 echo "      It opens http://127.0.0.1:8765 in your browser. The demo projects work without an API key;"
-echo "      add a key on the home page (or: eitri key set) to design your own parts with Claude."
+echo "      add a key on the home page (or: eitri key set) to design your own parts with eitri."

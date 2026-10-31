@@ -87,7 +87,7 @@ def run_doctor(online: bool = False, as_json: bool = False) -> int:
     from .config import api_key, config_path, key_source, mask, validate_api_key
     key = api_key()
     if not key:
-        add("warn", "API key", "not set - the editor and the demo projects work without one; to chat with Claude run "
+        add("warn", "API key", "not set - the editor and the demo projects work without one; to chat with eitri run "
             "`eitri key set` or paste a key on the home page (https://console.anthropic.com/settings/keys)")
     else:
         where = "ANTHROPIC_API_KEY" if key_source() == "environment" else str(config_path())

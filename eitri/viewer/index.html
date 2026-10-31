@@ -75,14 +75,14 @@
     <div id="hud">loading…</div>
     <div id="notice" role="status" aria-live="polite"></div>
     <div id="toast" role="status" aria-live="polite"></div>
-    <div id="livecode"><div class="lchead"><span class="lcdot"></span><span id="lctitle">Claude is writing the model</span><span id="lcmeta" style="color:#8b95a1"></span><span style="flex:1"></span><button id="lcclose" title="Hide until your next message">×</button></div><pre id="lccode"></pre></div>
+    <div id="livecode"><div class="lchead"><span class="lcdot"></span><span id="lctitle">eitri is writing the model</span><span id="lcmeta" style="color:#8b95a1"></span><span style="flex:1"></span><button id="lcclose" title="Hide until your next message">×</button></div><pre id="lccode"></pre></div>
   </div>
   <aside id="dock" aria-label="Inspector and chat">
     <div id="resizer" title="Drag to resize the panels"></div>
     <div id="dockstrip">
       <button class="iconbtn" id="dockunfold" title="Show the inspector and the chat" aria-label="Show the inspector and the chat"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#i-panel-right-open"/></svg></button>
       <span class="sv" id="stripverdict" title="Checks">–</span>
-      <button class="iconbtn" id="stripchat" title="Chat with Claude" aria-label="Chat with Claude"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#i-message-square"/></svg></button>
+      <button class="iconbtn" id="stripchat" title="Chat with eitri" aria-label="Chat with eitri"><svg class="i" aria-hidden="true"><use href="assets/icons.svg#i-message-square"/></svg></button>
     </div>
     <div id="side" role="region" aria-label="Inspector">
       <div class="dock-head">
@@ -99,7 +99,7 @@
       <div id="sharebar"></div>
       <div id="demobar"><div class="t"><svg class="i"><use href="assets/icons.svg#i-play"/></svg><span id="demotitle">Demo project</span><span class="badge accent" style="margin-left:auto">recorded session</span></div>
       <div class="d" id="demodesc"></div>
-      <div class="acts"><button class="primary" id="replaybtn"><svg class="i"><use href="assets/icons.svg#i-play"/></svg>Watch Claude build it</button><button id="replaystop" style="display:none"><svg class="i"><use href="assets/icons.svg#i-square"/></svg>Stop replay</button><button class="small" id="demoreset" title="Put the demo back exactly as shipped"><svg class="i"><use href="assets/icons.svg#i-rotate-ccw"/></svg>Reset demo</button></div>
+      <div class="acts"><button class="primary" id="replaybtn"><svg class="i"><use href="assets/icons.svg#i-play"/></svg>Watch eitri build it</button><button id="replaystop" style="display:none"><svg class="i"><use href="assets/icons.svg#i-square"/></svg>Stop replay</button><button class="small" id="demoreset" title="Put the demo back exactly as shipped"><svg class="i"><use href="assets/icons.svg#i-rotate-ccw"/></svg>Reset demo</button></div>
       <div class="stats" id="demostats"></div></div>
       <div id="domaininsp" aria-label="Selection"></div>
       <div id="checkcard" class="none"><div class="head" id="checkhead"><span class="verdict" id="checkicon"><svg class="i"><use href="assets/icons.svg#i-list-checks"/></svg></span><div style="min-width:0;flex:1"><div class="title" id="checktitle">Checks</div><div class="sub" id="checksub">no build yet</div></div><svg class="i sm"><use href="assets/icons.svg#i-chevron-down"/></svg></div>
@@ -157,23 +157,23 @@
     <div class="muted" style="font-size:11px"><kbd>V</kbd> select <kbd>S</kbd> sketch <kbd>H</kbd> hole <kbd>B</kbd> primitive <kbd>W</kbd> insert fastener <kbd>P</kbd> push/pull <kbd>D</kbd> edit geometry <kbd>F</kbd> fillet <kbd>C</kbd> chamfer <kbd>E</kbd> shell <kbd>J</kbd> combine <kbd>X</kbd> split <kbd>I</kbd> mirror <kbd>N</kbd> pattern <kbd>K</kbd> scale <kbd>T</kbd> thread <kbd>M</kbd> move <kbd>G</kbd> align <kbd>L</kbd> measure <kbd>A</kbd> look at <kbd>O</kbd> ortho <kbd>Enter</kbd> apply <kbd>Esc</kbd> cancel <kbd>⌘Z</kbd> undo · in a sketch: <kbd>R</kbd> rectangle <kbd>C</kbd> circle <kbd>G</kbd> polygon <kbd>O</kbd> slot <kbd>T</kbd> text · shift-click adds to a selection · hold <kbd>Alt</kbd> while dragging to disable snapping</div>
   </div>
     </div>
-    <section id="chatpanel" aria-label="Chat with Claude">
+    <section id="chatpanel" aria-label="Chat with eitri">
       <div id="chatgrip" title="Drag to resize the chat"></div>
       <div id="chathead" role="button" tabindex="0" aria-expanded="true" aria-controls="chat">
-        <h2><svg class="i sm" aria-hidden="true"><use href="assets/icons.svg#i-message-square"/></svg>Chat with Claude</h2><span class="peek" id="chatpeek"></span><span class="spacer"></span>
-        <button class="small" id="newchat" title="Start a new conversation: Claude forgets this chat; your model, edits and history stay"><svg class="i sm" aria-hidden="true"><use href="assets/icons.svg#i-message-square-plus"/></svg>New chat</button>
+        <h2><svg class="i sm" aria-hidden="true"><use href="assets/icons.svg#i-message-square"/></svg>Chat with eitri</h2><span class="peek" id="chatpeek"></span><span class="spacer"></span>
+        <button class="small" id="newchat" title="Start a new conversation: eitri forgets this chat; your model, edits and history stay"><svg class="i sm" aria-hidden="true"><use href="assets/icons.svg#i-message-square-plus"/></svg>New chat</button>
         <span class="chev"><svg class="i sm" aria-hidden="true"><use href="assets/icons.svg#i-chevron-down"/></svg></span>
       </div>
       <div id="chat">
       <div id="messages"></div>
       <div class="chips" id="chips"></div>
       <div id="attachments"></div>
-      <div id="composer"><textarea id="chatinput" placeholder="Describe a part, or tell Claude what to change. Click geometry first to refer to it; paste or drop an image to attach it."></textarea>
-        <div id="composerbtns"><button class="primary" id="send">Send</button><button id="stop" title="Stop Claude (the conversation is kept)">Stop</button><button class="small" id="attach" title="Attach an image: a photo, a sketch or a drawing">Image…</button></div>
+      <div id="composer"><textarea id="chatinput" placeholder="Describe a part, or tell eitri what to change. Click geometry first to refer to it; paste or drop an image to attach it."></textarea>
+        <div id="composerbtns"><button class="primary" id="send">Send</button><button id="stop" title="Stop eitri (the conversation is kept)">Stop</button><button class="small" id="attach" title="Attach an image: a photo, a sketch or a drawing">Image…</button></div>
         <input type="file" id="attachfile" accept="image/png,image/jpeg,image/gif,image/webp" multiple style="display:none"></div>
       <div id="keynote"></div>
       <div class="muted" id="chatstatus" style="font-size:11px"></div>
-      <div class="muted" id="planusage" style="font-size:11px" title="Your Claude plan's usage limits, as of Claude's last reply"></div>
+      <div class="muted" id="planusage" style="font-size:11px" title="Your Claude plan's usage limits, as of eitri's last reply"></div>
       </div>
     </section>
   </aside>
@@ -590,7 +590,7 @@ function showNotice(text, opts) {
   const ic = document.createElement('span'); ic.className = 'ic'; ic.innerHTML = icon(o.kind === 'info' ? 'info' : 'triangle-alert', 'sm'); el.appendChild(ic);
   const t = document.createElement('span'); t.className = 'txt'; t.textContent = text; el.appendChild(t);
   if (o.ask && state.has_agent) {
-    const b = document.createElement('button'); b.className = 'small'; b.innerHTML = icon('sparkles', 'sm') + ' Ask Claude';
+    const b = document.createElement('button'); b.className = 'small'; b.innerHTML = icon('sparkles', 'sm') + ' Ask eitri';
     b.onclick = () => { const ci = $('chatinput'); ci.value = o.ask; ci.focus(); ci.setSelectionRange(ci.value.length, ci.value.length); hideNotice(); };
     el.appendChild(b);
   }
@@ -2174,7 +2174,7 @@ function renderTimeline() {
   for (const f of feats) {
     const c = document.createElement('span'); c.className = 'tchip' + (selected.has('edit:' + f.index) ? ' on' : '') + (f.full.suppressed ? ' off' : '') + (f.note && !f.note.ok && !f.full.suppressed ? ' bad' : '');
     const byClaude = f.full.by === 'claude'; c.className += byClaude ? ' by-claude' : ' by-you';
-    c.innerHTML = `<span class="who">${icon(byClaude ? 'sparkles' : 'hand')}</span><b>${f.index + 1}</b> ${shortOp(f)}`; c.title = (byClaude ? 'Claude: ' : 'You: ') + f.desc + (f.note && !f.note.ok ? ' — ' + plainError(f.note.detail) : '') + ' · click: select · double-click: edit';
+    c.innerHTML = `<span class="who">${icon(byClaude ? 'sparkles' : 'hand')}</span><b>${f.index + 1}</b> ${shortOp(f)}`; c.title = (byClaude ? 'eitri: ' : 'You: ') + f.desc + (f.note && !f.note.ok ? ' — ' + plainError(f.note.detail) : '') + ' · click: select · double-click: edit';
     c.onclick = ev => { const id = 'edit:' + f.index; if (ev.shiftKey) { if (selected.has(id)) selected.delete(id); else selected.add(id); } else { const was = selected.has(id) && selected.size === 1; selected.clear(); if (!was) selected.add(id); } formOpen = null; refreshMaterials(); renderSelection(); renderTimeline(); };
     c.ondblclick = () => { selected.clear(); selected.add('edit:' + f.index); openFeatureForm(f.index); };
     el.appendChild(c);
@@ -3182,7 +3182,7 @@ function renderReport() {
     d.textContent.length; ch.appendChild(d);
   }
   const is = $('issues'); is.innerHTML = '';
-  if (state.last_ok === false && state.last_error) { const d = document.createElement('div'); d.className = 'issue'; d.style.background = 'var(--bad-soft)'; d.innerHTML = `<span class="ic" style="color:var(--bad)">${icon('octagon-alert', 'sm')}</span><span>The latest build failed: ${escHtml(plainError(state.last_error, 'the model code raised an error (Claude can fix it, or see the code panel)'))}</span>`; is.appendChild(d); }
+  if (state.last_ok === false && state.last_error) { const d = document.createElement('div'); d.className = 'issue'; d.style.background = 'var(--bad-soft)'; d.innerHTML = `<span class="ic" style="color:var(--bad)">${icon('octagon-alert', 'sm')}</span><span>The latest build failed: ${escHtml(plainError(state.last_error, 'the model code raised an error (eitri can fix it, or see the code panel)'))}</span>`; is.appendChild(d); }
   for (const i of issues) { const d = document.createElement('div'); d.className = 'issue'; d.innerHTML = `<span class="ic">${icon('triangle-alert', 'sm')}</span><span>${escHtml(i)}</span>`; is.appendChild(d); }
   const fails = checks.filter(c => !c.ok).length, warns = checks.filter(c => c.severity === 'warn').length, card = $('checkcard');
   const verdict = !checks.length && !issues.length ? 'none' : (fails || state.last_ok === false) ? 'fail' : 'pass';
@@ -3262,7 +3262,7 @@ async function renderRevisions() {
   for (const r of revs.slice(-12).reverse()) {
     const row = document.createElement('div'); row.className = 'rev';
     const note = r.note || '', who = /^(viewer:|imported)/.test(note) ? 'you' : note === 'blank design' ? 'sys' : 'claude';
-    row.innerHTML = `<span class="who-badge ${who}" title="${who === 'you' ? 'your edit' : who === 'claude' ? 'built by Claude' : 'start'}">${icon(who === 'you' ? 'hand' : who === 'claude' ? 'sparkles' : 'circle-dot')}</span><span class="${r.ok ? '' : 'bad'}" style="flex:1">${r.number}. ${escHtml(note)}${r.ok ? '' : ' (failed)'}</span>`;
+    row.innerHTML = `<span class="who-badge ${who}" title="${who === 'you' ? 'your edit' : who === 'claude' ? 'built by eitri' : 'start'}">${icon(who === 'you' ? 'hand' : who === 'claude' ? 'sparkles' : 'circle-dot')}</span><span class="${r.ok ? '' : 'bad'}" style="flex:1">${r.number}. ${escHtml(note)}${r.ok ? '' : ' (failed)'}</span>`;
     if (r.ok && r.number !== state.ok_revision) { const b = document.createElement('button'); b.className = 'small'; b.textContent = 'restore'; b.onclick = () => fetch('restore', { method: 'POST', body: JSON.stringify({ number: r.number }) }); row.appendChild(b);
       const c = document.createElement('button'); c.className = 'small' + (compareRev === r.number ? ' on' : ''); c.textContent = compareRev === r.number ? 'hide compare' : 'compare'; c.title = 'show this revision as a translucent overlay and list what changed'; c.onclick = () => compareWith(compareRev === r.number ? null : r.number); row.appendChild(c); }
     el.appendChild(row);
@@ -3309,13 +3309,13 @@ let pendingUser = null;                              // the message shown before
 async function sendChat(text, selection) {
   if (!text.trim()) return false;
   if (!state.has_agent) { addMsg('err', 'no agent here: start eitri with `eitri web` (or `eitri <project>`), not `eitri serve`'); return false; }
-  if (agentBusy) { addMsg('err', 'Claude is still working on the previous message'); return false; }
+  if (agentBusy) { addMsg('err', 'eitri is still working on the previous message'); return false; }
   const images = pendingImages.map(a => a.path);
   const sel = selection || (isDomain() && harnessEd && harnessEd.selectionIds ? harnessEd.selectionIds() : [...selected]);
   // feedback at once: your message, "getting started", Stop - before the request even returns
   pendingUser = addMsg('you', text + (sel.length ? `\n[${sel.join(', ')}]` : ''));
   agentBusy = true; lcHiddenTurn = false;
-  liveBubble('', 'Claude is getting started<span class="dots"></span>');
+  liveBubble('', 'eitri is getting started<span class="dots"></span>');
   $('send').disabled = true; $('stop').style.display = 'block';
   const r = await fetch('chat', { method: 'POST', body: JSON.stringify({ text, selection: sel, images }) }).then(r => r.json()).catch(e => ({ ok: false, error: String(e) }));
   if (!r.ok) {
@@ -3332,7 +3332,7 @@ async function sendChat(text, selection) {
 $('send').onclick = async () => { const t = $('chatinput').value; if (!t.trim()) return; $('chatinput').value = ''; if (!(await sendChat(t)) && !$('chatinput').value) $('chatinput').value = t; };
 $('chatinput').addEventListener('keydown', ev => { if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); $('send').onclick(); } });
 $('stop').onclick = async () => { $('stop').disabled = true; const r = await fetch('stop', { method: 'POST', body: '{}' }).then(r => r.json()).catch(() => ({ ok: false })); if (!r.ok) $('stop').disabled = false; };
-$('newchat').onclick = async () => { if (!state.has_agent) return; if (!confirm('Start a new conversation? Claude forgets this chat; your model, edits and history stay.')) return; await fetch('newchat', { method: 'POST', body: '{}' }); };
+$('newchat').onclick = async () => { if (!state.has_agent) return; if (!confirm('Start a new conversation? eitri forgets this chat; your model, edits and history stay.')) return; await fetch('newchat', { method: 'POST', body: '{}' }); };
 function renderAttachments() {
   const el = $('attachments'); el.innerHTML = '';
   pendingImages.forEach((a, i) => { const d = document.createElement('div'); d.className = 'attch'; d.innerHTML = `<img src="${fileUrl(a.path)}" alt="" title="${escHtml(a.path)}"><button title="Remove">×</button>`; d.querySelector('button').onclick = () => { pendingImages.splice(i, 1); renderAttachments(); }; el.appendChild(d); });
@@ -3383,7 +3383,7 @@ function renderEvent(ev) {
     if (liveEl && liveEl.parentNode === m) m.insertBefore(det, liveEl); else m.appendChild(det);
     if (stick) m.scrollTop = m.scrollHeight;
   }
-  else if (k === 'error') addMsg('err', plainError(d.text, 'Claude ran into a problem; try again'));
+  else if (k === 'error') addMsg('err', plainError(d.text, 'eitri ran into a problem; try again'));
   else if (k === 'stopping') addMsg('tool', 'stopping…');
   else if (k === 'divider') addMsg('divider', d.text);
   else if (k === 'result') addMsg('tool', d.stopped ? 'stopped' : `done${d.num_turns ? ' · ' + d.num_turns + ' steps' : ''}${d.duration_ms ? ' · ' + dur(d.duration_ms) : ''}`);
@@ -3433,7 +3433,7 @@ function typeText(text, mode, head) {                // Claude's reply (or its t
 }
 function thinkHead(r, live) {
   const tok = live && live.tokens ? ` · ~${live.tokens.toLocaleString()} tokens` : '';
-  return `Claude is thinking<span class="dots"></span>${r.phase_elapsed > 3 ? ' · ' + Math.round(r.phase_elapsed) + ' s' : ''}${tok}`;
+  return `eitri is thinking<span class="dots"></span>${r.phase_elapsed > 3 ? ' · ' + Math.round(r.phase_elapsed) + ' s' : ''}${tok}`;
 }
 function liveToolLine(live) {
   const name = shortName(live.name), f = live.fields || {};
@@ -3449,7 +3449,7 @@ function renderLive(r) {
   stopTyping();
   if (live && live.type === 'tool_use' && !live.done) liveBubble('', liveToolLine(live));
   else if (phase === 'running' || (live && live.done && live.type === 'text')) hideBubble();      // the step's row shows it
-  else if (phase === 'starting') liveBubble('', 'Claude is getting started<span class="dots"></span>');
+  else if (phase === 'starting') liveBubble('', 'eitri is getting started<span class="dots"></span>');
   else liveBubble('', thinkHead(r, live && live.type === 'thinking' ? live : null));
 }
 function renderRunning(r) {                          // a spinner and a timer on the step that is running
@@ -3475,7 +3475,7 @@ function renderCode(r) {
   if (!r.busy || lcHiddenTurn) { hideCode(lcHiddenTurn); return; }
   if (live && live.type === 'thinking' && !live.done && (live.text || '').trim() && !faceObjs.length) {   // nothing to look at yet: the thinking
     if (!lc || lc.id !== 'thinking') lc = { id: 'thinking', previewAt: 0, since: Date.now() };
-    showCode('Claude is thinking', `${Math.round(r.phase_elapsed || 0)} s${live.tokens ? ' · ~' + live.tokens.toLocaleString() + ' tokens' : ''}`, escHtml(live.text.slice(-6000)) + '<span class="caret"></span>', true);
+    showCode('eitri is thinking', `${Math.round(r.phase_elapsed || 0)} s${live.tokens ? ' · ~' + live.tokens.toLocaleString() + ' tokens' : ''}`, escHtml(live.text.slice(-6000)) + '<span class="caret"></span>', true);
     return;
   }
   if (live && live.type === 'tool_use' && isCodeTool(live.name) && !live.done) {
@@ -3487,11 +3487,11 @@ function renderCode(r) {
       body = (f.old ? f.old.split('\n').map(l => '<span class="del">' + escCode(l) + '</span>').join('\n') + '\n' : '') + (f.new != null ? f.new.split('\n').map(l => '<span class="add">' + escCode(l) + '</span>').join('\n') : '');
       lines = (f.new || '').split('\n').length;
     }
-    showCode(name === 'build_model' ? 'Claude is writing the model' : 'Claude is editing the model', `${lines} line${lines === 1 ? '' : 's'}${live.note ? ' · ' + escHtml(live.note) : ''}`, body + '<span class="caret"></span>');
+    showCode(name === 'build_model' ? 'eitri is writing the model' : 'eitri is editing the model', `${lines} line${lines === 1 ? '' : 's'}${live.note ? ' · ' + escHtml(live.note) : ''}`, body + '<span class="caret"></span>');
   } else if (run && isCodeTool(run.name) && lc && lc.id === run.id) {
     // the streamed code may have been caught mid-line by the last poll: once the build starts, show it whole
     const full = run.code && !lc.full ? (lc.full = true, hlPy(run.code)) : null;
-    showCode(lc.previewAt ? 'Built: Claude is checking it' : 'Building', `<span class="spin"></span> ${r.build && r.build.stage ? escHtml(r.build.stage) + ' · ' : ''}${run.elapsed.toFixed(1)} s`, full);
+    showCode(lc.previewAt ? 'Built: eitri is checking it' : 'Building', `<span class="spin"></span> ${r.build && r.build.stage ? escHtml(r.build.stage) + ' · ' : ''}${run.elapsed.toFixed(1)} s`, full);
     const pre = $('lccode'); const caret = pre.querySelector('.caret'); if (caret) caret.remove();
   } else if (lc) hideCode(false);
 }
@@ -3512,11 +3512,11 @@ async function pollEvents() {
       if (busy && !agentBusy) { lcHiddenTurn = false; }           // a new turn
       agentBusy = busy;
       renderRunning(r); renderLive(r); renderCode(r);
-      $('chatstatus').textContent = busy ? `Claude is working${r.elapsed != null ? ' · ' + dur(r.elapsed * 1000) : ''}${r.tools ? ' · ' + r.tools + ' step' + (r.tools === 1 ? '' : 's') : ''}…` : '';
+      $('chatstatus').textContent = busy ? `eitri is working${r.elapsed != null ? ' · ' + dur(r.elapsed * 1000) : ''}${r.tools ? ' · ' + r.tools + ' step' + (r.tools === 1 ? '' : 's') : ''}…` : '';
       $('send').disabled = busy; $('stop').style.display = busy ? 'block' : 'none'; if (!busy) $('stop').disabled = false;
       renderUsage(r.usage, r.cost || 0);
       renderStages(r);
-    } else if (state.has_agent === false) { $('chatstatus').textContent = 'no agent attached (viewer only): start eitri with `eitri web` to chat with Claude'; $('newchat').style.display = 'none'; }
+    } else if (state.has_agent === false) { $('chatstatus').textContent = 'no agent attached (viewer only): start eitri with `eitri web` to chat with eitri'; $('newchat').style.display = 'none'; }
   } catch (e) { /* server restarting */ }
   evFetching = false;
   schedulePoll(agentBusy ? 250 : 1000);
@@ -4031,8 +4031,8 @@ function renderKeyNote() {
   if (!state.needs_key) { n.classList.remove('on'); return; }
   n.classList.add('on');
   n.innerHTML = state.demo
-    ? `${icon('key-round', 'sm')} This is a recorded demo: press <b>Watch Claude build it</b> above. To change it with Claude, add your Anthropic API key on the <a href="${state.home || '/'}">home page</a>.`
-    : `${icon('key-round', 'sm')} To chat with Claude, add your Anthropic API key on the <a href="${state.home || '/'}">home page</a> (billed by Anthropic to your key; about $0.24 per request on average). The editor works without one.`;
+    ? `${icon('key-round', 'sm')} This is a recorded demo: press <b>Watch eitri build it</b> above. To change it with eitri, add your Anthropic API key on the <a href="${state.home || '/'}">home page</a>.`
+    : `${icon('key-round', 'sm')} To chat with eitri, add your Anthropic API key on the <a href="${state.home || '/'}">home page</a> (billed by Anthropic to your key; about $0.24 per request on average). The editor works without one.`;
 }
 function renderEngine() {
   const e = state.engine || {}; const t = $('loadingtext');

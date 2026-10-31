@@ -134,7 +134,7 @@ class Workspace:
         self.root.mkdir(parents=True, exist_ok=True)
         self.make_session = make_session
         self.printer = printer
-        self._agent = agent or {"available": True, "label": "Claude"}
+        self._agent = agent or {"available": True, "label": "eitri"}
         self.idle_close = idle_close
         self.apps: dict[str, ProjectApp] = {}
         self._lock = threading.RLock()
@@ -179,7 +179,7 @@ class Workspace:
             raise KeyError(pid)
         app = self.app(pid)
         if app.hub.busy:
-            raise ValueError("Claude (or a replay) is already working in this project")
+            raise ValueError("eitri (or a replay) is already working in this project")
         folder = demo_folder(self.root, meta["id"])
         if is_modified(folder):                           # edited since: back to the shipped demo first
             self.reset_demo(pid)
@@ -330,7 +330,7 @@ class Workspace:
             return pid, None
         agent = self.agent
         if not agent.get("available", True):
-            return pid, f"Claude is not available, so it did not start: {agent.get('detail', '')}"
+            return pid, f"eitri is not available, so it did not start: {agent.get('detail', '')}"
         self.app(pid).hub.send_async(prompt, source="viewer")
         return pid, None
 

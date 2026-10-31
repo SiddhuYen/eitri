@@ -1,7 +1,7 @@
 {
  "id": "racket-holder",
  "title": "Wall racket holder",
- "blurb": "A wall hook for a tennis racket. Watch the thin-wall check fail, Claude find the cause, and every check go green.",
+ "blurb": "A wall hook for a tennis racket. Watch the thin-wall check fail, eitri find the cause, and every check go green.",
  "outcome": "3 failed builds and a 0.1 mm sliver, then all checks pass (3 min 17 s).",
  "order": 1,
  "model": "tennis_racket_holder_to_clip_onto.py",

@@ -7,7 +7,7 @@ export function createEditor(host, api) {
   let showFile = null;
   const spec = {
     kind: 'firmware', dataKey: 'firmware', svgUrl: 'domain.svg',
-    hint: () => 'click a pin to edit it · the sources are read-only (Claude writes them) · scroll to zoom',
+    hint: () => 'click a pin to edit it · the sources are read-only (eitri writes them) · scroll to zoom',
     downloads: [{ fmt: 'pinout', label: 'pinout', title: 'Pinout table (CSV)' }, { fmt: 'header', label: 'eitri_pins.h', title: 'The generated pin header' }, { fmt: 'log', label: 'compile log', title: 'arduino-cli output' }],
     selectEdit: e => e.net ? { kind: 'pin', id: e.net } : null,
     inspector(sel, data, state, h) {

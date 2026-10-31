@@ -3,6 +3,16 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
+## 0.5.5: the agent is called eitri
+
+### Changed
+
+- **The agent is eitri in every message.** The editor, the local website, the CLI, the demos and the README call the agent
+  eitri rather than Claude: "eitri is thinking", "eitri is writing the model", "Chat with eitri", "Create with eitri", "Watch eitri
+  build it", and the error strings ("eitri is still working on the previous message"). Nothing else moved: the model ids, the
+  `claude_cli` backend, the Claude Code binary and the Anthropic API key are still named for what they are, and the edit log's
+  `by: "claude"` marker is unchanged so old timelines still read.
+
 ## 0.5.4: anchors, and a host's own view in the editor
 
 ### New

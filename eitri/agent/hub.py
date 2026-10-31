@@ -151,7 +151,7 @@ class AgentHub:
         self._next_id = max(e["id"] for e in events) + 1
         self._carry_context = any(e["kind"] in ("user", "text") for e in events)
         if events[-1]["kind"] != "divider":
-            self._record("divider", {"text": "eitri restarted · your next message starts a new Claude session, "
+            self._record("divider", {"text": "eitri restarted · your next message starts a new eitri session, "
                                              "which is given the recent conversation"}, source="system")
 
     def _set_phase(self, phase: str | None) -> None:

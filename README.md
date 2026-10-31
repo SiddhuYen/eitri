@@ -1,6 +1,6 @@
 # eitri
 
-**A local AI CAD agent.** Describe a part in plain language; Claude models it as a parametric
+**A local AI CAD agent.** Describe a part in plain language; eitri models it as a parametric
 [build123d](https://github.com/gumyr/build123d) (OpenCASCADE) model, builds it, **measures it against your
 request**, looks at it, fixes what fails, and hands you STEP / STL / 3MF / GLB files. Then keep going in a
 Fusion-style 3D editor in your browser, by hand or by chat: both edit the same model.
@@ -13,10 +13,10 @@ Fusion-style 3D editor in your browser, by hand or by chat: both edit the same m
   1. editor tour (docs/editor-tour.gif): still shows the editor before the shell.
   2. manual drag, then the agent continues (docs/edit-agent-loop.gif / .mp4): still the old editor; needs a key.
 -->
-![A recorded eitri session, replayed in the editor: Claude plans the hook, writes the model, a check fails, Claude rebuilds, and all 10 checks pass](docs/check-fix-green.gif)
+![A recorded eitri session, replayed in the editor: eitri plans the hook, writes the model, a check fails, eitri rebuilds, and all 10 checks pass](docs/check-fix-green.gif)
 
 <sub>A real recorded session (the Wall racket holder demo, which anyone can replay without a key), played back
-in the editor: the plan, Claude writing the model, the failed builds, the fix, all 10 checks passing. 3 min 17 s
+in the editor: the plan, eitri writing the model, the failed builds, the fix, all 10 checks passing. 3 min 17 s
 of work in 18 s.</sub>
 
 Every build comes back to the agent as a **geometry report** (bounding box, volume, every hole with diameter,
@@ -43,7 +43,7 @@ are both `eitri`.
 for every step.
 
 > **See it in action without a key.** The home page opens with three demo projects (a 43-part V8 engine kit, a wall
-> racket holder, a marble maze) and the real Claude sessions that made them. "Watch replay" plays a session
+> racket holder, a marble maze) and the real eitri sessions that made them. "Watch replay" plays a session
 > back in the editor (the chat, every tool call, the model stepping through each revision, the checks going
 > from red to green) with no API calls. Orbit them, edit them, export them: everything but chatting with
 > Claude works without a key.
@@ -90,10 +90,10 @@ On the V8 demo: **43 printable parts, 2 plates** of 220 x 220 mm, all 43 written
 ## Use
 
 `eitri` (no arguments) opens the **local website**: your projects (in `~/eitri-projects`, or
-`eitri web <folder>`), the demos, and a box to describe a part. Press **Create with Claude** and the
-project opens in its 3D editor while Claude models it; its steps, the review renders it checks and its
+`eitri web <folder>`), the demos, and a box to describe a part. Press **Create with eitri** and the
+project opens in its 3D editor while eitri models it; its steps, the review renders it checks and its
 replies stream into the chat beside the model. Keep talking to change it, click geometry first to point at
-something, paste or drop a photo or sketch to attach it, press **Stop** (or Esc) to halt a turn (Claude keeps
+something, paste or drop a photo or sketch to attach it, press **Stop** (or Esc) to halt a turn (eitri keeps
 the conversation) or **New chat** to start over; every direct-modeling tool works alongside. **Start blank**,
 **Import a file…** (STEP, IGES, STL, OBJ, 3MF, PLY or a model .py) and **Open a folder…** start projects
 without a prompt. Each project keeps its conversation, so it is still there after a restart.
@@ -106,17 +106,17 @@ revisions) and the chat sit in panels docked on the right. The chat collapses to
 a strip for more room, and the Export menu at the top of the inspector lists every file the project can be
 downloaded as. Dark by default, light when the system is.
 
-![The V8 engine kit demo: the prompt, Claude writing the model, the build, all 43 checks passing](docs/v8-build.gif)
+![The V8 engine kit demo: the prompt, eitri writing the model, the build, all 43 checks passing](docs/v8-build.gif)
 
-<sub>The 43-part V8 demo: one prompt → Claude writes a 398-line model → all 43 checks pass (a recorded
+<sub>The 43-part V8 demo: one prompt → eitri writes a 398-line model → all 43 checks pass (a recorded
 23-minute session, replayed and compressed to 18 s).</sub>
 
-You watch Claude work as it happens: its thinking (readable summaries; each finished thought stays as an
+You watch eitri work as it happens: its thinking (readable summaries; each finished thought stays as an
 expandable "Thought for N s"), its reply typing out, the model code streaming into a panel over the 3D view,
 each step with a spinner and a timer and, for a build, its stage (building → checking → rendering), and the
 new geometry the moment it exists, before the checks and the review render finish. The **checks card** at the
 top of the panel shows the verdict of every build and what changed since the last one ("fixed: thinnest
-wall", "1 warning resolved"). The CAD engine and Claude start loading when you open a project, so the first
+wall", "1 warning resolved"). The CAD engine and the agent start loading when you open a project, so the first
 build and the first reply don't wait for them.
 
 The terminal works too:
@@ -140,9 +140,9 @@ to your next message), `/model`, `/notes`.
 
 ## Wire harnesses
 
-eitri also designs **wire harnesses and cable assemblies**, with the same loop: Claude writes a parametric Python
+eitri also designs **wire harnesses and cable assemblies**, with the same loop: eitri writes a parametric Python
 model file, a deterministic kernel builds it, and every build returns a report of pass / warn / fail checks and a
-review image that Claude has to fix its work against. Mechanical CAD is untouched; a project is a harness project when its
+review image that eitri has to fix its work against. Mechanical CAD is untouched; a project is a harness project when its
 model file builds a `Harness` (it starts with `from eitri.harness import *`). Nothing extra to install: the kernel,
 the diagram layout and the rasteriser are our own code (no WireViz, no Graphviz), in plain Python with Pillow.
 
@@ -173,7 +173,7 @@ at both ends of every wire) and a WireViz-compatible YAML (interop only), all in
 In the browser a harness project opens a **harness editor** instead of the 3D view: click a wire to change its gauge, colour,
 length or net; click a connector to rename pins, change its type from the catalog, add or remove pins; drag connectors around;
 click a failing check and the wires it is about light up. Changes are direct edits (`EDITS` in the model file, the same path as CAD
-edits) and positions are `LAYOUT` hints, so Claude sees your changes and carries on from them. A demo to start from:
+edits) and positions are `LAYOUT` hints, so eitri sees your changes and carries on from them. A demo to start from:
 `eitri build eitri/demos/quad-power/quad_power.py` (battery XT60 -> distribution splice -> 4 ESCs at 20 A + a flight controller).
 
 ```bash
@@ -186,7 +186,7 @@ reference when a project is a harness (and calls `harness_reference()` when a bl
 
 ## Mechanisms, pneumatics and firmware
 
-Three more domains work the same way as harnesses. Claude writes a parametric model file, a deterministic kernel checks every
+Three more domains work the same way as harnesses. eitri writes a parametric model file, a deterministic kernel checks every
 build, and the browser opens a domain editor instead of the 3D view. A project's domain comes from its model file's import
 (`from eitri.mechanism import *`, `from eitri.pneumatics import *`, `from eitri.firmware import *`). Each domain knows only its own
 model. The agent reads that domain's reference (`eitri/agent/<domain>_ref.md`) and rules, and gets a `<domain>_reference()` tool for
@@ -238,7 +238,7 @@ control. It reports one warning on purpose, because its tubes carry no datasheet
 clamp and a double-acting cylinder with speed control.
 
 **Firmware** is a board (Arduino Uno, Arduino Nano, ESP32), a pinout (each pin with a direction, a role and a name), peripherals
-(servo, PWM motor driver, limit switch, serial) and the source files Claude writes. Every build generates `eitri_pins.h` from the
+(servo, PWM motor driver, limit switch, serial) and the source files eitri writes. Every build generates `eitri_pins.h` from the
 pinout, so the sketch uses `PIN_<NAME>` constants instead of numbers. Then it checks:
 
 - **Compile.** The sketch is compiled headless with arduino-cli for the board. A compile error is a failed check at its file and line.
@@ -396,7 +396,7 @@ the selected faces and heals the body (a fillet, a hole, a boss, a pocket - the
 captive floor of a blind hole comes along automatically). Shift-drag on empty space
 window-selects many corners/edges/faces at once; dragging a cylinder's rim pushes the
 face it bounds. When the kernel cannot do something, the editor says why in a plain
-sentence and offers to hand the job to Claude with the selection filled in. Edits
+sentence and offers to hand the job to eitri with the selection filled in. Edits
 are optimistic: the change stays on screen while the model rebuilds (the revision
 chip pulses), further edits queue behind it, and a rebuild never blocks the editor.
 Existing **fillets** are
@@ -525,9 +525,9 @@ steps (pattern -> `GridLocations`, mirror -> `mirror(...)`, shell -> `offset(...
 revolve -> `revolve(...)`, thread -> `IsoThread`, a dragged corner ->
 `move_vertices(shape, near=[(x, y, z)], delta=...)` from the library, ...).
 
-![Stretch the plate by hand and tell Claude to continue: it reads the edit, adds the holes, then builds a hook on the circle you sketched and writes checks for it](docs/edit-agent-loop.gif)
+![Stretch the plate by hand and tell eitri to continue: it reads the edit, adds the holes, then builds a hook on the circle you sketched and writes checks for it](docs/edit-agent-loop.gif)
 
-<sub>Stretch the plate by hand, tell Claude to continue: it reads your edits, adds the holes, then builds a hook
+<sub>Stretch the plate by hand, tell eitri to continue: it reads your edits, adds the holes, then builds a hook
 on the circle you sketched and writes new checks for it ($0.61 of API usage, a real session;
 [MP4](docs/edit-agent-loop.mp4)).</sub>
 
@@ -622,10 +622,10 @@ project):
 | Full build of a simple part: build, checks, review render | about 1 s (a small clip: 0.9 s) |
 | 3D view of a new build (shown before the checks finish) | 0.1 s for small parts, 2.5 s for the 43-part V8 |
 | 43-part V8 assembly, full build with interference and clearance checks | about 21 s |
-| One request handled by Claude, end to end (22-task benchmark) | 89 s on average, 52 s median |
+| One request handled by eitri, end to end (22-task benchmark) | 89 s on average, 52 s median |
 | Cost per request at API prices (same benchmark) | $0.24 on average ($0.07 to $1.10) |
 
-Most of a request's time is Claude thinking, not CAD work; the chat streams Claude's thinking and the model
+Most of a request's time is the model thinking, not CAD work; the chat streams its thinking and the model
 code as they are written, so the screen is never blank.
 
 Direct edits (push/pull, fillets, moves, primitives, parameter changes) never call the LLM: they go editor →
