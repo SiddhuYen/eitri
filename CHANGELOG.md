@@ -3,6 +3,23 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
+## 0.5.6: depth that holds at desk scale
+
+### Fixed
+
+- **No more flicker between faces a millimetre apart.** The 3D view's near and far planes now follow the camera every frame,
+  fitted to what is on screen with a margin, instead of a near plane at 1/200 of the model's radius and a far plane that only ever
+  grew (to 100 m). A desk-scale model keeps its depth precision at any zoom.
+- **Translucent parts draw in the right order.** Each translucent face (one mesh per B-rep face, all with their origin at the world
+  origin) is ordered back to front by its own centre, every frame, rather than all at the origin in one arbitrary order; a translucent
+  face that lies on an opaque one gives way to it in depth (polygon offset), the same from every side; translucent materials never
+  write depth, so the opaque parts inside them show in their true colours.
+
+### New for hosts
+
+- `eitriViewer.setHostBounds(box)`: the bounds of a host's own scene (`hostGroup`), so the near and far planes fit it too while
+  the editor's model is hidden; `eitriViewer.clip()` reads the current planes.
+
 ## 0.5.5: the agent is called eitri
 
 ### Changed

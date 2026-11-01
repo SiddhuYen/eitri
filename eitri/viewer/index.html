@@ -248,6 +248,7 @@ function applyAppearance() {
       if (!o.isMesh || !o.userData.base) continue; const m = o.userData.base;
       if (ap) { m.metalness = ap.metalness; m.roughness = ap.roughness; if (ap.tint && !m.userData.tinted) { m.color.lerp(new THREE.Color(ap.tint), 0.6); m.userData.tinted = true; } if (ap.transparent && !(info.opacity < 1)) { m.transparent = true; m.opacity = ap.transparent; m.depthWrite = false; } }
       else { m.metalness = 0.05; m.roughness = 0.6; }
+      if (m.transparent) { m.depthWrite = false; m.polygonOffset = true; m.polygonOffsetFactor = 2; m.polygonOffsetUnits = 2; }   // gives way to an opaque face it lies on
       m.envMapIntensity = envMapOn ? 0.9 : 0.0; m.needsUpdate = true;
     }
   }
@@ -3817,6 +3818,7 @@ window.eitriViewer = {
   scene, renderer, controls, hostGroup, camera: () => camera, model: () => model, bbox: () => bbox, radius: () => radius, centre: () => centre,
   parts: () => partNodes, meshes: () => partMeshes, rev: () => loadedRev, state: () => state, busy: () => agentBusy, interacting,
   setView, frame: frameBox, addLabel, clearLabels, labelLayer: $('labels'), light: isLight, hideLoading,
+  setHostBounds, clip: () => ({ near: persp.near, far: persp.far }),
 };
 window.__eitri_debug = () => ({ rev: loadedRev, bbox: bbox ? { min: bbox.min.toArray(), max: bbox.max.toArray() } : null, centre: centre.toArray(), radius,
   camera: camera.position.toArray(), target: controls.target.toArray(), ortho: camera === ortho, tool, sketch: sketch ? { face: sketch.face.id, sub: sketch.sub, profile: sketch.profile, shape: sketch.simple, model: sketch.model, status: sketch.status, profiles: sketch.preview.profiles, open: sketch.preview.open, distance: sketch.distance, mode: sketch.mode, sel: [...sketch.sel], editing: sketch.editing ? sketch.editing.index : null, busy: skBusy || !!skQueue } : null,
@@ -4070,7 +4072,35 @@ function syncCube() {
 const openPrint = () => import('./assets/print.js').then(m => m.openPrintDialog({ title: state.title || state.name || 'model' })).catch(e => hint('the print export could not open: ' + e.message));
 $('printbtn').onclick = openPrint; $('printdlg').onclick = openPrint;
 
-function animate(now) { requestAnimationFrame(animate); if (deferredLoad && !interacting()) { const f = deferredLoad; deferredLoad = null; f(); } stepViewTween(now || performance.now()); controls.update(); updateLabels(); syncCube(); renderer.render(scene, camera); }
+// Depth: the near and far planes follow the camera every frame, fitted to what is on screen (the model, or a host's scene: setHostBounds)
+// with a margin, instead of a fixed 1:40000 range. A desk-scale model keeps its depth precision at any zoom, so faces a millimetre apart
+// never trade places as the camera moves. Translucent faces (one mesh per B-rep face, every one with its origin at the world origin)
+// are ordered back to front by their own centres, not all at the origin in one arbitrary order.
+let hostBounds = null;
+function setHostBounds(box) { hostBounds = box && !box.isEmpty() ? box.clone() : null; }
+const _clipBox = new THREE.Box3(), _clipS = new THREE.Sphere(), _cv = new THREE.Vector3();
+function fitClip() {
+  _clipBox.makeEmpty();
+  if (hostBounds) _clipBox.union(hostBounds);
+  if (bbox && model && model.visible) _clipBox.union(bbox);
+  if (_clipBox.isEmpty()) return;
+  _clipBox.getBoundingSphere(_clipS);
+  const R = Math.max(_clipS.radius * 1.6, 1);                          // the grid and the shadow catcher reach past the model
+  if (camera === persp) {
+    const d = camera.position.distanceTo(_clipS.center);
+    const near = Math.max(d - R, d / 400, 0.01), far = d + R;
+    if (Math.abs(near - persp.near) > near * 0.02 || Math.abs(far - persp.far) > far * 0.02) { persp.near = near; persp.far = far; persp.updateProjectionMatrix(); }
+  }
+}
+function orderTranslucent() {
+  for (const o of faceObjs) {
+    if (!o.material || !o.material.transparent || !o.visible) { if (o.renderOrder) o.renderOrder = 0; continue; }
+    if (!o.userData.centre) { o.geometry.computeBoundingBox(); o.userData.centre = o.geometry.boundingBox.getCenter(new THREE.Vector3()); }
+    _cv.copy(o.userData.centre).applyMatrix4(o.matrixWorld);
+    o.renderOrder = -Math.round(_cv.distanceTo(camera.position) * 100);      // far first: three.js draws a lower renderOrder earlier
+  }
+}
+function animate(now) { requestAnimationFrame(animate); if (deferredLoad && !interacting()) { const f = deferredLoad; deferredLoad = null; f(); } stepViewTween(now || performance.now()); controls.update(); fitClip(); orderTranslucent(); updateLabels(); syncCube(); renderer.render(scene, camera); }
 animate();
 </script>
 </body>

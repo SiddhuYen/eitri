@@ -375,7 +375,14 @@ def test_a_host_view_beside_the_file_tabs_and_the_viewer_api(tmp_path):
                         ["view:assembly", "all", "Assembly", "false", -1]]
         assert page.get_attribute("#filetabs [data-view='assembly'] .v", "class") == "v ok" and "3 checks pass" in page.get_attribute("#filetabs [data-view='assembly']", "title")
         # the viewer for a host's scripts: the scene, its own group in it, the loaded parts, framing, labels, and the state event
-        assert page.evaluate("() => Object.keys(window.eitriViewer).sort()") == sorted(["scene", "renderer", "controls", "hostGroup", "camera", "model", "bbox", "radius", "centre", "parts", "meshes", "rev", "state", "busy", "interacting", "setView", "frame", "addLabel", "clearLabels", "labelLayer", "light", "hideLoading"])
+        assert page.evaluate("() => Object.keys(window.eitriViewer).sort()") == sorted(["scene", "renderer", "controls", "hostGroup", "camera", "model", "bbox", "radius", "centre", "parts", "meshes", "rev", "state", "busy", "interacting", "setView", "frame", "addLabel", "clearLabels", "labelLayer", "light", "hideLoading", "setHostBounds", "clip"])
+        # depth: the near and far planes are fitted to what is on screen (not 1:40000), and follow a host's own bounds
+        page.wait_for_timeout(200)
+        clip = page.evaluate("() => window.eitriViewer.clip()")
+        assert 0 < clip["near"] < clip["far"] and clip["far"] / clip["near"] <= 401, clip
+        far = page.evaluate("""async () => { const V = window.eitriViewer, b = V.bbox().clone(); b.max.multiplyScalar(40); b.min.multiplyScalar(40);
+                                             V.setHostBounds(b); await new Promise(r => setTimeout(r, 200)); const c = V.clip(); V.setHostBounds(null); return c.far; }""")
+        assert far > clip["far"] * 5
         assert page.evaluate("() => window.eitriViewer.hostGroup.parent === window.eitriViewer.scene && Object.keys(window.eitriViewer.parts())") == ["model"]
         page.evaluate("""() => { window.__st = []; document.addEventListener('eitri:state', e => window.__st.push(e.detail.file)); window.__md = []; document.addEventListener('eitri:model', e => window.__md.push(e.detail));
                                const V = window.eitriViewer, b = V.bbox(); V.frame(b, 'hero', 3, false); window.__cam = V.camera().position.toArray(); V.addLabel(b.max, 'here', 'host'); }""")
