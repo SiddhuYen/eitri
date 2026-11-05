@@ -519,6 +519,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="eitri", description="An AI agent for parametric CAD: describe a part, eitri models and checks it.",
                                  epilog="With no command, eitri opens the local website in your browser "
                                         "(the same as `eitri web`); `eitri chat [project]` is the terminal REPL.")
+    from .update import installed_version
+    ap.add_argument("-V", "--version", action="version", version=f"eitri {installed_version()}")
     sub = ap.add_subparsers(dest="cmd")
 
     chat = sub.add_parser("chat", help="the terminal REPL (also: eitri <project folder>)")
@@ -620,7 +622,8 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("--pictures", action="store_true", help="also write a picture of each plate")
 
     doc = sub.add_parser("doctor", help="check that this install works (kernel, test build, Claude binary, API key)")
-    doc.add_argument("--online", action="store_true", help="also check the API key with Anthropic (one free call)")
+    doc.add_argument("--online", action="store_true", help="also check the API key with Anthropic (one free call) "
+                                                       "and ask pypi.org for the newest eitri")
     doc.add_argument("--json", action="store_true", help="machine-readable output")
 
     k = sub.add_parser("key", help="the Anthropic API key eitri uses: set, show or forget")
@@ -628,9 +631,22 @@ def main(argv: list[str] | None = None) -> int:
     k.add_argument("key", nargs="?", default=None, help="the key (default: read it hidden from the terminal, or from stdin)")
     k.add_argument("--no-check", action="store_true", help="save without checking it with Anthropic")
 
+    up = sub.add_parser("update", help="upgrade eitri to the newest release (asks pypi.org; eitri never checks on its own unless you turn on --auto)")
+    up.add_argument("--check", action="store_true", help="only say whether a newer version exists")
+    up.add_argument("--auto", choices=["on", "off"], default=None,
+                    help="on: when eitri starts, at most once a day, ask pypi.org for the newest version and print one line if there is one")
+    up.add_argument("--dry-run", action="store_true", help="print the upgrade command instead of running it")
+
+    st = sub.add_parser("setup", help="install the optional system tools a domain needs: `eitri setup firmware` (arduino-cli)")
+    st.add_argument("what", choices=["firmware"])
+    st.add_argument("--esp32", action="store_true", help="also the ESP32 board package and ESP32Servo")
+    st.add_argument("--no-servo", action="store_true", help="skip the Servo / ESP32Servo libraries")
+    st.add_argument("--dry-run", action="store_true", help="print what would be installed; change nothing")
+    st.add_argument("-y", "--yes", action="store_true", help="install arduino-cli without asking, if it is missing")
+
     argv = list(sys.argv[1:] if argv is None else argv)
     commands = ("chat", "build", "bom", "view", "drawing", "serve", "web", "cam", "cut", "print-prep", "print", "doctor", "key",
-                "-h", "--help")
+                "update", "setup", "-h", "--help", "-V", "--version")
     if not argv:
         argv = ["web"]                   # plain `eitri`: the website, in the browser
     elif argv[0] not in commands:
@@ -645,6 +661,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "key":
         from .doctor import run_key
         return run_key(args.action, args.key, check=not args.no_check)
+    if args.cmd == "update":
+        from .update import run_update
+        return run_update(check_only=args.check, auto=args.auto, dry_run=args.dry_run)
+    if args.cmd == "setup":
+        from .setup_firmware import run_setup_firmware
+        return run_setup_firmware(esp32=args.esp32, dry_run=args.dry_run, yes=args.yes, servo=not args.no_servo)
 
     if args.cmd == "build":
         from .kernel import build_model
@@ -762,6 +784,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "web":
+        from .update import startup_notice
+        startup_notice()
         return web_main(args)
 
     if args.cmd == "serve":
@@ -783,6 +807,8 @@ def main(argv: list[str] | None = None) -> int:
             res = project.last_ok_revision()
             print("\n".join(f"{k}: {v}" for k, v in res.outputs.items()))
         return 1 if result.is_error else 0
+    from .update import startup_notice
+    startup_notice()
     return repl(project, args.llm, args.effort, not args.no_viewer, args.verbose, args.max_budget, backend)
 
 
