@@ -3,7 +3,22 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
-## 0.5.6: depth that holds at desk scale
+## 0.5.6: depth that holds at desk scale, and a cheaper API loop
+
+### Changed
+
+- **The API backend caches the whole conversation.** `APISession` (the Messages-API loop behind `eitri chat --backend api`, and
+  the one eitri.io's hosted session subclasses) cached only the tools and system prompt, so every agent step paid full input price
+  to re-send the history: tool results, review images, earlier thinking. It now also sets top-level automatic caching, so each
+  step reads the conversation so far from cache and writes only what the last step appended. The history was already append-only
+  and thinking blocks go back unchanged, so the cached prefix and preserved thinking both stay valid. Measured on the bench (4
+  tasks plus 2 follow-ups, Opus 5.5, effort high): the cache-read share of the prompt went from 66% to 93%, and cost fell by about
+  half ($2.72 to $1.34 for the same trajectories). The default effort is unchanged (`high`), and so are the requests when no new
+  argument is set.
+- **Usage per step.** Every API response is recorded in `APISession.step_log` (input, cache-write, cache-read and output
+  tokens, cost, seconds, images carried in the history, stop reason). With `EITRI_USAGE_LOG` set to a file path, each record is
+  also appended to that file as one JSON line. `TurnResult` from the API backend now carries the turn's `cost_usd`, `usage` and
+  `duration_ms` (they were left at zero).
 
 ### Fixed
 
@@ -19,6 +34,21 @@ annotated tags (`git show v0.4.0`).
 
 - `eitriViewer.setHostBounds(box)`: the bounds of a host's own scene (`hostGroup`), so the near and far planes fit it too while
   the editor's model is hidden; `eitriViewer.clip()` reads the current planes.
+- **Effort per route.** `APISession(followup_effort=...)` sets the effort for a follow-up edit: a turn that starts on a project
+  that already has a good build, so a resumed chat counts too. `send(effort=...)` sets the effort for one turn. Neither changes the
+  session's top-level effort, which has to stay fixed for the cache to hold. Instead the turn's level goes out as an effort-only
+  system message after the user turn (beta `mid-conversation-output-config-2026-07-01`), so the turn still reads the whole cached
+  history. Neither is set by default. A host whose single turn spans several `send()` calls on a design that is still being
+  created should not set `followup_effort`.
+- `APISession(usage_log=...)`: a JSONL file for the per-step records (default `$EITRI_USAGE_LOG`).
+- `bench.run --backend api` (with `--label` and `--followup-effort`): runs the bench through `APISession` with the configured key.
+  It spends real money, with `--budget` enforced between steps. See `bench/README.md`.
+
+### Breaking for hosts
+
+None. `APISession`'s new arguments come last in the signature and default to off; with neither effort argument set it sends
+the same effort as before. Requests gain top-level `cache_control`. `state.json`, routes, export formats, the build-extension API and
+the shell slots are unchanged.
 
 ## 0.5.5: the agent is called eitri
 
