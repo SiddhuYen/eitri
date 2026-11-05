@@ -132,18 +132,21 @@ for a harness it prints the connectivity / ampacity / voltage-drop checks and wr
 cut list and WireViz YAML to `out/`. `eitri build eitri/demos/quad-power/quad_power.py` is a quick harness smoke test
 (it should report `28 pass, 5 warn, 0 FAIL`; the warnings are intended: the connectors run at or past their continuous ratings). No extra install or system package is needed for harnesses.
 
-Three more domains work the same way, each chosen by its model file's import: **mechanism** (`from eitri.mechanism import *`:
+Four more domains work the same way, each chosen by its model file's import: **mechanism** (`from eitri.mechanism import *`:
 links, joints, actuators, targets; reach, worst-pose torque, speed, limits, mass), **pneumatics** (`from eitri.pneumatics import *`:
 ISO 1219 circuits; force, ISO 6358 flow, air consumption, pressure drop, circuit validity) and **firmware**
-(`from eitri.firmware import *`: board, pinout, peripherals, sources; pin checks and an arduino-cli compile). Smoke tests:
+(`from eitri.firmware import *`: board, pinout, peripherals, sources; pin checks and an arduino-cli compile) and **electronics**
+(`from eitri.electronics import *`: a board, modules, passives, transistors, relays, servos and nets at breadboard level; current,
+power, logic-level, I2C, flyback and gate checks, each against a datasheet figure with its source). Smoke tests:
 
 ```sh
 eitri build eitri/demos/pan-tilt/pan_tilt.py         # 12 pass, 0 warn, 0 FAIL
 eitri build eitri/demos/air-clamp/air_clamp.py       # 23 pass, 1 warn, 0 FAIL (the warning is intended: estimated flow data)
 eitri build eitri/demos/servo-sweep/servo_sweep.py   # 12 pass, 0 warn, 0 FAIL once arduino-cli is installed (below)
+eitri build eitri/demos/uno-arm-circuit/uno_arm_circuit.py   # 31 pass, 0 warn, 0 FAIL
 ```
 
-Mechanism and pneumatics need nothing extra. **Firmware needs arduino-cli** (a system program, not a Python package). Install it
+Mechanism, pneumatics and electronics need nothing extra (electronics is breadboard level: no PCB layout). **Firmware needs arduino-cli** (a system program, not a Python package). Install it
 only if the person wants firmware. Without it, firmware builds still run and report one failed check,
 `compiles (arduino-cli)`, saying "compiler unavailable". eitri never uploads to a board, and you must not either.
 

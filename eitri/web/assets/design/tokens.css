@@ -8,7 +8,7 @@
   --ok: #3fb950; --ok-soft: rgba(63, 185, 80, .13); --bad: #f85149; --bad-soft: rgba(248, 81, 73, .13); --warn: #d29922; --warn-soft: rgba(210, 153, 34, .14);
   --grid-dot: rgba(160, 175, 195, .16); --grid-line: rgba(160, 175, 195, .05); --vignette: rgba(11, 14, 19, .9);
   --scrim: rgba(5, 8, 12, .66); --shadow-2: 0 8px 24px rgba(0, 0, 0, .38), 0 1px 3px rgba(0, 0, 0, .3);
-  --c-cad: #ff8a3d; --c-wires: #f472b6; --c-motion: #a78bfa; --c-pneumatics: #38bdf8; --c-firmware: #a3e635; --c-all: #e6e9ee;
+  --c-cad: #ff8a3d; --c-wires: #f472b6; --c-motion: #a78bfa; --c-pneumatics: #38bdf8; --c-firmware: #a3e635; --c-electronics: #facc15; --c-all: #e6e9ee;
   --tool: var(--c-all); --tool-ink: #0b0e13;
   --font-ui: "IBM Plex Sans", -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
@@ -26,7 +26,7 @@
     --ok: #116329; --ok-soft: rgba(17, 99, 41, .1); --bad: #c0392b; --bad-soft: rgba(192, 57, 43, .09); --warn: #9a6700; --warn-soft: rgba(154, 103, 0, .1);
     --grid-dot: rgba(40, 55, 75, .16); --grid-line: rgba(40, 55, 75, .05); --vignette: rgba(243, 244, 246, .92);
     --scrim: rgba(20, 30, 45, .28); --shadow-2: 0 6px 20px rgba(20, 30, 45, .12), 0 1px 3px rgba(20, 30, 45, .08);
-    --c-cad: #c2410c; --c-wires: #be185d; --c-motion: #6d28d9; --c-pneumatics: #0369a1; --c-firmware: #4d7c0f; --c-all: #1a1e24;
+    --c-cad: #c2410c; --c-wires: #be185d; --c-motion: #6d28d9; --c-pneumatics: #0369a1; --c-firmware: #4d7c0f; --c-electronics: #a16207; --c-all: #1a1e24;
     --tool-ink: #ffffff;
   }
 }
@@ -37,7 +37,7 @@
   --ok: #116329; --ok-soft: rgba(17, 99, 41, .1); --bad: #c0392b; --bad-soft: rgba(192, 57, 43, .09); --warn: #9a6700; --warn-soft: rgba(154, 103, 0, .1);
   --grid-dot: rgba(40, 55, 75, .16); --grid-line: rgba(40, 55, 75, .05); --vignette: rgba(243, 244, 246, .92);
   --scrim: rgba(20, 30, 45, .28); --shadow-2: 0 6px 20px rgba(20, 30, 45, .12), 0 1px 3px rgba(20, 30, 45, .08);
-  --c-cad: #c2410c; --c-wires: #be185d; --c-motion: #6d28d9; --c-pneumatics: #0369a1; --c-firmware: #4d7c0f; --c-all: #1a1e24;
+  --c-cad: #c2410c; --c-wires: #be185d; --c-motion: #6d28d9; --c-pneumatics: #0369a1; --c-firmware: #4d7c0f; --c-electronics: #a16207; --c-all: #1a1e24;
   --tool-ink: #ffffff;
 }
 [data-tool="cad"] { --tool: var(--c-cad); }
@@ -45,4 +45,5 @@
 [data-tool="motion"] { --tool: var(--c-motion); }
 [data-tool="pneumatics"] { --tool: var(--c-pneumatics); }
 [data-tool="firmware"] { --tool: var(--c-firmware); }
+[data-tool="electronics"] { --tool: var(--c-electronics); }
 [data-tool="all"], [data-tool="multi"] { --tool: var(--c-all); }

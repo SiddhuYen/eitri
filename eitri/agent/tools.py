@@ -145,6 +145,17 @@ class Tools:
         from ..domains import module
         return ToolResult(module("firmware").reference_text())
 
+    def electronics_reference(self) -> ToolResult:
+        """The electronics reference: the Circuit API at breadboard and module level (a board - uno, nano, esp32 -
+        supplies, regulators, catalog modules such as PCA9685 / BME280 / SSD1306 / HC-SR04, resistors, LEDs, diodes,
+        capacitors, switches, MOSFETs, transistors, relays, motors, servos, and the nets that join them), the parts
+        catalog, the checks every build runs with the datasheet each limit comes from (LED and resistor current, per-pin
+        and per-chip current, rail budgets, regulator headroom and temperature, I2C pull-ups and addresses, logic levels,
+        flyback diodes, MOSFET gate drive) and worked examples. Read it before designing a circuit (a model file that
+        starts `from eitri.electronics import *`)."""
+        from ..domains import module
+        return ToolResult(module("electronics").reference_text())
+
     def _cad_only(self, what: str) -> ToolResult | None:
         if self.project.kind != "cad":
             from ..domains import module
@@ -175,7 +186,10 @@ class Tools:
         torque(**angles) (holding torque per joint at a pose), reach(target) (the closest the tip gets).
         A pneumatics project: `c`, `p`, cylinders() (force, consumption, achievable speed), paths()
         (the conductance of every fill and exhaust path), flow(C, b, p1, p2) (ISO 6358). A firmware
-        project: `fw`, `p`, pins(), board(), sources(), compile_log().
+        project: `fw`, `p`, pins(), board(), sources(), compile_log(). An electronics project: `c`, `p`,
+        nets() (rail, ground, driven, switched or signal, and the voltage), currents() (every series
+        string solved: its worst-case current and each end state), rails() (what each rail supplies,
+        item by item, against its limit), part(name) (its numbers with their sources), sources().
         """
         ok, out = self.project.run_python(code)
         text = out or "(no output)"
@@ -233,7 +247,7 @@ class Tools:
 
     def export(self, formats: list[str]) -> ToolResult:
         """Export the current model to additional formats: any of step, stl, 3mf, glb. A harness, mechanism,
-        pneumatic or firmware project has no geometry: every build already writes its outputs (diagram, tables,
+        pneumatic, firmware or electronics project has no geometry: every build writes its outputs (diagram, tables,
         BOM, code...), and this returns their paths."""
         if self.project.kind != "cad":
             res = self.project.build(note="export", render=False)
@@ -591,4 +605,4 @@ def _truncate(text: str, limit: int = MAX_TEXT) -> str:
 
 
 TOOL_NAMES = ["build_model", "edit_model", "set_params", "read_model", "inspect", "view", "library", "export",
-              "design_notes", "harness_reference", "mechanism_reference", "pneumatics_reference", "firmware_reference"]
+              "design_notes", "harness_reference", "mechanism_reference", "pneumatics_reference", "firmware_reference", "electronics_reference"]

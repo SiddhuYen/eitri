@@ -8,7 +8,7 @@
 //     topbarEnd(end, topbar) {},                   top bar, right-hand slot (hosted: usage meter + account menu; OSS: a "local" badge)
 //     railBottom: [{key, href, name, short, line, glyph}],   rail, bottom slot (hosted: Projects; OSS: the local project list)
 //     status(footer, info) {},                     status bar items, called after the page's own items are drawn (info: {tool, version, page})
-//     rail, palette, home, mark, brand             as in the design README (the OSS rail is the five tools, nothing else)
+//     rail, palette, home, mark, brand             as in the design README (the OSS rail is the six tools, nothing else)
 //     place(state) {},                             the editor's place in the shell: {crumb: [label, href], railKey, toolName}, any of them, or
 //                                                  nothing for the default (the current model file's tool)
 //     switchModel(file) {},                        make another of the project's model files (state.models) current; may return a promise.
@@ -26,7 +26,8 @@
     { key: 'wires', name: 'eitri Wires', short: 'Wires', line: 'Wire harnesses and cable assemblies', kind: 'harness' },
     { key: 'motion', name: 'eitri Motion', short: 'Motion', line: 'Linkages, joints and actuators', kind: 'mechanism' },
     { key: 'pneumatics', name: 'eitri Pneumatics', short: 'Pneumatics', line: 'ISO 1219 air circuits', kind: 'pneumatics' },
-    { key: 'firmware', name: 'eitri Firmware', short: 'Firmware', line: 'Arduino pinouts and sketches, compiled', kind: 'firmware' }
+    { key: 'firmware', name: 'eitri Firmware', short: 'Firmware', line: 'Arduino pinouts and sketches, compiled', kind: 'firmware' },
+    { key: 'electronics', name: 'eitri Electronics', short: 'Electronics', line: 'Breadboard circuits, checked against datasheets', kind: 'electronics' }
   ];
   var host = window.EITRI_SHELL || {};
   var defaults = {

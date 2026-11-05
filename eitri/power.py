@@ -8,6 +8,10 @@ Shared by the wire-harness and the firmware domains (each grades its own model a
 
 The limits are for what the pin can source in total. The board's own draw (the ATmega328P, the USB bridge, the LEDs) comes out of the
 same budget, so a load near the limit is reported as a warning.
+
+Where sources disagree, the conservative figure is used and both are quoted: the lower figure for a limit (every number in this
+file is one: a pin's or regulator's rating) and the higher figure for a draw or load (a servo's stall current is the model's to
+give, at its datasheet's highest; eitri.electronics applies the same rule to its catalog).
 """
 from __future__ import annotations
 
