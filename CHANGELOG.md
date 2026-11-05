@@ -3,7 +3,10 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
-## Unreleased: electronics, the sixth domain
+## 0.6.0: electronics, and a one-command install
+
+eitri gains its sixth domain, circuits at breadboard and module level, and becomes installable with one command from PyPI
+(`eitri-cad`).
 
 ### Added
 
@@ -19,6 +22,65 @@ annotated tags (`git show v0.4.0`).
   `eitri/electronics/sources.py`; where sources disagree the conservative figure is used (the lower limit, the higher draw); each build writes the sources it used. Outputs: a schematic (SVG + PNG review image, labels by the
   shared placer), BOM, netlist, sources. A browser editor (schematic, parts and nets tables, value and pin edits, drag), the agent's
   `electronics_reference()` tool, and the `uno-arm-circuit` demo (its `bad` configuration fails two checks on purpose).
+- **Branched circuits are solved, not skipped.** Where three or more parts meet at a node that is not a rail (two LEDs on one
+  resistor, a divider feeding two loads, a pin feeding several strings through one resistor) the network is solved by nodal
+  analysis (`eitri/electronics/nodal.py`: MNA with an ideal-diode iteration, written for eitri). Series strings keep the closed form;
+  a test checks the two agree on every series string. LEDs that share a resistor are graded on the worst case (each at typical Vf,
+  the others at maximum, so one takes the whole current), and an LED that stays dark at typical Vf because another clamps the node
+  is a warning (current hogging).
+- **Wire's internal pull-ups on an Uno or Nano.** `Wire.begin()` turns on the ATmega's 20-50 kΩ pull-ups to 5 V on SDA and SCL. A
+  device on the bus that cannot take 5.5 V (a 3.3 V BME280) is a warning with the line's worst voltage and the fixes: a level
+  shifter, or a 3.3 V-only bus with the internal pull-ups turned off, declared with `c.i2c(sda, internal_pullups=False)` (also a
+  toggle on the SDA net in the editor).
+- **Catalog LEDs.** `c.led(name, part="WP7113SGD")` (also WP7113SRD/D, WP7113QBC/D, WP7113QWC/D) is graded on that part's own
+  datasheet, with no "typical figures" warning; `vf_max=` for your own LED.
+- **One-command install.** `curl -fsSL https://eitri.io/install | sh` (`scripts/install-remote.sh`) installs uv if it is missing, then
+  `uv tool install eitri-cad` from PyPI (or, if PyPI is unreachable, the tagged GitHub release archive), and runs `eitri doctor`.
+  `./install.sh` in a checkout runs the same script against the checkout. It prints the download size and time first and never uses
+  sudo (on Linux without libGL it prints the apt / dnf command).
+- **`eitri update`** (`--check`, `--dry-run`, `--auto on|off`). It reads how eitri was installed (uv's receipt) and upgrades from
+  PyPI, moves a git or archive install over to PyPI, or tells a checkout to `git pull && ./install.sh`. eitri asks pypi.org only when
+  you run `eitri update` or `eitri doctor --online`, or once a day at startup if you turn that on; the answer is cached.
+- **`eitri setup firmware`** (`--esp32`, `--yes`, `--dry-run`). Installs arduino-cli if missing (asking first: Homebrew on a Mac that
+  has it, else Arduino's script into `~/.local/bin`), the AVR core and Servo (ESP32 core and ESP32Servo with `--esp32`), skips what is
+  installed, and finishes with a test compile per board family.
+- **`eitri --version`**, and `eitri doctor` lines for the installed version and the firmware toolchain.
+- **PyPI releases.** A `v*` tag runs the `release` workflow: build, `scripts/check_dist.py` (every package file is in the wheel and
+  sdist; pyproject, `__version__`, the installer's fallback tag and the tag agree), a clean install on macOS and Ubuntu with
+  `eitri doctor`, then trusted publishing of that same sdist and wheel. The `install` workflow runs the build and install check on
+  pushes to main and on pull requests.
+
+### Changed
+
+- **Sourcing rule, stated for every domain: the conservative figure.** Where sources disagree, the lower figure is used for a limit
+  and the higher for a draw or load (the docs said "the lower figure"). The harness, power and mechanism catalogs only ever applied
+  it to limits, so no number there changes. In the new electronics catalog the MG996R draws 2.5 A at stall (the distributor's figure
+  at 6 V; TowerPro says 1.4 A) within TowerPro's narrower 4.8-6.6 V; the SG90's 0.5 A stays an ASSUMPTION (no stall figure is
+  published).
+- **`eitri doctor`**: a missing arduino-cli (or AVR core) is `info`, not `warn`: only firmware projects need it. Lines now start with
+  `ok`, `info`, `warn` or `FAIL`.
+- **README** images and links are absolute GitHub URLs, so they show on the PyPI page.
+- The firmware "compiler unavailable" hint points at `eitri setup firmware`; arduino-cli is also looked for in `~/.local/bin`,
+  `/opt/homebrew/bin` and `/usr/local/bin`.
+
+### Fixed
+
+- **A project folder that holds its own virtualenv builds.** The build worker forgets the project's own helper modules between
+  builds; it also forgot every installed package under the folder (numpy, the CAD kernel), and the next import failed with
+  "cannot load module more than once per process". It now keeps installed packages and eitri itself.
+
+### Breaking for hosts
+
+- **A new domain kind, `electronics`.** `eitri.domains.kind_of_source()` returns `"electronics"` for a model that starts
+  `from eitri.electronics import *`, `domains.LABELS` gains it, `result.json` gains an `"electronics"` block for such builds, and the
+  agent's tool list gains `electronics_reference()` (a sixth reference tool). A host that maps core kinds to its own domains must add
+  it or route it elsewhere: eitri.io's `cadhost/domains.py` `KIND` has no entry for it yet.
+- **`eitri doctor` has a fourth status, `info`.** Anything that parses its lines or `--json` `status` values must accept it
+  (`ready` is unchanged: only `FAIL` makes it false).
+- **Electronics analysis objects.** `Analysis.branches` now lists only networks the nodal solver could not solve (it listed every
+  branch node), `Analysis.networks` is new, and a `String` can end at a branch node (`String.network`, `String.typical`).
+- Nothing else: `state.json`, routes, export formats, the build-extension API, the shell slots and `APISession` are unchanged. The
+  package name on PyPI is `eitri-cad`; installing from a git ref still works.
 
 ## 0.5.6: depth that holds at desk scale, and a cheaper API loop
 

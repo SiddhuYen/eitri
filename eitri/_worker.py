@@ -18,6 +18,24 @@ from pathlib import Path
 from typing import Any
 
 
+def _installed_roots() -> list[str]:
+    """Where installed packages live (this interpreter's prefixes and site-packages). A project folder that holds its own venv
+    must not have them purged: numpy and the CAD kernel's extension modules cannot be imported twice in one process."""
+    import site
+    roots = {sys.prefix, sys.base_prefix, sys.exec_prefix}
+    try:
+        roots.update(site.getsitepackages())
+    except AttributeError:                   # some virtualenv layouts
+        pass
+    roots.add(site.getusersitepackages() if hasattr(site, "getusersitepackages") else "")
+    out = []
+    for r in roots:
+        if r:
+            rp = str(Path(r).resolve())
+            out.append(rp if rp.endswith(os.sep) else rp + os.sep)
+    return out
+
+
 def _purge_project_modules(folder: Path) -> None:
     """Forget modules loaded from the model's folder so edits to helpers are picked up.
 
@@ -29,9 +47,13 @@ def _purge_project_modules(folder: Path) -> None:
     import shutil
 
     folder_s = str(folder)
+    keep = _installed_roots()
     for name, mod in list(sys.modules.items()):
         f = getattr(mod, "__file__", None)
-        if f and str(Path(f).resolve()).startswith(folder_s):
+        if not f or name == "eitri" or name.startswith("eitri."):
+            continue
+        rf = str(Path(f).resolve())
+        if rf.startswith(folder_s) and not any(rf.startswith(k) for k in keep):
             del sys.modules[name]
     for cache in list(folder.glob("__pycache__")) + list(folder.glob("*/__pycache__")):
         shutil.rmtree(cache, ignore_errors=True)

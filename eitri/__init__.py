@@ -19,4 +19,4 @@ from .measure import *  # noqa: F401,F403
 from .lib import *  # noqa: F401,F403
 from .anchors import anchor  # noqa: F401  - named points and frames of the model (eitri.anchors)
 
-__version__ = "0.5.6"
+__version__ = "0.6.0"

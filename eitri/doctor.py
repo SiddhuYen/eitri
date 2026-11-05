@@ -1,7 +1,7 @@
 """`eitri doctor` (is this install complete and working?) and `eitri key` (the Anthropic API key).
 
 Both are written to be run by a person or by an AI agent setting eitri up: plain lines, a stable
-first word per line (ok / warn / FAIL), `--json` for machines, and a non-zero exit code when eitri
+first word per line (ok / info / warn / FAIL; info is something optional that is not installed), `--json` for machines, and a non-zero exit code when eitri
 cannot work.
 """
 from __future__ import annotations
@@ -144,13 +144,13 @@ def _version_check(add, online: bool) -> None:
 
 
 def _firmware_check(add) -> None:
-    """arduino-cli and the AVR core: only firmware projects need them, so a missing toolchain is a warning."""
+    """arduino-cli and the AVR core: only firmware projects need them, so a missing toolchain is info, not a warning."""
     try:
         import subprocess
         from .firmware.compile import find_cli
         cli = find_cli()
         if cli is None:
-            add("warn", "firmware toolchain", "arduino-cli not installed - only firmware projects need it; "
+            add("info", "firmware toolchain", "arduino-cli not installed - only firmware projects need it; "
                 "`eitri setup firmware` installs it")
             return
         ver = subprocess.run([cli, "version"], capture_output=True, text=True, timeout=30).stdout.strip().splitlines()
@@ -159,7 +159,8 @@ def _firmware_check(add) -> None:
         if "arduino:avr" in have:
             add("ok", "firmware toolchain", f"{(ver or ['arduino-cli'])[0]} ({cli}); cores: {', '.join(have)}")
         else:
-            add("warn", "firmware toolchain", f"arduino-cli at {cli} but the arduino:avr core is missing; `eitri setup firmware` installs it")
+            add("info", "firmware toolchain", f"arduino-cli at {cli} but the arduino:avr core is missing (only firmware projects need it); "
+                "`eitri setup firmware` installs it")
     except Exception as exc:  # noqa: BLE001 - informational
         add("warn", "firmware toolchain", f"could not ask arduino-cli: {type(exc).__name__}: {exc}")
 

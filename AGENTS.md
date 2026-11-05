@@ -43,7 +43,7 @@ The installer (A, and C, which runs the same script on the clone) installs `uv` 
 `claude-agent-sdk` package from PyPI: about 390 MB of downloads, 1 to 5 minutes), runs `eitri doctor` (up to a
 minute the first time), and adds the tool folder to the shell `PATH`. It needs no sudo. Set
 `EITRI_NO_PATH_EDIT=1` to leave the shell profile alone (then call eitri by the full path it prints),
-`EITRI_NO_UV_INSTALL=1` to stop it from installing uv, `EITRI_VERSION=0.5.5` to pin a version. If the
+`EITRI_NO_UV_INSTALL=1` to stop it from installing uv, `EITRI_VERSION=0.6.0` to pin a version. If the
 `eitri-cad` package is not on PyPI, the installer installs the matching GitHub release archive instead.
 
 **Success:** the install ends with `eitri doctor` output (step 2) and then:
@@ -66,18 +66,18 @@ eitri doctor
 ```
 eitri doctor
   ok   python: 3.12.x (...)
-  ok   eitri: 0.5.5 (installed from PyPI with uv tool)
+  ok   eitri: 0.6.0 (installed from PyPI with uv tool)
   ok   CAD kernel: build123d 0.13.0, OCP 8.0.1.1.0
   ok   test build: 20 mm cube, volume 8000 mm^3, STEP + report + review image in 2.0 s
   ok   Claude Code binary: 2.1.301 (Claude Code) (from Anthropic's claude-agent-sdk package); API-key-only mode (--bare) supported
   warn API key: not set - the editor and the demo projects work without one; ...
   ok   demo projects: V8 engine kit, Wall racket holder, Marble maze
-  warn firmware toolchain: arduino-cli not installed - only firmware projects need it; `eitri setup firmware` installs it
+  info firmware toolchain: arduino-cli not installed - only firmware projects need it; `eitri setup firmware` installs it
 eitri is ready. Next: run `eitri` - it opens http://127.0.0.1:8765 in your browser.
 ```
 
-Every line starts with `ok`, `warn` or `FAIL`. `warn` on the API key and on the firmware toolchain is fine at
-this point. A `warn` on `eitri` means a newer version is known: `eitri update` installs it. Any `FAIL`
+Every line starts with `ok`, `info`, `warn` or `FAIL`. `warn` on the API key is fine at this point; `info` marks
+something optional that is not installed (the firmware toolchain: only firmware projects need it). A `warn` on `eitri` means a newer version is known: `eitri update` installs it. Any `FAIL`
 means the install is broken (see Troubleshooting). For machine-readable output: `eitri doctor --json`
 (`{"ready": true, "checks": [...], "next": "..."}`).
 

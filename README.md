@@ -13,7 +13,7 @@ Fusion-style 3D editor in your browser, by hand or by chat: both edit the same m
   1. editor tour (docs/editor-tour.gif): still shows the editor before the shell.
   2. manual drag, then the agent continues (docs/edit-agent-loop.gif / .mp4): still the old editor; needs a key.
 -->
-![A recorded eitri session, replayed in the editor: eitri plans the hook, writes the model, a check fails, eitri rebuilds, and all 10 checks pass](docs/check-fix-green.gif)
+![A recorded eitri session, replayed in the editor: eitri plans the hook, writes the model, a check fails, eitri rebuilds, and all 10 checks pass](https://raw.githubusercontent.com/SiddhuYen/eitri/main/docs/check-fix-green.gif)
 
 <sub>A real recorded session (the Wall racket holder demo, which anyone can replay without a key), played back
 in the editor: the plan, eitri writing the model, the failed builds, the fix, all 10 checks passing. 3 min 17 s
@@ -31,7 +31,7 @@ curl -fsSL https://eitri.io/install | sh
 eitri
 ```
 
-The installer ([scripts/install-remote.sh](scripts/install-remote.sh); read it first if you like) installs
+The installer ([scripts/install-remote.sh](https://github.com/SiddhuYen/eitri/blob/main/scripts/install-remote.sh); read it first if you like) installs
 [uv](https://docs.astral.sh/uv/) if needed, then `uv tool install --python 3.12 eitri-cad`: Python 3.12, the CAD
 kernel and Claude Code (the binary inside Anthropic's `claude-agent-sdk` package, downloaded from PyPI at install
 time; eitri does not ship it). It checks the install (`eitri doctor`) and tells you what to run. **It downloads
@@ -50,7 +50,7 @@ Python import are both `eitri`.
 - **Firmware projects:** `eitri setup firmware` installs arduino-cli and the Arduino AVR core (`--esp32` adds
   the ESP32 core; `--dry-run` shows the commands first). It asks before installing arduino-cli itself.
 
-**Setting it up with an AI agent?** Point it at [AGENTS.md](AGENTS.md): exact commands and expected output
+**Setting it up with an AI agent?** Point it at [AGENTS.md](https://github.com/SiddhuYen/eitri/blob/main/AGENTS.md): exact commands and expected output
 for every step.
 
 > **See it in action without a key.** The home page opens with three demo projects (a 43-part V8 engine kit, a wall
@@ -95,14 +95,14 @@ files a slicer wants:
   written (closed, manifold, consistently wound, the solid's volume) and every file is read back and checked
   again; a part that fails is not written, and the dialog says which and where.
 
-![The V8 engine kit: 43 printable parts on 2 plates](docs/print-dialog.png)
+![The V8 engine kit: 43 printable parts on 2 plates](https://raw.githubusercontent.com/SiddhuYen/eitri/main/docs/print-dialog.png)
 
 On the V8 demo: **43 printable parts, 2 plates** of 220 x 220 mm, all 43 written and verified in about
 3 s after a 3 s plan; 12 parts are flagged with walls under 0.8 mm (the model's own report flags them too).
 
 | Plate 1 | Plate 2 |
 |---|---|
-| ![V8 plate 1](docs/v8-plate1.png) | ![V8 plate 2](docs/v8-plate2.png) |
+| ![V8 plate 1](https://raw.githubusercontent.com/SiddhuYen/eitri/main/docs/v8-plate1.png) | ![V8 plate 2](https://raw.githubusercontent.com/SiddhuYen/eitri/main/docs/v8-plate2.png) |
 
 ## Use
 
@@ -123,7 +123,7 @@ revisions) and the chat sit in panels docked on the right. The chat collapses to
 a strip for more room, and the Export menu at the top of the inspector lists every file the project can be
 downloaded as. Dark by default, light when the system is.
 
-![The V8 engine kit demo: the prompt, eitri writing the model, the build, all 43 checks passing](docs/v8-build.gif)
+![The V8 engine kit demo: the prompt, eitri writing the model, the build, all 43 checks passing](https://raw.githubusercontent.com/SiddhuYen/eitri/main/docs/v8-build.gif)
 
 <sub>The 43-part V8 demo: one prompt → eitri writes a 398-line model → all 43 checks pass (a recorded
 23-minute session, replayed and compressed to 18 s).</sub>
@@ -366,7 +366,7 @@ an empty grid. Press **S** and click the grid to sketch on the ground plane and 
 the first part, drop a **primitive** (B), or describe the part in the chat and let
 eitri write it - every later edit works the same on either.
 
-![A tour of the editor on the V8: combine, mirror, align and mate, form bodies, holes from fastener tables, export](docs/editor-tour.gif)
+![A tour of the editor on the V8: combine, mirror, align and mate, form bodies, holes from fastener tables, export](https://raw.githubusercontent.com/SiddhuYen/eitri/main/docs/editor-tour.gif)
 
 <sub>Thirteen seconds of the editor on the V8 demo: combine, mirror, align and mate faces, form bodies, holes
 sized from fastener tables, export to STEP / STL / 3MF / drawings / G-code.</sub>
@@ -608,11 +608,11 @@ steps (pattern -> `GridLocations`, mirror -> `mirror(...)`, shell -> `offset(...
 revolve -> `revolve(...)`, thread -> `IsoThread`, a dragged corner ->
 `move_vertices(shape, near=[(x, y, z)], delta=...)` from the library, ...).
 
-![Stretch the plate by hand and tell eitri to continue: it reads the edit, adds the holes, then builds a hook on the circle you sketched and writes checks for it](docs/edit-agent-loop.gif)
+![Stretch the plate by hand and tell eitri to continue: it reads the edit, adds the holes, then builds a hook on the circle you sketched and writes checks for it](https://raw.githubusercontent.com/SiddhuYen/eitri/main/docs/edit-agent-loop.gif)
 
 <sub>Stretch the plate by hand, tell eitri to continue: it reads your edits, adds the holes, then builds a hook
 on the circle you sketched and writes new checks for it ($0.61 of API usage, a real session;
-[MP4](docs/edit-agent-loop.mp4)).</sub>
+[MP4](https://github.com/SiddhuYen/eitri/blob/main/docs/edit-agent-loop.mp4)).</sub>
 
 For anything else, click the geometry and type in the chat box ("make this hole
 M5 and counterbore it", "this wall is too thin, 3 mm please"): the message goes
@@ -663,7 +663,7 @@ nuts, washers and ball bearings (via bd_warehouse), bearing pockets.
 
 ## What the automatic checks catch
 
-![The checks card after the fix: all 10 checks of the racket holder pass, each with what was measured and what was expected](docs/editor-checks.png)
+![The checks card after the fix: all 10 checks of the racket holder pass, each with what was measured and what was expected](https://raw.githubusercontent.com/SiddhuYen/eitri/main/docs/editor-checks.png)
 
 Things that went wrong during development and are now caught by the build, not by
 hoping the agent notices:
@@ -792,7 +792,7 @@ eitri or through the baseline (headless Claude Code with the text-to-cad
 plugin installed, same model, same prompt) and scores the result identically.
 
 Results (Claude Opus 5.5 at effort high for both, 2026-10-11; full tables and
-per-check verdicts in [`bench/RESULTS.md`](bench/RESULTS.md)):
+per-check verdicts in [`bench/RESULTS.md`](https://github.com/SiddhuYen/eitri/blob/main/bench/RESULTS.md)):
 
 | | baseline (Claude Code + text-to-cad) | eitri |
 |---|---|---|
@@ -864,7 +864,7 @@ check on every push to main and every pull request.
 
 ## License
 
-eitri is licensed under the [Functional Source License, Version 1.1, MIT Future License](LICENSE.md)
+eitri is licensed under the [Functional Source License, Version 1.1, MIT Future License](https://github.com/SiddhuYen/eitri/blob/main/LICENSE.md)
 (FSL-1.1-MIT): you may use, modify and redistribute it for any purpose except offering a competing
 commercial product or service; each version becomes MIT-licensed two years after it is released. Bundled
 third-party assets keep their own licenses: three.js (MIT, `eitri/viewer/vendor/three/LICENSE`), IBM Plex
