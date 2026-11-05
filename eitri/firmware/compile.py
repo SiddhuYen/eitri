@@ -1,7 +1,7 @@
 """The real verifier: compile the sketch with arduino-cli, headless. Never flashes anything.
 
 arduino-cli is a system dependency (like Chromium is for PDF drawings): `EITRI_ARDUINO_CLI` names the binary, else `arduino-cli` on
-PATH. Its own directories follow its usual ARDUINO_DIRECTORIES_DATA / _DOWNLOADS / _USER environment variables. Without the binary, or
+PATH, else ~/.local/bin, /opt/homebrew/bin or /usr/local/bin (`eitri setup firmware` installs it). Its own directories follow its usual ARDUINO_DIRECTORIES_DATA / _DOWNLOADS / _USER environment variables. Without the binary, or
 without the board's core, compile() returns a result whose `available` is False and whose message says how to install it; the
 checks turn that into a failed check, never a crashed build.
 """
@@ -44,11 +44,19 @@ def find_cli() -> str | None:
     env = os.environ.get("EITRI_ARDUINO_CLI")
     if env:
         return env if Path(env).is_file() and os.access(env, os.X_OK) else None
-    return shutil.which("arduino-cli")
+    found = shutil.which("arduino-cli")
+    if found:
+        return found
+    # where `eitri setup firmware` (and Homebrew) put it, for an eitri started without them on PATH
+    for cand in (Path.home() / ".local" / "bin" / "arduino-cli", Path("/opt/homebrew/bin/arduino-cli"), Path("/usr/local/bin/arduino-cli")):
+        if cand.is_file() and os.access(cand, os.X_OK):
+            return str(cand)
+    return None
 
 
 def install_hint(core: str) -> str:
-    return (f"install arduino-cli (https://arduino.github.io/arduino-cli/latest/installation/: "
+    setup = "`eitri setup firmware --esp32`" if core.startswith("esp32") else "`eitri setup firmware`"
+    return (f"run {setup} (it installs arduino-cli and the board core), or by hand: install arduino-cli (https://arduino.github.io/arduino-cli/latest/installation/: "
             f"`curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh`, or `brew install arduino-cli`), then "
             f"`arduino-cli core update-index && arduino-cli core install {core}`" + (" (add the ESP32 package index first: "
             "`arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json`)" if core.startswith("esp32") else "")

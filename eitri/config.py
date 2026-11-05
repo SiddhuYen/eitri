@@ -1,4 +1,4 @@
-"""eitri's per-user settings: the Anthropic API key and nothing else secret.
+"""eitri's per-user settings: the Anthropic API key (the only secret) and a few switches (update_check).
 
 The key comes from ANTHROPIC_API_KEY when it is set, else from config.json in the user config folder
 (macOS ~/Library/Application Support/eitri, Linux $XDG_CONFIG_HOME/eitri or ~/.config/eitri,
@@ -51,6 +51,17 @@ def _save(data: dict) -> None:
         os.chmod(path, 0o600)
     except OSError:
         pass
+
+
+def get_setting(name: str, default=None):
+    """A non-secret setting from config.json (e.g. update_check)."""
+    return _load().get(name, default)
+
+
+def set_setting(name: str, value) -> None:
+    data = _load()
+    data[name] = value
+    _save(data)
 
 
 def api_key() -> str | None:

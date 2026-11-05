@@ -1,0 +1,68 @@
+# Build eitri-cad, check the package data, then install the built wheel on clean macOS and Linux runners with the
+# one-line installer (which installs uv itself) and check the install with `eitri doctor`.
+# The release workflow (release.yml) runs this first and publishes the exact wheel it tested.
+name: install
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - name: build the sdist and the wheel
+        run: uv build
+      - name: check the package data and the version numbers
+        run: python3 scripts/check_dist.py ${{ startsWith(github.ref, 'refs/tags/v') && format('--tag {0}', github.ref_name) || '' }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  install:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7          # for scripts/ and tests/ only: eitri itself comes from the built wheel
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+      - name: the CAD kernel's one system library on Linux (the installer checks for it and prints this command)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y libgl1
+      - name: install with the one-line installer (installs uv if missing, then runs eitri doctor)
+        run: EITRI_INSTALL_SOURCE="$(ls dist/*.whl)" EITRI_NO_PATH_EDIT=1 sh scripts/install-remote.sh
+      - name: put uv and eitri on PATH
+        run: |
+          export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "$(uv tool dir --bin)" >> "$GITHUB_PATH"
+      - name: eitri doctor --json says ready
+        run: |
+          eitri --version
+          eitri doctor --json > doctor.json
+          python3 -c "import json; d = json.load(open('doctor.json')); [print(c['status'], c['check'], c['detail']) for c in d['checks']]; assert d['ready'], 'not ready'"
+      - name: a harness build (a second domain, no API key)
+        run: eitri build eitri/demos/quad-power/quad_power.py
+      - name: eitri setup firmware --dry-run (installs nothing)
+        run: eitri setup firmware --dry-run --esp32
+      - name: the install tests, against the installed wheel
+        run: |
+          py="$(uv tool dir)/eitri-cad/bin/python"
+          uv pip install --python "$py" pytest
+          cd tests && "$(dirname "$py")/pytest" -q -p no:cacheprovider test_install_cli.py
