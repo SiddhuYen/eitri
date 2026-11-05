@@ -3,6 +3,22 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
+## Unreleased: electronics, the sixth domain
+
+### Added
+
+- **Electronics at breadboard and module level** (`from eitri.electronics import *`). A `Circuit` holds a board (Uno, Nano, ESP32
+  DevKitC), supplies, regulators, catalog modules (PCA9685, BME280, SSD1306, HC-SR04), resistors, LEDs, diodes, capacitors,
+  switches, MOSFETs, an NPN transistor, a relay, motors, solenoids and servos, joined by nets. A closed-form DC kernel classifies
+  every net and solves the series strings between rails, grounds and driven pins; the checks grade per-pin and per-chip current,
+  LED current, resistor power, unlimited-current strings, shorted and back-fed rails, supply ranges, rail budgets (servos at stall),
+  regulator dropout and junction temperature, VIN range, common ground, logic levels and over-voltage on inputs, floating inputs,
+  I2C pull-ups (UM10204 Rp(min) / Rp(max)) and addresses, flyback diodes on switched coils, MOSFET gate drive and heat, transistor
+  saturation and relay contacts. Every limit has a recorded source (document, URL, quote, fetch date) in
+  `eitri/electronics/sources.py`; each build writes the sources it used. Outputs: a schematic (SVG + PNG review image, labels by the
+  shared placer), BOM, netlist, sources. A browser editor (schematic, parts and nets tables, value and pin edits, drag), the agent's
+  `electronics_reference()` tool, and the `uno-arm-circuit` demo (its `bad` configuration fails two checks on purpose).
+
 ## 0.5.6: depth that holds at desk scale, and a cheaper API loop
 
 ### Changed

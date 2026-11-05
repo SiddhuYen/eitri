@@ -99,7 +99,7 @@ the conversation) or **New chat** to start over; every direct-modeling tool work
 without a prompt. Each project keeps its conversation, so it is still there after a restart.
 
 Every page shares one layout: a top bar with where you are (`eitri / wires / Quad power harness`), a rail with
-the five tools (CAD, Wires, Motion, Pneumatics, Firmware; each opens that tool's projects) and your project list
+the six tools (CAD, Wires, Motion, Pneumatics, Firmware, Electronics; each opens that tool's projects) and your project list
 at its foot, and a status bar with the tool, the core version, the project folder and the build's verdict. In a
 project the model (or a domain's diagram) fills the canvas; the inspector (checks, parameters, the selection,
 revisions) and the chat sit in panels docked on the right. The chat collapses to its header, the panels fold to
@@ -275,6 +275,61 @@ eitri build eitri/demos/air-clamp/air_clamp.py       # 20 pass, 1 warn, 0 FAIL
 eitri build eitri/demos/servo-sweep/servo_sweep.py   # 11 pass, 0 warn, 0 FAIL with arduino-cli and arduino:avr installed
 eitri bom ~/eitri-projects/clamp                     # pneumatics: the bill of materials (--csv)
 ```
+
+## Electronics (breadboard and module level)
+
+The sixth domain: a circuit as code. A model file that starts `from eitri.electronics import *` builds a `Circuit`: a board (Arduino
+Uno, Nano, ESP32 DevKitC), supplies, regulators, breakout modules from a catalog (PCA9685, BME280, SSD1306, HC-SR04), resistors,
+LEDs, diodes, capacitors, switches, MOSFETs, transistors, relays, motors, solenoids and servos, and the nets that join them. It is
+breadboard and module level only: no PCB layout, no footprints, no KiCad export yet (the netlist CSV is the hand-off).
+
+Every build classifies each net (a rail at a voltage, a ground, a pin a board drives, a transistor's switched low side), solves the
+series strings of two-terminal parts between them in closed form (a pin, a resistor and an LED to ground; a rail, a relay coil and a
+MOSFET's drain), and grades the result. Every limit comes from a datasheet, standard or vendor page whose URL, words and fetch date
+are recorded in `eitri/electronics/sources.py`; each check names its source, and each build writes the ones it used to
+`<name>.sources.md`. Where vendors disagree the lower figure is used and both are quoted; a figure no document gives is marked
+ASSUMPTION. The checks:
+
+- **Current.** Per GPIO (Uno / Nano 20 mA, ESP32 28 mA) and per chip (ATmega328P 200 mA); module outputs; every LED against its DC
+  maximum (Kingbright 5 mm parts by colour unless you give your LED's figures); every resistor's I²R against its rating; nothing
+  without a current limit (an LED with no resistor, a switch from a driven pin to ground).
+- **Power.** No rail tied to ground or fed by two supplies; every supply pin within its part's range (a BME280 on 5 V fails); the
+  budget of every source (a board's 5V pin on USB or VIN, its 3V3 pin, a supply's rating, a regulator's rating), servos at stall;
+  regulator dropout and junction temperature; VIN range; one common ground for everything that exchanges signals.
+- **Logic levels.** No input above its absolute maximum (a 5 V sensor's output into an ESP32 pin fails); the driver's guaranteed
+  VOH against the receiver's VIH; no floating inputs.
+- **I2C** (NXP UM10204). Pull-ups present and between Rp(min) and Rp(max) for the clock and the bus capacitance; unique addresses.
+- **Inductive loads.** A flyback diode across every coil a transistor or pin switches, the right way round and rated for the coil current.
+- **Switching.** A MOSFET's gate drive against the VGS its RDS(on) is specified at (an IRF540N from a 5 V pin fails) and its heat; a
+  transistor's base drive for saturation; relay contacts against their rating.
+
+It writes a schematic (SVG and PNG: rails and grounds as flags, every other net routed), a BOM, a netlist (CSV and Markdown) and the
+sources file. The editor shows the schematic beside a parts table and a nets table: edit a value, move a pin to another net, add a
+resistor, LED, diode, capacitor or switch, drag parts. The demo `eitri/demos/uno-arm-circuit` is an Uno driving four MG996R servos
+through a PCA9685, a status LED, an end-stop and a relay-switched gripper solenoid. Its `bad` configuration powers the servos from
+the Uno's 5V pin and leaves out the relay's flyback diode, and fails exactly those two checks.
+
+```python
+from eitri.electronics import *
+
+def build(p):
+    c = Circuit("Status LED")
+    uno = c.board("UNO", "uno")
+    c.net("GND", uno["GND"])
+    r, led = c.resistor("R1", 330), c.led("LED1", "red")     # (5 V - 1.85 V) / 330 = 9.5 mA
+    c.net("LED_A", uno["D13"], r["1"])
+    c.connect(r["2"], led["A"])
+    c.connect(led["K"], "UNO.GND")
+    return c
+```
+
+```bash
+eitri build eitri/demos/uno-arm-circuit/uno_arm_circuit.py                 # 30 pass, 1 warn, 0 FAIL
+eitri build eitri/demos/uno-arm-circuit/uno_arm_circuit.py --config bad    # 27 pass, 1 warn, 2 FAIL (on purpose)
+eitri bom eitri/demos/uno-arm-circuit/uno_arm_circuit.py                   # the bill of materials (--csv)
+```
+
+The one warning is intended: the status LED is graded on a typical part's figures until the model gives its own.
 
 ## Direct modeling in the viewer (Fusion-style)
 
@@ -664,7 +719,7 @@ evidence, not independent proof.
 - Imported meshes stay faceted: an STL becomes a solid of flat facets, not smooth cylinders.
 - Big assemblies are slower: the clearance check measures every pair of parts whose boxes come close
   (about 9 s of the V8's 21 s build); farther pairs are counted, not measured.
-- Not included: FEA/thermal/modal simulation, generative design, electronics/PCB, lathe and multi-axis CAM,
+- Not included: FEA/thermal/modal simulation, generative design, PCB layout (electronics is breadboard and module level), lathe and multi-axis CAM,
   DWG/SAT/native Fusion or SolidWorks import, cloud sharing, photorealistic rendering, true T-splines (the
   Form workspace is subdivision-based). CAM is 2.5-axis; sheet-metal corner reliefs are basic.
 - Needs an Anthropic API key to chat (billed to you); everything else works without one. Tested on macOS
@@ -750,6 +805,7 @@ eitri/
   mechanism/    mechanisms: links, joints, actuators; reach (IK), worst-pose torque, speed, limits, mass; kinematic diagram
   pneumatics/   ISO 1219 circuits: force, ISO 6358 flow, air consumption, pressure drop, validity; schematic, BOM
   firmware/     board, pinout, peripherals, sources; pin checks, arduino-cli compile (never uploads); pinout diagram
+  electronics/  circuits: boards, modules, passives, nets; sourced current, power, logic, I2C, flyback, gate checks; schematic, BOM, netlist
   domains.py    the registry of non-CAD domains (one `domain.py` per package); checks.py and diagram.py are shared by them
   demos/        the bundled demo projects and their recorded sessions (agent/replay.py plays them)
   config.py     the API key (user config folder)
