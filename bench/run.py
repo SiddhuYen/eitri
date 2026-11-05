@@ -3,6 +3,7 @@
     .venv/bin/python -m bench.run --system eitri --tasks plate,flange --model opus
     .venv/bin/python -m bench.run --system baseline --tasks all
     .venv/bin/python -m bench.run --report            # summarise bench/results/*.json
+    .venv/bin/python -m bench.run --backend api --tasks plate --budget 2   # the Messages-API loop (eitri.io's)
 
 Each run gets a fresh folder under bench/results/<system>/<task>/ with the
 transcript, the produced files and the checker verdicts. The checkers only read
@@ -81,7 +82,16 @@ def _final_step(project):
     return Path(res.outputs["step"]) if res.ok and res.outputs.get("step") else None
 
 
-def run_eitri(task: Task, out: Path, model: str, effort: str, budget: float) -> dict:
+def _api_usage_summary(steps: list[dict]) -> dict:
+    """Totals over APISession.step_log records: tokens by kind, cache-read share of the prompt, cost, steps."""
+    tot = {k: sum(r[k] for r in steps) for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens")}
+    prompt = tot["input_tokens"] + tot["cache_creation_input_tokens"] + tot["cache_read_input_tokens"]
+    return {**tot, "prompt_tokens": prompt, "cache_read_share": round(tot["cache_read_input_tokens"] / prompt, 4) if prompt else 0.0,
+            "api_steps": len(steps), "cost_usd": round(sum(r["cost_usd"] for r in steps), 4)}
+
+
+def run_eitri(task: Task, out: Path, model: str, effort: str, budget: float, backend: str = "cli",
+              followup_effort: str | None = None) -> dict:
     from eitri.cli import Printer
     from eitri.agent.claude_cli import ClaudeCLISession
     from eitri.agent.prompt import system_prompt
@@ -102,8 +112,18 @@ def run_eitri(task: Task, out: Path, model: str, effort: str, budget: float) -> 
             events.append({"kind": kind, **d})
         printer(kind, data)
 
-    session = ClaudeCLISession(project, system_prompt(project), model=model, effort=effort, max_budget_usd=budget,
-                               on_event=on_event)
+    if backend == "api":
+        from eitri.agent.api_backend import APISession
+
+        def on_usage(one, cost):                       # the per-task budget covers the first request and the follow-up
+            if session.total_cost >= budget:
+                print(f"--- budget ${budget} reached (${session.total_cost:.2f}); stopping at the next step")
+                session.interrupt()
+        session = APISession(project, system_prompt(project), model=model, effort=effort, on_event=on_event,
+                             on_usage=on_usage, usage_log=out / "usage.jsonl", followup_effort=followup_effort)
+    else:
+        session = ClaudeCLISession(project, system_prompt(project), model=model, effort=effort, max_budget_usd=budget,
+                                   on_event=on_event)
     t0 = time.time()
     res = session.send(task.prompt, timeout=1800)
     elapsed = time.time() - t0
@@ -113,6 +133,9 @@ def run_eitri(task: Task, out: Path, model: str, effort: str, budget: float) -> 
              "llm_turns": res.turns, "tool_calls": res.tool_calls, "builds": len(project.history),
              "failed_builds": sum(1 for h in project.history if not h.ok), "final_text": res.text[-3000:],
              "is_error": res.is_error, "step": str(step) if step else None, "events": events, **score(task, step)}
+    if backend == "api":
+        first_steps = list(session.step_log)
+        out_d.update(backend="api", stopped=res.stopped, api=_api_usage_summary(first_steps), api_steps=first_steps)
     if task.followup and task.followup_check and step is not None:
         # keep the first result's STEP: the follow-up rebuilds in place
         keep = out / "first.step"
@@ -127,6 +150,9 @@ def run_eitri(task: Task, out: Path, model: str, effort: str, budget: float) -> 
                              "cost_usd": round(res2.cost_usd, 3),
                              "tool_calls": res2.tool_calls, "final_text": res2.text[-2000:],
                              "step": str(step2) if step2 else None, **score(fu_task, step2)}
+        if backend == "api":
+            fu_steps = session.step_log[len(first_steps):]
+            out_d["followup"].update(stopped=res2.stopped, api=_api_usage_summary(fu_steps), api_steps=fu_steps)
     session.close()
     return out_d
 
@@ -232,13 +258,15 @@ def _baseline_turn(prompt: str, work: Path, model: str, effort: str, budget: flo
 
 # ----------------------------------------------------------------------------- driver
 
-def run(system: str, names: list[str], model: str, effort: str, budget: float, repeat: int = 1, force: bool = False) -> None:
+def run(system: str, names: list[str], model: str, effort: str, budget: float, repeat: int = 1, force: bool = False,
+        backend: str = "cli", label: str | None = None, followup_effort: str | None = None) -> None:
     from eitri.agent.claude_cli import find_claude_binary
-    claude_bin = find_claude_binary()
+    claude_bin = find_claude_binary() if backend == "cli" or system == "baseline" else None
+    folder = label or (system if backend == "cli" else f"{system}_api")
     for name in names:
         task = get(name)
         for r in range(repeat):
-            out = RESULTS / system / (task.name if repeat == 1 else f"{task.name}_{r + 1}")
+            out = RESULTS / folder / (task.name if repeat == 1 else f"{task.name}_{r + 1}")
             result_file = out / "result.json"
             if result_file.exists() and not force:
                 print(f"[{system}] {task.name}: cached ({json.loads(result_file.read_text(encoding="utf-8"))['score']:.2f})")
@@ -250,7 +278,7 @@ def run(system: str, names: list[str], model: str, effort: str, budget: float, r
             for attempt in range(3):
                 try:
                     if system == "eitri":
-                        res = run_eitri(task, out, model, effort, budget)
+                        res = run_eitri(task, out, model, effort, budget, backend, followup_effort)
                     else:
                         res = run_baseline(task, out, model, effort, budget, claude_bin)
                 except Exception as exc:
@@ -264,6 +292,8 @@ def run(system: str, names: list[str], model: str, effort: str, budget: float, r
                 out.mkdir(parents=True)
             res["model"] = model
             res["effort"] = effort
+            if followup_effort:
+                res["followup_effort"] = followup_effort
             result_file.write_text(json.dumps(res, indent=1, default=str), encoding="utf-8")
             print(f"--- score {res['score']:.2f} solved={res['solved']} in {res.get('seconds', 0)}s ${res.get('cost_usd', 0)}")
             for c in res.get("checks", []):
@@ -355,6 +385,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--model", default="opus")
     ap.add_argument("--effort", default="high")
     ap.add_argument("--budget", type=float, default=6.0, help="USD cap per task")
+    ap.add_argument("--backend", choices=["cli", "api"], default="cli",
+                    help="eitri only: cli = headless Claude Code; api = the Messages-API loop (APISession, as on eitri.io)")
+    ap.add_argument("--label", default=None, help="results folder name (default: the system, plus _api for --backend api)")
+    ap.add_argument("--followup-effort", default=None,
+                    help="--backend api: effort for the follow-up turn, set per message so the cached history holds")
     ap.add_argument("--repeat", type=int, default=1)
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--report", action="store_true")
@@ -368,7 +403,8 @@ def main(argv: list[str] | None = None) -> int:
         print(write_report())
         return 0
     names = [t.name for t in TASKS] if args.tasks == "all" else args.tasks.split(",")
-    run(args.system, names, args.model, args.effort, args.budget, args.repeat, args.force)
+    run(args.system, names, args.model, args.effort, args.budget, args.repeat, args.force, args.backend, args.label,
+        args.followup_effort)
     print()
     print(write_report())
     return 0

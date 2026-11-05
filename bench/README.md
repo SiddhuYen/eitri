@@ -50,3 +50,21 @@ request, and scores fidelity / engineering / overall 1-10 and a preference.
 Every run leaves its transcript (`events`), produced files and per-check verdicts
 in `results/<system>/<task>/`. Costs and times come from the CLI's own `result`
 events.
+
+## The API backend (eitri.io's loop)
+
+```bash
+.venv/bin/python -m bench.run --backend api --tasks plate,enclosure --budget 3 --label api_run
+```
+
+`--backend api` drives the same tasks through `eitri.agent.api_backend.APISession` (the Messages-API
+loop that eitri.io's HostedSession subclasses) with the configured API key, so it spends real money:
+`--budget` is a USD cap per task (first request plus follow-up), enforced between steps. Each task folder
+gets `usage.jsonl`, one line per API response (input, cache write, cache read and output tokens, cost,
+images carried in the history), and `result.json` gains `api` totals (cache-read share of the prompt,
+steps, cost) and the per-step records. Costs here are list prices computed from the response `usage`.
+
+`--followup-effort LEVEL` runs the follow-up turn at a different effort from the first request (e.g. `--effort high
+--followup-effort low`, which is how a first build and a follow-up edit would run on two routes). The session's top-level
+effort stays fixed and the follow-up's level goes out as a per-message effort change (beta
+`mid-conversation-output-config-2026-07-01`), so the follow-up still reads the whole cached history.
