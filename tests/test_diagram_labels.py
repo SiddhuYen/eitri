@@ -121,6 +121,31 @@ def _sweep_pause():
     return fw
 
 
+def _demo_cfg(path, cfg):
+    from eitri.model import load_model
+    return lambda: load_model(path, config=cfg).build()
+
+
+def _sonar_esp32():
+    from eitri.electronics import Circuit
+    c = Circuit("Ranger and display on an ESP32")
+    b = c.board("ESP", "esp32")
+    c.net("3V3", b["3V3"]); c.net("GND", b["GND"])
+    psu = c.supply("USB5", 5.0, 0.5)
+    c.net("5V", psu["+"]); c.connect(psu["-"], "ESP.GND")
+    us = c.module("SONAR", "HC-SR04")
+    c.connect(us["VCC"], "USB5.+"); c.connect(us["GND"], "ESP.GND")
+    c.net("TRIG", b["GPIO5"], us["TRIG"])
+    r1, r2 = c.resistor("R1", 1000), c.resistor("R2", 2000)
+    c.net("ECHO5", us["ECHO"], r1["1"]); c.gpio(b["GPIO18"], "in")
+    c.net("ECHO", r1["2"], r2["1"], b["GPIO18"]); c.connect(r2["2"], "ESP.GND")
+    oled, env = c.module("OLED", "SSD1306"), c.module("ENV", "BME280")
+    for m, v in ((oled, "VIN"), (env, "VCC")):
+        c.connect(m[v], "ESP.3V3"); c.connect(m["GND"], "ESP.GND")
+    c.net("SDA", b["GPIO21"], oled["SDA"], env["SDA"]); c.net("SCL", b["GPIO22"], oled["SCL"], env["SCL"])
+    return c
+
+
 CASES = {
     "quad-power harness": _demo(DEMOS / "quad-power" / "quad_power.py"),
     "two servos on a separate supply": _uno_servo,
@@ -131,6 +156,9 @@ CASES = {
     "25 x 50 cylinder circuit": _cyl25,
     "servo sweep": _demo(DEMOS / "servo-sweep" / "servo_sweep.py"),
     "sweep with pause and pot": _sweep_pause,
+    "uno arm circuit": _demo(DEMOS / "uno-arm-circuit" / "uno_arm_circuit.py"),
+    "uno arm circuit, bad": _demo_cfg(DEMOS / "uno-arm-circuit" / "uno_arm_circuit.py", "bad"),
+    "ranger and display on an ESP32": _sonar_esp32,
 }
 
 

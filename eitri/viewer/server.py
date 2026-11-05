@@ -131,7 +131,7 @@ def _state(project: Project, hub=None, home: str | None = None) -> dict:
     }
 
 
-MODEL_ORDER = ("cad", "harness", "mechanism", "pneumatics", "firmware")
+MODEL_ORDER = ("cad", "harness", "mechanism", "pneumatics", "firmware", "electronics")
 _RESULT_CHECKS: dict[str, tuple[int, list]] = {}          # result.json path -> (mtime, its checks): read once per build
 
 

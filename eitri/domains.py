@@ -29,8 +29,8 @@ import importlib.util
 import re
 from typing import Any
 
-KINDS = ("harness", "mechanism", "pneumatics", "firmware")
-LABELS = {"harness": "wire harness", "mechanism": "mechanism", "pneumatics": "pneumatic circuit", "firmware": "firmware project"}
+KINDS = ("harness", "mechanism", "pneumatics", "firmware", "electronics")
+LABELS = {"harness": "wire harness", "mechanism": "mechanism", "pneumatics": "pneumatic circuit", "firmware": "firmware project", "electronics": "circuit"}
 _IMPORT_RE = {k: re.compile(rf"^\s*(from\s+eitri\.{k}\b|import\s+eitri\.{k}\b)", re.M) for k in KINDS}
 _OPS: dict[str, str] | None = None
 _AVAILABLE: tuple[str, ...] | None = None

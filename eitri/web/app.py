@@ -62,7 +62,7 @@ def _version() -> str:
 
 
 def _kind_of(model: Path) -> str:
-    """cad, harness, mechanism, pneumatics or firmware: what the model file imports (eitri.domains), for the project list's tool badges."""
+    """cad, harness, mechanism, pneumatics, firmware or electronics: what the model file imports (eitri.domains), for the project list's tool badges."""
     try:
         from ..domains import kind_of_source
         return kind_of_source(model.read_text(encoding="utf-8")) or "cad" if model.is_file() else "cad"
