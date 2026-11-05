@@ -2,7 +2,7 @@
 
     c              the built Circuit (also `parts`); p is PARAMS
     nets()         every net: what it is (rail, ground, driven, switched, signal), its voltage, its pins
-    currents()     every series string the kernel solved: its parts, its ends, its worst-case current, and each end state
+    currents()     every string the kernel solved (series, or a piece of a branched network): parts, ends, worst case, each case
     rails()        every rail: its source, what it supplies (item by item) and its limit
     part(name)     one part: its numbers with their sources, and its pins' nets
     sources()      the sources table (every number a check can use)
@@ -35,6 +35,8 @@ def electronics_scope(c: Circuit, p=None) -> dict:
             print(f"{s.flow[0] or s.a} -> {' -> '.join(s.parts)} -> {s.flow[1] or s.b}: {'unlimited' if s.current == float('inf') else amps_text(s.current)}"
                   + "".join(f"\n    {s.a}={va:g} V, {s.b}={vb:g} V: {'unlimited' if i == float('inf') else amps_text(i)}" + (f" {node}" if node else "")
                             for va, vb, i, node in s.combos))
+        for k, net in enumerate(an.networks):
+            print(f"network {k + 1} (nodal analysis): branch node(s) " + "; ".join(f"{n} ({', '.join(ps)})" for n, ps in net["nodes"].items()))
         for net, ps in an.branches.items():
             print(f"not solved: {net} is a branch of {', '.join(ps)}")
 

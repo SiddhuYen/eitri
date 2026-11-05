@@ -190,6 +190,7 @@ class I2CBus:
     sda: str
     speed_hz: int = 100_000
     capacitance_pF: float | None = None
+    internal_pullups: bool = True            # an AVR board's Wire.begin() turns on its pins' internal pull-ups; False: the firmware turns them off
 
 
 def ohms(v: float) -> str:
@@ -316,18 +317,31 @@ class Circuit:
                              spec, srcs, title="resistor", part_number=part_number))
 
     def led(self, name: str, color: str = "red", vf: float | None = None, if_max: float | None = None, if_rated: float | None = None,
-            part_number: str = "") -> Part:
-        """An LED: pins "A" (anode) and "K" (cathode). Without vf / if_max the typical 5 mm part of that colour from the catalog
-        is used (and the build says so); give your LED's datasheet figures when you have them."""
-        from .catalog import led_spec
+            part_number: str = "", part: str | None = None, vf_max: float | None = None) -> Part:
+        """An LED: pins "A" (anode) and "K" (cathode). part: a catalog LED (WP7113SRD/D, WP7113SGD, WP7113QBC/D, WP7113QWC/D), graded
+        on its own datasheet's figures. Without part, vf or if_max, the typical 5 mm part of that colour is used and the build says so;
+        give your LED's datasheet figures when you have them (vf typical, vf_max maximum, if_max DC maximum)."""
+        from .catalog import led_part, led_spec
+        if part is not None:
+            key = led_part(part)
+            if key is None:
+                from .catalog import LEDS
+                raise CircuitError(f"{name}: no catalog LED {part!r}; catalog LEDs: {', '.join(e['spec']['part_number'] for e in LEDS.values())} "
+                                   "(any other LED: give vf= and if_max= from its datasheet)")
+            color = key
         spec, srcs = led_spec(color)
-        for k, v in (("vf", vf), ("if_max", if_max), ("if_rated", if_rated)):
+        for k, v in (("vf", vf), ("vf_max", vf_max), ("if_max", if_max), ("if_rated", if_rated)):
             if v is not None:
                 spec[k] = _num(v, f"{name}: {k}", positive=True)
                 srcs[k] = "model"
-        spec["generic"] = not (vf is not None and if_max is not None)
+        if vf is not None and vf_max is None:
+            spec.pop("vf_max", None)                 # the catalog's maximum belongs to the catalog part, not to this LED
+        spec["generic"] = part is None and not (vf is not None and if_max is not None)
+        if part is not None:
+            spec["catalog_part"] = spec["part_number"]
         return self.add(Part(name, "led", {"A": PinSpec("A", "passive", required=True), "K": PinSpec("K", "passive", required=True)},
-                             spec, srcs, title="LED", part_number=part_number or spec.get("part_number", "")))
+                             spec, srcs, title="LED", catalog=spec["part_number"] if part is not None else "",
+                             part_number=part_number or spec.get("part_number", "")))
 
     def diode(self, name: str, part: str = "1N4007") -> Part:
         """A diode from the catalog (1N4148, 1N4007, 1N5819): pins "A" and "K"."""
@@ -539,9 +553,11 @@ class Circuit:
             self.buses[new] = self.buses.pop(old)
             self.buses[new].sda = new
 
-    def i2c(self, sda, speed_hz: int = 100_000, capacitance_pF: float | None = None) -> I2CBus:
+    def i2c(self, sda, speed_hz: int = 100_000, capacitance_pF: float | None = None, internal_pullups: bool = True) -> I2CBus:
         """Settings of the I2C bus whose SDA is this net (or pin): its clock (100 kHz Standard-mode, Arduino Wire's default; 400 kHz
-        Fast-mode; 1 MHz Fast-mode Plus) and the capacitance of each line if you know it (default: an estimate, see the check)."""
+        Fast-mode; 1 MHz Fast-mode Plus) and the capacitance of each line if you know it (default: an estimate, see the check).
+        internal_pullups: on an AVR board (Uno, Nano), Wire.begin() turns on the pins' internal pull-ups to 5 V; False says the
+        firmware turns them off after Wire.begin() (digitalWrite(SDA, LOW); digitalWrite(SCL, LOW);), as a 3.3 V-only bus needs."""
         if isinstance(sda, str) and sda in self.nets:
             name = sda
         else:
@@ -549,7 +565,7 @@ class Circuit:
             if n is None:
                 raise CircuitError(f"{sda} is on no net; connect it first")
             name = n.name
-        bus = I2CBus(name, int(speed_hz), None if capacitance_pF is None else float(capacitance_pF))
+        bus = I2CBus(name, int(speed_hz), None if capacitance_pF is None else float(capacitance_pF), bool(internal_pullups))
         self.buses[name] = bus
         return bus
 

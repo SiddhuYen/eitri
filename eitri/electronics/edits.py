@@ -2,7 +2,7 @@
 
     set_part     {"part": "R1", "ohm": 330}            a part's numbers (ohm, power_W, vf, if_max, if_rated, color, volts, current_A,
                                                         farad, v_rated, address, part_number); "rename": a new name
-    set_net      {"net": "N3", "rename": "LED_A"}       rename a net; I2C settings: speed_hz, capacitance_pF (on an SDA net)
+    set_net      {"net": "N3", "rename": "LED_A"}       rename a net; I2C settings: speed_hz, capacitance_pF, internal_pullups (on an SDA net)
     connect      {"pin": "R1.2", "net": "LED_A"}         move a pin onto a net (a new net when it does not exist)
     disconnect   {"pin": "R1.2"}                         take a pin off its net
     set_gpio     {"pin": "UNO.D2", "mode": "in", "pullup": true}
@@ -72,6 +72,8 @@ def _set_part(c: Circuit, e: dict) -> str:
             p.spec.update(spec)
             p.srcs.update(srcs)
             p.spec["generic"] = True
+            p.spec.pop("catalog_part", None)
+            p.catalog = ""
         elif k == "address":
             a = int(v, 0) if isinstance(v, str) else int(v)
             if p.spec.get("addresses") and a not in p.spec["addresses"]:
@@ -85,7 +87,7 @@ def _set_part(c: Circuit, e: dict) -> str:
             p.spec[k] = x
             p.srcs[k] = "model"
             if p.kind == "led" and k in ("vf", "if_max"):
-                p.spec["generic"] = not ("model" == p.srcs.get("vf") == p.srcs.get("if_max"))
+                p.spec["generic"] = not p.spec.get("catalog_part") and not ("model" == p.srcs.get("vf") == p.srcs.get("if_max"))
             _sync_pins(p, k, x)
         done.append(f"{k} {v}")
     if e.get("rename"):
@@ -128,12 +130,15 @@ def _apply_one(c: Circuit, e: dict) -> str:
         name = str(e["net"])
         if name not in c.nets:
             raise CircuitError(f"no net {name!r}")
-        if "speed_hz" in e or "capacitance_pF" in e:
+        if "speed_hz" in e or "capacitance_pF" in e or "internal_pullups" in e:
             bus = c.buses.get(name) or c.i2c(name)
             if "speed_hz" in e:
                 bus.speed_hz = int(float(e["speed_hz"]))
             if "capacitance_pF" in e:
                 bus.capacitance_pF = None if e["capacitance_pF"] in (None, "") else float(e["capacitance_pF"])
+            if "internal_pullups" in e:
+                v = e["internal_pullups"]
+                bus.internal_pullups = v.strip().lower() not in ("false", "off", "0", "no") if isinstance(v, str) else bool(v)
         if e.get("rename"):
             c.rename_net(name, str(e["rename"]))
             name = str(e["rename"])

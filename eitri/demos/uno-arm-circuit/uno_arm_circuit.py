@@ -1,12 +1,13 @@
 """Uno arm electronics: an Arduino Uno drives four MG996R servos through a PCA9685 breakout on I2C, lights a status LED, reads an
 end-stop switch, and switches a 12 V gripper solenoid through a relay that a logic-level MOSFET drives.
 
-The servos and the relay coil run from their own 5 V supply (only its ground joins the Uno's); the relay has a flyback diode across
-its coil. CONFIGS["bad"] is the classic first attempt: the servos on the Uno's 5V pin and no flyback diode. It fails on purpose
+The servos and the relay coil run from their own 5 V 15 A supply (only its ground joins the Uno's): four MG996R at their 2.5 A stall
+plus the 72 mA coil is 10.07 A, 67 % of it (a 12 A supply would be 84 %, a warning; 10 A fails). The relay has a flyback diode
+across its coil. CONFIGS["bad"] is the classic first attempt: the servos on the Uno's 5V pin and no flyback diode. It fails on purpose
 (the 5V pin's budget and the diode), and the default configuration is the fix."""
 from eitri.electronics import *
 
-PARAMS = dict(servos=4, servo_supply="psu", flyback=True, psu_A=10.0, led_ohm=330, pullup_ohm=10000, gate_ohm=220, solenoid_A=0.5)
+PARAMS = dict(servos=4, servo_supply="psu", flyback=True, psu_A=15.0, led_ohm=330, pullup_ohm=10000, gate_ohm=220, solenoid_A=0.5)
 CONFIGS = {"bad": dict(servo_supply="uno", flyback=False)}
 
 
@@ -25,7 +26,7 @@ def build(p):
 
     # servo power: a 5 V supply of its own, or (the bad configuration) the Uno's 5V pin
     if p.servo_supply == "psu":
-        psu = c.supply("PSU5", 5.0, current_A=p.psu_A, part_number="5 V 10 A adapter")
+        psu = c.supply("PSU5", 5.0, current_A=p.psu_A, part_number="5 V 15 A supply")
         c.net("SERVO_5V", psu["+"], pwm["V+"])
         c.connect(psu["-"], "UNO.GND")                       # a common ground; the + rails stay apart
     else:
@@ -36,9 +37,9 @@ def build(p):
         c.connect(s["GND"], "UNO.GND")
         c.connect(s["SIG"], pwm[f"PWM{i}"])
 
-    # status LED on D13: (5 V - 1.85 V) / 330 Ohm = 9.5 mA
+    # status LED on D13: (5 V - 1.85 V) / 330 Ohm = 9.5 mA (a catalog part: graded on its own datasheet)
     c.gpio(uno["D13"], "out")
-    r1, led = c.resistor("R1", p.led_ohm), c.led("LED1", "red")
+    r1, led = c.resistor("R1", p.led_ohm), c.led("LED1", part="WP7113SRD/D")
     c.net("LED_A", uno["D13"], r1["1"])
     c.connect(r1["2"], led["A"])
     c.connect(led["K"], "UNO.GND")

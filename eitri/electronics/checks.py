@@ -1,14 +1,16 @@
 """The electronics checks: what every build is graded on. Each number a check compares against has a source
 (eitri.electronics.sources), named in the check's text; a value the model file gave is its own source.
 
-    connectivity  required pins connected, no dangling nets, no branch the kernel cannot solve
+    connectivity  required pins connected, no dangling nets, every current solved (series strings in closed form, branched
+                  networks by nodal analysis)
     power         no shorted rails, every supply pin within its part's range, the rail budget of every source (a board's 5V / 3V3
                   pins, a supply, a regulator), the regulators' headroom and junction temperature, a board's VIN range, one common
                   ground for everything that exchanges signals
     current       per GPIO pin and per microcontroller against its datasheet limits, LED current, resistor power, nothing
                   without a current limit
     logic         driver high level against receiver VIH, no input above its absolute maximum, no floating input
-    i2c           pull-ups present, within UM10204's Rp(min) / Rp(max), no two devices at one address
+    i2c           pull-ups present, within UM10204's Rp(min) / Rp(max), no two devices at one address; an AVR board's Wire
+                  internal pull-ups (to 5 V) against the devices' absolute maximum
     inductive     a flyback diode, the right way round and rated for the coil current, on every coil a transistor or pin switches
     switching     MOSFET gate drive against the VGS its RDS(on) is specified at, its dissipation; a BJT's saturation and IC rating
     parts         standard (E24) resistor values, LED data from the part's own datasheet, capacitor voltage ratings
@@ -24,6 +26,8 @@ from .analysis import INF, Analysis, analyze, net_high, open_drain, pullups_on, 
 from .catalog import E24, nearest_e
 from .model import Circuit, PinRef, amps_text, ohms
 from .sources import cite
+
+AVR_VMAX = 5.5                       # ATmega328P: any pin VCC + 0.5 V at 5 V (DS40002061B s29.1): what a 5 V-tolerant device must take
 
 WARN_FRACTION = 0.8                  # within 20 % of a limit: a warning (as the harness grades)
 I2C_MODES = ((100_000, "Standard-mode", 1000e-9, 400e-12, 0.003), (400_000, "Fast-mode", 300e-9, 400e-12, 0.003),
@@ -54,7 +58,7 @@ def run_checks(c: Circuit) -> tuple[list[Check], Analysis]:
     an = analyze(c)
     checks: list[Check] = []
     for fn in (_connectivity, _shorts, _supply_ranges, _budgets, _regulators, _ground, _unlimited, _gpio_current, _leds,
-               _resistors, _logic, _floating, _i2c, _inductive, _contacts, _mosfets, _bjts, _parts):
+               _resistors, _logic, _floating, _i2c, _avr_wire_pullups, _inductive, _contacts, _mosfets, _bjts, _parts):
         checks += fn(c, an)
     return checks, an
 
@@ -78,8 +82,15 @@ def _connectivity(c: Circuit, an: Analysis) -> list[Check]:
     if an.branches:
         out.append(_c("connectivity", "currents solved on every net", "warn",
                       "; ".join(f"{n} joins {', '.join(ps)}" for n, ps in an.branches.items())
-                      + ": a branch point that is not a rail; the currents through it are not computed (pin, LED and resistor checks skip them)",
-                      "series strings between rails, grounds and driven pins", list(an.branches) + [p for ps in an.branches.values() for p in ps]))
+                      + ": nodal analysis found no consistent solution for this network (or it has too many cases); the currents through it "
+                      "are not computed (pin, LED and resistor checks skip them)",
+                      "every current solved", list(an.branches) + [p for ps in an.branches.values() for p in ps]))
+    elif an.networks:
+        nodes = {n: ps for net in an.networks for n, ps in net["nodes"].items()}
+        out.append(_c("connectivity", "currents solved on every net", "pass",
+                      "series strings in closed form; branch node(s) " + "; ".join(f"{n} ({', '.join(ps)})" for n, ps in nodes.items())
+                      + " solved by nodal analysis (MNA, ideal-diode iteration) for every input state",
+                      "every current solved", list(nodes) + sorted({p for ps in nodes.values() for p in ps})))
     return out
 
 
@@ -405,6 +416,18 @@ def _leds(c: Circuit, an: Analysis) -> list[Check]:
             continue                                   # the unlimited-current check says it
         name = f"LED current {p.name} ({p.spec.get('color', '')})"
         imax = float(p.spec["if_max"])
+        net = next((an.networks[s.network] for s in ss if s.network is not None), None)
+        others = [x for x in (net or {}).get("leds", []) if x != p.name]
+        typ = max((s.typical if s.typical is not None else s.current) for s in ss)
+        if i > 0 and typ <= 0 and others:
+            node = next((n for s in ss for n in (s.a, s.b) if n in net["nodes"]), "the shared node")
+            low = ", ".join(f"{x} ({c.parts[x].spec['vf']:g} V)" for x in others)
+            out.append(_c("current", name, "warn",
+                          f"current hogging: at typical Vf {p.name} ({p.spec['vf']:g} V) takes none of the current it shares at {node}: {low} hold(s) "
+                          f"{node} below its forward voltage, so it stays dark (with Vf spread it could instead take up to {amps_text(i)}). "
+                          "Fix: one series resistor per LED (or LEDs of one part number)",
+                          "every LED lights", [p.name] + others + [node]))
+            continue
         if i <= 0:
             s = ss[0]
             out.append(_c("current", name, "warn", f"no current: along {s.describe()} the LED is reversed or the supply is below its {p.spec['vf']:g} V forward voltage, so it never lights",
@@ -412,8 +435,13 @@ def _leds(c: Circuit, an: Analysis) -> list[Check]:
             continue
         sev = _lvl(i, imax)
         rated = p.spec.get("if_rated")
+        hog = ""
+        if others:
+            hog = (f"; it shares its current with {', '.join(others)}: graded on the worst case, its Vf at typical and theirs at maximum, "
+                   f"where it takes the whole shared current (at typical Vf: {amps_text(typ)})")
         out.append(_c("current", name, sev, f"{amps_text(i)} of {amps_text(imax)} DC max ({i / imax * 100:.0f}%)" + (f", rated {amps_text(rated)}" if rated else "")
-                      + f", Vf {p.spec['vf']:g} V" + (". Fix: a larger series resistor" if sev == "fail" else "") + _src(p, "if_max"),
+                      + f", Vf {p.spec['vf']:g} V" + hog + (". Fix: a larger series resistor" + (", or one resistor per LED" if others else "") if sev == "fail" else "")
+                      + _src(p, "if_max"),
                       f"<= {amps_text(imax)}", [p.name] + max(ss, key=lambda s: s.current).parts))
     return out
 
@@ -543,7 +571,7 @@ def _floating(c: Circuit, an: Analysis) -> list[Check]:
         internal = [r for r in inputs if c.parts[r.part].kind == "board" and r.pin in c.parts[r.part].pullups]
         pulls = pullups_on(c, an, n) + [(x, 0, 0, "") for x, _ in pulldowns_on(c, an, n)] + resistors_to_fixed(c, an, n)
         outs = [r for r in c.nets[n].pins if c.pin_spec(r).kind in ("out", "od")]
-        through = [s for s in an.strings if n in s.inner]
+        through = [s for s in an.strings if n in s.inner or (s.network is not None and n in (s.a, s.b))]
         if internal or pulls or outs or through:
             continue
         sw = [r.part for r in c.nets[n].pins if c.parts[r.part].kind == "switch"]
@@ -642,6 +670,56 @@ def _i2c(c: Circuit, an: Analysis) -> list[Check]:
     return out
 
 
+def _avr_wire_pullups(c: Circuit, an: Analysis) -> list[Check]:
+    """Arduino's Wire library on an AVR board turns on the internal pull-ups (20-50 kOhm to 5 V) of SDA and SCL. A device on the bus
+    that cannot take 5 V sees them (unless the firmware turns them off and the model says so)."""
+    out = []
+    for sda, scl, devs in i2c_buses(c):
+        for b in devs:
+            board = c.parts[b]
+            if board.kind != "board" or not board.spec.get("wire_pullups"):
+                continue
+            rmin, rmax = board.spec["wire_pullups"]
+            vcc = float(board.spec.get("vdd") or 5.0)
+            bus = c.buses.get(sda)
+            src = f" [source: {cite(board.srcs.get('wire_pullups', ''))}; {cite('atmega328p')}]"
+            name = f"AVR internal pull-ups on I2C {sda} ({b})"
+            refs = [b, sda] + ([scl] if scl else [])
+            low = []                                   # (device pin, its absolute maximum, line)
+            for line in (sda, scl):
+                if line is None:
+                    continue
+                for r in c.nets[line].pins:
+                    if r.part == b or c.parts[r.part].kind == "board":
+                        continue
+                    lv = _levels(c, an, r)
+                    if lv.get("vmax") is not None and lv["vmax"] < AVR_VMAX - 1e-9:
+                        low.append((r, lv["vmax"], line))
+            if bus is not None and not bus.internal_pullups:
+                out.append(_c("i2c", name, "pass", f"declared off (c.i2c(..., internal_pullups=False)): the firmware turns them off after Wire.begin() "
+                              "(digitalWrite(SDA, LOW); digitalWrite(SCL, LOW);), else the lines see 5 V through 20-50 kΩ" + src, "", refs))
+                continue
+            if not low:
+                out.append(_c("i2c", name, "pass", f"Wire.begin() turns on {b}'s internal pull-ups ({ohms(rmin)}-{ohms(rmax)} to {vcc:g} V) on SDA and SCL; "
+                              f"every device on the bus takes {AVR_VMAX:g} V or more" + src, "", refs))
+                continue
+            worst = []
+            for line in dict.fromkeys(x[2] for x in low):
+                ups = pullups_on(c, an, line)
+                g = sum(1.0 / r for _, r, _, _ in ups) + 1.0 / rmin
+                v = (sum(v / r for _, r, v, _ in ups) + vcc / rmin) / g
+                ext = ", ".join(f"{w} {ohms(r)} to {v_:g} V" for w, r, v_, _ in ups) or "no other pull-up"
+                worst.append(f"{line} rises to {v:.2f} V ({ohms(rmin)} to {vcc:g} V against {ext})")
+            devs_txt = "; ".join(f"{r} tolerates at most {vm:g} V [source: {cite(c.pin_spec(r).logic.src)}]" for r, vm, _ in low)
+            out.append(_c("i2c", name, "warn",
+                          f"Wire.begin() turns on {b}'s internal pull-ups, {ohms(rmin)}-{ohms(rmax)} to {vcc:g} V, on SDA and SCL{src}. {devs_txt}. "
+                          f"With them on, {'; '.join(worst)}: over-voltage on the 3.3 V side. Fix: a level shifter between {b} and the 3.3 V devices, "
+                          "or a 3.3 V-only bus: pull-ups to 3.3 V only and the internal pull-ups turned off after Wire.begin() "
+                          "(digitalWrite(SDA, LOW); digitalWrite(SCL, LOW);), declared with c.i2c(sda, internal_pullups=False)",
+                          f"every device on the bus takes {vcc:g} V, or the internal pull-ups off", refs + sorted({r.part for r, _, _ in low})))
+    return out
+
+
 # --------------------------------------------------------------------------- inductive loads
 
 
@@ -727,7 +805,7 @@ def _gate_voltage(c: Circuit, an: Analysis, q) -> tuple[float | None, str]:
         v = lv.get("voh") if lv.get("voh") is not None else an.vdd.get(d.part)
         if v is not None and (best is None or v > best):
             best, how = v, f"{d} drives the gate (VOH min {v:g} V) [source: {cite(c.pin_spec(d).logic.src) if c.pin_spec(d).logic else ''}]"
-    if not any(g in s.inner for s in an.strings):             # a series resistor from a driven pin into a gate that draws no current
+    if not an.voltages_at(g):                                  # a series resistor from a driven pin into a gate that draws no current
         for rname, other in resistors_to_fixed(c, an, g):
             o = an.nets[other]
             for d in o.drivers:
@@ -737,8 +815,16 @@ def _gate_voltage(c: Circuit, an: Analysis, q) -> tuple[float | None, str]:
                     best, how = v, f"{d} through {rname} (VOH min {v:g} V, no current)"
             if o.kind == "rail" and (best is None or o.volts > best):
                 best, how = o.volts, f"rail {other} through {rname}"
+    for v, s, _combo in an.voltages_at(g):
+        if s.network is None:
+            continue
+        ends = {n for t in an.strings if t.network == s.network for n in (t.a, t.b) if an.nets[n].kind == "driven"}
+        scale = min((_levels(c, an, d)["voh"] / an.vdd[d.part] for n in ends for d in an.nets[n].drivers
+                     if _levels(c, an, d).get("voh") is not None and an.vdd.get(d.part)), default=1.0)
+        if best is None or v * scale > best:
+            best, how = round(v * scale, 3), f"the node of {', '.join(s.parts)} ({v * scale:.2f} V at the gate: nodal solution, the drivers' VOH min scaled)"
     for s in an.strings:
-        if g in s.inner:
+        if g in s.inner and s.network is None:
             for va, vb, _i, node in s.combos:
                 v = node.get(g)
                 if v is None:

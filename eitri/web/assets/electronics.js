@@ -143,6 +143,11 @@ export function createEditor(host, api) {
       sp.onchange = () => h.run({ op: 'set_net', net: n.name, speed_hz: Number(sp.value) });
       p.appendChild(h.field('I2C clock', sp));
       p.appendChild(h.numField('bus capacitance (pF)', '', { placeholder: 'estimated' }, v => h.run({ op: 'set_net', net: n.name, capacitance_pF: v })));
+      if (bus.avr) {
+        const ip = h.select(bus.internal_pullups === false ? 'off' : 'on', [['on', 'on (Wire.begin(): 20-50 kΩ to 5 V)'], ['off', 'off (the firmware turns them off)']]);
+        ip.onchange = () => h.run({ op: 'set_net', net: n.name, internal_pullups: ip.value });
+        p.appendChild(h.field('AVR internal pull-ups', ip));
+      }
       p.appendChild(el('div', { class: 'hsub' }, 'devices: ' + bus.devices.map(esc).join(', ')));
     }
     p.appendChild(el('h4', { class: 'hsec' }, 'Pins'));

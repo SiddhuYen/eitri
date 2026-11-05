@@ -281,17 +281,19 @@ eitri bom ~/eitri-projects/clamp                     # pneumatics: the bill of m
 The sixth domain: a circuit as code. A model file that starts `from eitri.electronics import *` builds a `Circuit`: a board (Arduino
 Uno, Nano, ESP32 DevKitC), supplies, regulators, breakout modules from a catalog (PCA9685, BME280, SSD1306, HC-SR04), resistors,
 LEDs, diodes, capacitors, switches, MOSFETs, transistors, relays, motors, solenoids and servos, and the nets that join them. It is
-breadboard and module level only: no PCB layout, no footprints, no KiCad export yet (the netlist CSV is the hand-off).
+breadboard and module level only: no PCB layout, no footprints, no KiCad export (the netlist CSV is the hand-off).
 
 Every build classifies each net (a rail at a voltage, a ground, a pin a board drives, a transistor's switched low side), solves the
-series strings of two-terminal parts between them in closed form (a pin, a resistor and an LED to ground; a rail, a relay coil and a
-MOSFET's drain), and grades the result. Every limit comes from a datasheet, standard or vendor page whose URL, words and fetch date
+currents through the two-terminal parts between them, and grades the result. Series strings (a pin, a resistor and an LED to
+ground; a rail, a relay coil and a MOSFET's drain) are solved in closed form; branched networks (two LEDs sharing a resistor, a
+divider feeding two loads) by nodal analysis, written for eitri, with an ideal-diode iteration. The two agree on every series string. Every limit comes from a datasheet, standard or vendor page whose URL, words and fetch date
 are recorded in `eitri/electronics/sources.py`; each check names its source, and each build writes the ones it used to
-`<name>.sources.md`. Where vendors disagree the lower figure is used and both are quoted; a figure no document gives is marked
-ASSUMPTION. The checks:
+`<name>.sources.md`. Where sources disagree the conservative figure is used and both are quoted: the lower figure for a
+limit, the higher for a draw or load (an MG996R draws 2.5 A at stall, not 1.4 A); a figure no document gives is marked ASSUMPTION. The checks:
 
 - **Current.** Per GPIO (Uno / Nano 20 mA, ESP32 28 mA) and per chip (ATmega328P 200 mA); module outputs; every LED against its DC
-  maximum (Kingbright 5 mm parts by colour unless you give your LED's figures); every resistor's I²R against its rating; nothing
+  maximum (Kingbright 5 mm catalog parts by `part=`, a typical part by colour, or your LED's own figures; LEDs sharing a resistor
+  are graded for current hogging); every resistor's I²R against its rating; nothing
   without a current limit (an LED with no resistor, a switch from a driven pin to ground).
 - **Power.** No rail tied to ground or fed by two supplies; every supply pin within its part's range (a BME280 on 5 V fails); the
   budget of every source (a board's 5V pin on USB or VIN, its 3V3 pin, a supply's rating, a regulator's rating), servos at stall;
@@ -299,6 +301,7 @@ ASSUMPTION. The checks:
 - **Logic levels.** No input above its absolute maximum (a 5 V sensor's output into an ESP32 pin fails); the driver's guaranteed
   VOH against the receiver's VIH; no floating inputs.
 - **I2C** (NXP UM10204). Pull-ups present and between Rp(min) and Rp(max) for the clock and the bus capacitance; unique addresses.
+  On an Uno or Nano, Wire's internal pull-ups to 5 V against any 3.3 V device on the bus (a warning, with the fixes).
 - **Inductive loads.** A flyback diode across every coil a transistor or pin switches, the right way round and rated for the coil current.
 - **Switching.** A MOSFET's gate drive against the VGS its RDS(on) is specified at (an IRF540N from a 5 V pin fails) and its heat; a
   transistor's base drive for saturation; relay contacts against their rating.
@@ -316,7 +319,7 @@ def build(p):
     c = Circuit("Status LED")
     uno = c.board("UNO", "uno")
     c.net("GND", uno["GND"])
-    r, led = c.resistor("R1", 330), c.led("LED1", "red")     # (5 V - 1.85 V) / 330 = 9.5 mA
+    r, led = c.resistor("R1", 330), c.led("LED1", part="WP7113SRD/D")   # (5 V - 1.85 V) / 330 = 9.5 mA
     c.net("LED_A", uno["D13"], r["1"])
     c.connect(r["2"], led["A"])
     c.connect(led["K"], "UNO.GND")
@@ -324,12 +327,12 @@ def build(p):
 ```
 
 ```bash
-eitri build eitri/demos/uno-arm-circuit/uno_arm_circuit.py                 # 30 pass, 1 warn, 0 FAIL
-eitri build eitri/demos/uno-arm-circuit/uno_arm_circuit.py --config bad    # 27 pass, 1 warn, 2 FAIL (on purpose)
+eitri build eitri/demos/uno-arm-circuit/uno_arm_circuit.py                 # 31 pass, 0 warn, 0 FAIL
+eitri build eitri/demos/uno-arm-circuit/uno_arm_circuit.py --config bad    # 28 pass, 0 warn, 2 FAIL (on purpose)
 eitri bom eitri/demos/uno-arm-circuit/uno_arm_circuit.py                   # the bill of materials (--csv)
 ```
 
-The one warning is intended: the status LED is graded on a typical part's figures until the model gives its own.
+The servos run from a 5 V 15 A supply: four MG996R at their 2.5 A stall and the relay coil draw 10.07 A, 67 % of it.
 
 ## Direct modeling in the viewer (Fusion-style)
 

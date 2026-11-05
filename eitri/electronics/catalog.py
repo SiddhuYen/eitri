@@ -78,11 +78,14 @@ def _esp32_pins() -> dict:
 
 BOARDS = {
     "uno": dict(title="Arduino Uno R3", pins=lambda: _board_pins(14, 6, pwm=(3, 5, 6, 9, 10, 11), sda="A4", scl="A5"),
-                spec=dict(key="uno", vdd=5.0, logic_rail="5V", pin_limit_A=0.020, total_limit_A=0.200, vin_range=(7.0, 12.0), v3_from_5v=True),
-                srcs=dict(pin_limit_A="arduino-uno", total_limit_A="atmega328p", vin_range="arduino-uno", vdd="atmega328p", v3_from_5v="arduino-uno-sch")),
+                spec=dict(key="uno", vdd=5.0, logic_rail="5V", pin_limit_A=0.020, total_limit_A=0.200, vin_range=(7.0, 12.0), v3_from_5v=True,
+                          wire_pullups=(20_000.0, 50_000.0)),
+                srcs=dict(pin_limit_A="arduino-uno", total_limit_A="atmega328p", vin_range="arduino-uno", vdd="atmega328p", v3_from_5v="arduino-uno-sch",
+                          wire_pullups="arduino-wire-avr")),
     "nano": dict(title="Arduino Nano", pins=lambda: _board_pins(14, 8, pwm=(3, 5, 6, 9, 10, 11), sda="A4", scl="A5", input_only=("A6", "A7")),
-                 spec=dict(key="nano", vdd=5.0, logic_rail="5V", pin_limit_A=0.020, total_limit_A=0.200, vin_range=(7.0, 12.0)),
-                 srcs=dict(pin_limit_A="arduino-nano", total_limit_A="atmega328p", vin_range="arduino-nano", vdd="atmega328p")),
+                 spec=dict(key="nano", vdd=5.0, logic_rail="5V", pin_limit_A=0.020, total_limit_A=0.200, vin_range=(7.0, 12.0),
+                           wire_pullups=(20_000.0, 50_000.0)),
+                 srcs=dict(pin_limit_A="arduino-nano", total_limit_A="atmega328p", vin_range="arduino-nano", vdd="atmega328p", wire_pullups="arduino-wire-avr")),
     "esp32": dict(title="ESP32-DevKitC V4", pins=_esp32_pins,
                   spec=dict(key="esp32", vdd=3.3, logic_rail="3V3", pin_limit_A=0.028, total_limit_A=1.2, vin_range=None),
                   srcs=dict(pin_limit_A="esp32", total_limit_A="esp32", vdd="esp32")),
@@ -153,7 +156,7 @@ MODULES = {
 
 SERVOS = {
     "SG90": dict(title="TowerPro SG90 micro servo", stall=0.5, v=(4.8, 6.0), src="towerpro-sg90"),
-    "MG996R": dict(title="TowerPro MG996R servo", stall=1.4, v=(4.8, 6.6), src="towerpro-mg996r"),
+    "MG996R": dict(title="TowerPro MG996R servo", stall=2.5, v=(4.8, 6.6), src="towerpro-mg996r"),     # the higher draw, the narrower range
 }
 
 def _two(a: str, b: str):
@@ -174,9 +177,9 @@ PARTS: dict[str, dict] = {
     "AMS1117-5.0": dict(kind="regulator", title="AMS1117-5.0 LDO regulator (SOT-223)", pins=_reg_pins(5.0, "ams1117"), spec=dict(vout=5.0, **_AMS), srcs=_AMS_SRC,
                         note="5 V, 1 A; dropout 1.3 V max; 90 C/W SOT-223; Tj 125 C; VIN max 15 V"),
     "L7805": dict(kind="regulator", title="L7805 regulator (TO-220, no heatsink)", pins=_reg_pins(5.0, "st-l7805"),
-                  spec=dict(vout=5.0, i_max=1.5, dropout=2.0, theta_ja=50.0, tj_max=125.0, vin_max=35.0, iq=0.0),
-                  srcs={k: "st-l7805" for k in ("vout", "i_max", "dropout", "theta_ja", "tj_max", "vin_max")},
-                  note="5 V, 1.5 A; dropout 2 V (typical: no maximum published); 50 C/W TO-220; Tj 125 C; VIN max 35 V"),
+                  spec=dict(vout=5.0, i_max=1.5, dropout=2.0, theta_ja=50.0, tj_max=125.0, vin_max=35.0, iq=0.008),
+                  srcs={k: "st-l7805" for k in ("vout", "i_max", "dropout", "theta_ja", "tj_max", "vin_max", "iq")},
+                  note="5 V, 1.5 A; dropout 2 V (typical: no maximum published); 50 C/W TO-220; Tj 125 C; VIN max 35 V; Iq 8 mA max"),
     "1N4148": dict(kind="diode", title="1N4148 small-signal diode", pins=_two("A", "K"), spec=dict(vf=1.0, if_avg=0.150, vrrm=100.0),
                    srcs=dict(vf="diode-1n4148", if_avg="diode-1n4148", vrrm="diode-1n4148"), note="150 mA average, 100 V"),
     "1N4007": dict(kind="diode", title="1N4007 rectifier diode", pins=_two("A", "K"), spec=dict(vf=0.93, if_avg=1.0, vrrm=1000.0),
@@ -251,10 +254,21 @@ def make_part(name: str, key: str, kind: str) -> Part:
     return Part(name, kind, e["pins"](), copy.deepcopy(e["spec"]), dict(e["srcs"]), catalog=k, title=e["title"], part_number=k)
 
 
+def led_part(part: str) -> str | None:
+    """The LEDS colour key of a catalog LED part number (WP7113SRD/D, WP7113SGD, ...), or None."""
+    k = str(part).strip().upper()
+    for color, e in LEDS.items():
+        pn = e["spec"]["part_number"].upper()
+        if k in (pn, pn.split("/")[0]):
+            return color
+    return None
+
+
 def led_spec(color: str) -> tuple[dict, dict]:
     c = str(color).strip().lower()
     if c not in LEDS:
-        raise CircuitError(f"no typical LED for colour {color!r}; colours: {', '.join(LEDS)} (or give vf= and if_max= from your LED's datasheet)")
+        raise CircuitError(f"no typical LED for colour {color!r}; colours: {', '.join(LEDS)} (or part= one of "
+                           f"{', '.join(e['spec']['part_number'] for e in LEDS.values())}, or vf= and if_max= from your LED's datasheet)")
     e = LEDS[c]
     return {"color": c, **copy.deepcopy(e["spec"])}, dict(e["srcs"])
 
@@ -274,5 +288,6 @@ def catalog_table() -> str:
         rows.append(f"| {k} | {e['kind']} | {e['title']} | {e['note']} ({cite(next(iter(e['srcs'].values()), ''))}) |")
     for k, e in LEDS.items():
         s = e["spec"]
-        rows.append(f"| led(\"{k}\") | led | typical 5 mm {k} LED ({s.get('part_number', '')}) | Vf {s['vf']:g} V, {s['if_max'] * 1000:g} mA DC max ({cite(e['srcs']['if_max'])}) |")
+        rows.append(f"| led(part=\"{s['part_number']}\") | led | Kingbright 5 mm {k} LED (led(\"{k}\") without part= is graded on the same figures, with a warning) | "
+                    f"Vf {s['vf']:g} V typ, {s['vf_max']:g} V max, {s['if_max'] * 1000:g} mA DC max ({cite(e['srcs']['if_max'])}) |")
     return "\n".join(rows)

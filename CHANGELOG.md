@@ -9,13 +9,14 @@ annotated tags (`git show v0.4.0`).
 
 - **Electronics at breadboard and module level** (`from eitri.electronics import *`). A `Circuit` holds a board (Uno, Nano, ESP32
   DevKitC), supplies, regulators, catalog modules (PCA9685, BME280, SSD1306, HC-SR04), resistors, LEDs, diodes, capacitors,
-  switches, MOSFETs, an NPN transistor, a relay, motors, solenoids and servos, joined by nets. A closed-form DC kernel classifies
-  every net and solves the series strings between rails, grounds and driven pins; the checks grade per-pin and per-chip current,
-  LED current, resistor power, unlimited-current strings, shorted and back-fed rails, supply ranges, rail budgets (servos at stall),
+  switches, MOSFETs, an NPN transistor, a relay, motors, solenoids and servos, joined by nets. A DC kernel classifies every net,
+  solves series strings in closed form and branched networks (LEDs sharing a resistor, a divider feeding two loads) by nodal
+  analysis with an ideal-diode iteration; the checks grade per-pin and per-chip current,
+  LED current and current hogging, resistor power, unlimited-current strings, shorted and back-fed rails, supply ranges, rail budgets (servos at stall),
   regulator dropout and junction temperature, VIN range, common ground, logic levels and over-voltage on inputs, floating inputs,
-  I2C pull-ups (UM10204 Rp(min) / Rp(max)) and addresses, flyback diodes on switched coils, MOSFET gate drive and heat, transistor
+  I2C pull-ups (UM10204 Rp(min) / Rp(max)) and addresses, an AVR board's Wire internal pull-ups against 3.3 V devices, flyback diodes on switched coils, MOSFET gate drive and heat, transistor
   saturation and relay contacts. Every limit has a recorded source (document, URL, quote, fetch date) in
-  `eitri/electronics/sources.py`; each build writes the sources it used. Outputs: a schematic (SVG + PNG review image, labels by the
+  `eitri/electronics/sources.py`; where sources disagree the conservative figure is used (the lower limit, the higher draw); each build writes the sources it used. Outputs: a schematic (SVG + PNG review image, labels by the
   shared placer), BOM, netlist, sources. A browser editor (schematic, parts and nets tables, value and pin edits, drag), the agent's
   `electronics_reference()` tool, and the `uno-arm-circuit` demo (its `bad` configuration fails two checks on purpose).
 

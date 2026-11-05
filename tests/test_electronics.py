@@ -116,9 +116,12 @@ def test_every_catalog_number_has_a_fetched_source():
     for s in SOURCES.values():
         assert s.url.startswith("http") and re.fullmatch(r"\d{4}-\d{2}-\d{2}", s.fetched) and s.quote, s.id
     assert "ASSUMPTION" in cite("towerpro-sg90") and cite("model") == "the model file"
-    # where vendors disagree the lower figure is used
+    # where sources disagree the conservative figure is used: the lower limit, the higher draw
     assert catalog.PARTS["1N4148"]["spec"]["if_avg"] == 0.150 and catalog.PARTS["PN2222A"]["spec"]["ic_max"] == 0.6
-    assert catalog.SERVOS["MG996R"]["stall"] == 1.4 and catalog.BOARDS["esp32"]["spec"]["pin_limit_A"] == 0.028
+    assert catalog.SERVOS["MG996R"]["stall"] == 2.5 and catalog.SERVOS["MG996R"]["v"] == (4.8, 6.6)       # TowerPro 1.4 A vs 2.5 A at 6 V
+    assert catalog.PARTS["SRD-05VDC-SL-C"]["spec"]["coil_ohm"] == 69.4                                     # 69.4 vs 70 Ohm: the higher coil current
+    assert catalog.SERVOS["SG90"]["stall"] == 0.5 and "ASSUMPTION" in cite("towerpro-sg90")                 # kept by decision, marked
+    assert catalog.BOARDS["esp32"]["spec"]["pin_limit_A"] == 0.028
 
 
 # ---------------------------------------------------------------------------- the DC kernel
@@ -194,15 +197,15 @@ def test_rail_budget():
     c, b = uno()
     _servos(c, b, "UNO.5V")
     ch = one(c, "rail budget 5V", "fail")
-    assert "2.8 A of 500 mA" in ch.measured and "polyfuse" in ch.measured and "S1" in ch.refs
+    assert "5 A of 500 mA" in ch.measured and "polyfuse" in ch.measured and "S1" in ch.refs
     c2, b2 = uno()
-    psu = c2.supply("PSU", 5.0, 5.0)
+    psu = c2.supply("PSU", 5.0, 8.0)
     c2.net("SERVO_5V", psu["+"]); c2.connect(psu["-"], "UNO.GND")
     _servos(c2, b2, "PSU.+")
-    assert "2.8 A of 5 A" in one(c2, "rail budget SERVO_5V", "pass").measured
+    assert "5 A of 8 A" in one(c2, "rail budget SERVO_5V", "pass").measured
     # within 20 % of the rating: a warning
     c3, b3 = uno()
-    psu3 = c3.supply("PSU", 5.0, 3.0)
+    psu3 = c3.supply("PSU", 5.0, 6.0)                    # 5 A of 6 A: 83 %
     c3.net("SERVO_5V", psu3["+"]); c3.connect(psu3["-"], "UNO.GND")
     _servos(c3, b3, "PSU.+")
     one(c3, "rail budget SERVO_5V", "warn")
@@ -583,7 +586,9 @@ def _demo(config=None):
 
 def test_demo_passes_and_its_bad_configuration_fails_twice():
     rep = analyze(_demo())
-    assert not rep.failed and [w.name for w in rep.warnings] == ["LED data from the LED's own datasheet"]
+    assert not rep.failed and not rep.warnings, [x.line() for x in rep.failed + rep.warnings]
+    budget = next(x for x in rep.checks if x.name == "rail budget SERVO_5V (PSU5.+)")
+    assert budget.severity == "pass" and budget.measured.startswith("10.1 A of 15 A (67%)")
     bad = analyze(_demo("bad"))
     assert sorted(x.name for x in bad.failed) == ["flyback diode K1 (relay coil)", "rail budget 5V (UNO.5V)"]
 

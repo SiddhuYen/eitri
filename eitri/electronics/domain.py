@@ -31,7 +31,7 @@ REVIEW_HINT = ("The image is the schematic: rails and grounds are flags at each 
 ATTENTION_HINT = "Fix the circuit (resistor values, supplies, drivers, diodes, pull-ups, level shifting); never delete or loosen a check to make it pass."
 EXPORT_DOC = "Its outputs (schematic, BOM, netlist, sources) are written by every build; see `export`."
 INSPECT_DOC = ("`c` (the built Circuit, also `parts`), `p`, and nets() (what each net is: rail, ground, driven pin, switched low side), "
-               "currents() (every series string the kernel solved, its worst case and each end state), rails() (what each rail supplies, "
+               "currents() (every string the kernel solved, series or a piece of a branched network, its worst case and each case), rails() (what each rail supplies, "
                "item by item, against its limit), part(name) (its numbers with their sources), sources() and report()")
 
 

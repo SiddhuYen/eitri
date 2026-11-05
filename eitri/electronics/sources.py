@@ -2,7 +2,8 @@
 
 A part's numbers name a source id here (Part.srcs); a check names the source in its text ("[source: ...]"). A value the model file
 gives is its own source ("model"). A value with no fetchable source is marked ASSUMPTION in its title and in the check that uses it.
-Where vendors disagree, the lower figure is used and both are quoted.
+Where sources disagree, the conservative figure is used and both are quoted: the lower figure for a limit (a rating, a maximum, a
+voltage a part tolerates) and the higher figure for a draw or load (a current a part takes, a stall current, a coil current).
 
     cite(id)          a short citation for a check's text
     SOURCES[id]       the full record; sources_table() the Markdown table (the reference and every build's sources file)
@@ -54,6 +55,12 @@ _S = [
            '"U2 AMS1117-3.3" feeds the 3V3 rail from USB 5 V; neither the guide nor the schematic gives a current for external loads. The limit used '
            "is the AMS1117's rating less the 0.5 A the ESP32 datasheet asks its supply to deliver."),
     # ---------------------------------------------------------------- I2C and modules
+    Source("arduino-wire-avr", "Arduino AVR core, Wire library (twi.c)", "arduino/ArduinoCore-avr, libraries/Wire/src/utility/twi.c (master; last changed "
+           "26 May 2021, commit 8b327d7). LGPL-2.1: read for its behaviour only, nothing copied",
+           "https://github.com/arduino/ArduinoCore-avr/blob/master/libraries/Wire/src/utility/twi.c",
+           "twi_init(), which Wire.begin() calls, writes SDA and SCL high, which turns on the ATmega's internal pull-ups on both lines (its comment: "
+           '"activate internal pullups for twi."); twi_disable() (Wire.end()) writes them low again. The pull-ups are 20-50 kOhm to VCC (5 V on an '
+           "Uno or Nano): see the ATmega328P datasheet, Table 30-1, RPU."),
     Source("nxp-um10204", "NXP UM10204 Rev. 7.0", "NXP UM10204 I2C-bus specification and user manual, Rev. 7.0, 1 October 2021: Table 10, Table 11, s7.1",
            "https://www.nxp.com/docs/en/user-guide/UM10204.pdf",
            'VOL1 max 0.4 V "at 3 mA sink current; VDD > 2 V"; IOL 3 mA (Standard-, Fast-mode), 20 mA (Fast-mode Plus); VIL max 0.3VDD, VIH min 0.7VDD; '
@@ -88,13 +95,13 @@ _S = [
     Source("towerpro-mg996r", "TowerPro MG996R", "TowerPro MG996R product page (towerpro.com.tw) and Electronicos Caldas MG996R datasheet (2014-08-19)",
            "https://towerpro.com.tw/product/mg996r/",
            'TowerPro: "Operating voltage: 4.8~ 6.6v", "Stall current draw 1400mA" (no voltage stated). The distributor datasheet says "Stall Current 2.5 A '
-           '(6V)" and "Operating voltage: 4.8 V a 7.2 V". By the lower-figure rule the manufacturer\'s 1.4 A and 4.8-6.6 V are used; 2.5 A is the more '
-           "cautious draw (an open question for the design rules)."),
+           '(6V)" and "Operating voltage: 4.8 V a 7.2 V". By the conservative-figure rule the higher draw, 2.5 A, and the narrower range, TowerPro\'s '
+           "4.8-6.6 V, are used."),
     Source("towerpro-sg90", "TowerPro SG90 (ASSUMPTION for current)", "TowerPro SG90 product page (towerpro.com.tw)",
            "https://towerpro.com.tw/product/sg90-7/",
            '"Operating voltage: 4.8v"; the spec publishes no stall current. The only figure is an admin reply in the page\'s Q&A (2021-11-07): "The '
-           'operation current for our SG90 is about 0.5A - 2A. Voltages from 4.8V - 6V are fine." ASSUMPTION: 0.5 A (the lower figure) is used as its '
-           "draw; give servo(..., current_A=) from a measured stall current.", assumption=True),
+           'operation current for our SG90 is about 0.5A - 2A. Voltages from 4.8V - 6V are fine." ASSUMPTION: 0.5 A is used as its draw (a project '
+           "decision: the reply is not a specification, and its range runs to 2 A); give servo(..., current_A=) from a measured stall current.", assumption=True),
     # ---------------------------------------------------------------- passives and power parts (filled from the fetched datasheets below)
     Source("iec-60063", "IEC 60063 E-series (Vishay 28372)", "IEC 60063 (a paid standard, not fetched); its values from Vishay \"E-Series Values ... "
            "according to IEC 60063\", document 28372, rev 22-Aug-12", "https://www.vishay.com/docs/28372/e-series.pdf",
@@ -121,10 +128,14 @@ _S = [
            'currents over 0.8A dropout will be higher"; "SOT-223 package phiJA = 90 C/W ... can vary from 46 C/W to >90 C/W depending on mounting"; '
            '"Operating Junction Temperature Range ... -40C to 125 C"; "Input Voltage 15V"; "Quiescent Current AMS1117-1.5/.../-3.3/-5.0 (VIN - VOUT) = 1.5V 5 11 mA" '
            '(the 11 mA maximum is used). The 90 C/W figure (no copper area assumed) is used.'),
-    Source("st-l7805", "ST L78 datasheet Rev 34 (third-party copy)", "ST L78 series datasheet DocID2143 Rev 34 (Nov 2016), ST-authored copy on protostack.com.au: "
-           "st.com timed out (the current revision is said to be Rev 38, unverified)", "https://protostack.com.au/download/l7805.pdf",
-           '"Output current up to 1.5 A"; "Vd Dropout voltage IO = 1 A, TJ = 25 C 2 V" (typical: no maximum is given); "RthJA ... 50" C/W for TO-220; '
-           '"Operating junction temperature range for L78xxC, L78xxAC 0 to 125 C"; "VI DC input voltage for VO= 5 to 18 V 35 V"'),
+    Source("st-l7805", "ST L78 datasheet Rev 34 (ST-authored copy)", "ST L78 series datasheet DocID2143 Rev 34 (Nov 2016), an unmodified ST-authored "
+           "copy on protostack.com.au. Re-checked 2026-11-05: st.com (www.st.com/resource/en/datasheet/l78.pdf) timed out again, Mouser's copy "
+           "returned a bot-check page, DigiKey's datasheet page answered 403, and the copy Octopart serves is Rev 13 (2006), older than this one. "
+           "The current revision on st.com (said to be Rev 38) is unverified: a manual refresh is pending",
+           "https://protostack.com.au/download/l7805.pdf",
+           '"Output current up to 1.5 A"; Table 10 (L7805C) "Vd Dropout voltage IO = 1 A, TJ = 25 C 2 V" (typical: no maximum is given) and '
+           '"Id Quiescent current TJ = 25 C 8 mA" (max); "RthJA ... 50" C/W for TO-220; "Operating junction temperature range for L78xxC, L78xxAC 0 to '
+           '125 C"; "VI DC input voltage for VO= 5 to 18 V 35 V"'),
     Source("songle-srd", "Songle SRD(T73) datasheet V1", "Songle SRD(T73) series relay datasheet, Version V1 (undated, songlerelay.com)",
            "https://www.songlerelay.com/upload/8670/srd-t73-relay-290486.pdf",
            '"Power consumption(W) 0.36W(L) ... Nominal voltage(VDC) 3 5 6 ... Coil resistance(Ohm+-10%) 25 69.4 100"; "Contact rating(Res. load) 7A/10A/15A '
