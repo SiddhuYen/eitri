@@ -5,15 +5,31 @@ chat with Claude, running on their own computer. Follow these steps in order. Ev
 non-interactive unless noted, and each step says what success looks like. If a step's output does not
 match, stop and use **Troubleshooting** at the end.
 
-Requirements: macOS or Linux (tested on macOS on Apple Silicon; the same packages exist for Linux x86-64/arm64;
-Windows is untested), internet access during install, about 1 GB of disk.
+Requirements: macOS or Linux (tested on macOS on Apple Silicon and Ubuntu 24.04; Windows is untested; use WSL),
+internet access during install, about 1 GB of disk. The install downloads about 390 MB.
 Python is **not** required in advance: the installer uses `uv`, which fetches Python 3.12 itself.
 
 ## 1. Install
 
 Pick ONE of these.
 
-**A. From a clone of the repository (recommended):**
+**A. The one-line installer (recommended):**
+
+```sh
+curl -fsSL https://eitri.io/install | sh
+```
+
+(The same script is `scripts/install-remote.sh` in the repository:
+`curl -fsSL https://raw.githubusercontent.com/SiddhuYen/eitri/main/scripts/install-remote.sh | sh`.)
+
+**B. Already have `uv` (https://docs.astral.sh/uv/):**
+
+```sh
+uv tool install --python 3.12 eitri-cad
+eitri doctor
+```
+
+**C. From a clone of the repository:**
 
 ```sh
 git clone https://github.com/SiddhuYen/eitri eitri
@@ -21,17 +37,14 @@ cd eitri
 ./install.sh
 ```
 
-**B. Without cloning (needs `uv`, https://docs.astral.sh/uv/):**
-
-```sh
-uv tool install --python 3.12 git+https://github.com/SiddhuYen/eitri
-eitri doctor
-```
-
-`install.sh` installs `uv` if it is missing (from `https://astral.sh/uv/install.sh`), installs eitri as a
-command-line tool in its own environment (the CAD kernel and Claude Code, which comes inside Anthropic's `claude-agent-sdk` package from PyPI: a few hundred MB
-of downloads; the first install takes a few minutes), runs `eitri doctor`, and adds the tool folder to the
-shell `PATH` (set `EITRI_NO_PATH_EDIT=1` to skip that and call eitri by the full path it prints).
+The installer (A, and C, which runs the same script on the clone) installs `uv` if it is missing (from
+`https://astral.sh/uv/install.sh`), installs eitri as a command-line tool in its own environment with
+`uv tool install --python 3.12 eitri-cad` (the CAD kernel and Claude Code, which comes inside Anthropic's
+`claude-agent-sdk` package from PyPI: about 390 MB of downloads, 1 to 5 minutes), runs `eitri doctor` (up to a
+minute the first time), and adds the tool folder to the shell `PATH`. It needs no sudo. Set
+`EITRI_NO_PATH_EDIT=1` to leave the shell profile alone (then call eitri by the full path it prints),
+`EITRI_NO_UV_INSTALL=1` to stop it from installing uv, `EITRI_VERSION=0.5.5` to pin a version. If the
+`eitri-cad` package is not on PyPI, the installer installs the matching GitHub release archive instead.
 
 **Success:** the install ends with `eitri doctor` output (step 2) and then:
 
@@ -53,15 +66,18 @@ eitri doctor
 ```
 eitri doctor
   ok   python: 3.12.x (...)
+  ok   eitri: 0.5.5 (installed from PyPI with uv tool)
   ok   CAD kernel: build123d 0.13.0, OCP 8.0.1.1.0
   ok   test build: 20 mm cube, volume 8000 mm^3, STEP + report + review image in 2.0 s
   ok   Claude Code binary: 2.1.301 (Claude Code) (from Anthropic's claude-agent-sdk package); API-key-only mode (--bare) supported
   warn API key: not set - the editor and the demo projects work without one; ...
   ok   demo projects: V8 engine kit, Wall racket holder, Marble maze
+  warn firmware toolchain: arduino-cli not installed - only firmware projects need it; `eitri setup firmware` installs it
 eitri is ready. Next: run `eitri` - it opens http://127.0.0.1:8765 in your browser.
 ```
 
-Every line starts with `ok`, `warn` or `FAIL`. `warn` on the API key is fine at this point. Any `FAIL`
+Every line starts with `ok`, `warn` or `FAIL`. `warn` on the API key and on the firmware toolchain is fine at
+this point. A `warn` on `eitri` means a newer version is known: `eitri update` installs it. Any `FAIL`
 means the install is broken (see Troubleshooting). For machine-readable output: `eitri doctor --json`
 (`{"ready": true, "checks": [...], "next": "..."}`).
 
@@ -144,8 +160,17 @@ eitri build eitri/demos/servo-sweep/servo_sweep.py   # 12 pass, 0 warn, 0 FAIL o
 ```
 
 Mechanism and pneumatics need nothing extra. **Firmware needs arduino-cli** (a system program, not a Python package). Install it
-only if the person wants firmware. Without it, firmware builds still run and report one failed check,
+only if the person wants firmware, and ask them first: it installs system software (with Homebrew on a Mac that has it). Without it, firmware builds still run and report one failed check,
 `compiles (arduino-cli)`, saying "compiler unavailable". eitri never uploads to a board, and you must not either.
+
+```sh
+eitri setup firmware --dry-run    # show the person what it will run
+eitri setup firmware --yes        # install arduino-cli if missing (--yes: no prompt), arduino:avr, Servo; then a test compile
+eitri setup firmware --esp32 --yes   # only if they need ESP32 as well
+```
+
+**Success:** the last line is `firmware is ready: ...`, after `ok   compiled a test sketch for arduino:avr:uno`.
+It skips what is already installed, so running it again is safe. The same steps by hand:
 
 ```sh
 brew install arduino-cli          # or: curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
@@ -158,19 +183,33 @@ arduino-cli config add board_manager.additional_urls https://espressif.github.io
 arduino-cli core update-index && arduino-cli core install esp32:esp32 && arduino-cli lib install ESP32Servo
 ```
 
-If arduino-cli is not on `PATH`, set `EITRI_ARDUINO_CLI` to its full path in the environment eitri is started from.
+eitri also looks in `~/.local/bin`, `/opt/homebrew/bin` and `/usr/local/bin`. If arduino-cli is elsewhere, set
+`EITRI_ARDUINO_CLI` to its full path in the environment eitri is started from.
+
+## Updating
+
+```sh
+eitri update --check   # is there a newer release? (asks pypi.org)
+eitri update           # install it (uv tool upgrade eitri-cad)
+```
+
+An install from a clone is updated with `git pull && ./install.sh` in the clone; `eitri update` says so.
+eitri never checks for updates on its own unless the person turns it on with `eitri update --auto on`.
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| `eitri: command not found` after install | open a new shell, or run the full path printed by `install.sh` (`$(uv tool dir --bin)/eitri`) |
-| `FAIL CAD kernel` or `FAIL test build` | reinstall: `uv tool install --force --python 3.12 <REPO_URL or the clone folder>`; Python 3.10–3.13 only |
+| `eitri: command not found` after install | open a new shell, or run the full path printed by the installer (`$(uv tool dir --bin)/eitri`) |
+| `FAIL CAD kernel` or `FAIL test build` | reinstall: `uv tool install --force --python 3.12 eitri-cad` (or the clone folder); Python 3.10–3.13 only |
 | `FAIL Claude Code binary` | the `claude-agent-sdk` wheel is missing for this platform; reinstall, or set `EITRI_CLAUDE_BIN` to a recent `claude` that supports `--bare` |
-| `uv` will not install | install it by hand (https://docs.astral.sh/uv/getting-started/installation/), then `./install.sh` again |
+| `uv` will not install | install it by hand (https://docs.astral.sh/uv/getting-started/installation/), then run the installer again |
 | the page says it could not start three.js / WebGL | use a current Chrome, Edge, Firefox or Safari with hardware acceleration on |
-| firmware check `compiles (arduino-cli)` says "compiler unavailable" | install arduino-cli and the board core (commands above), or set `EITRI_ARDUINO_CLI`; then rebuild |
+| firmware check `compiles (arduino-cli)` says "compiler unavailable" | `eitri setup firmware` (`--esp32` for an ESP32 board), or set `EITRI_ARDUINO_CLI`; then rebuild |
+| `eitri update` says it could not reach pypi.org | check the internet connection; or reinstall with the one-line installer |
 | chat says `Invalid API key` | `eitri key set` with a valid key (or fix `ANTHROPIC_API_KEY`) |
 
-Network: eitri itself contacts nothing but Anthropic's API (with the key). The installer downloads
-packages from PyPI and, if needed, uv from astral.sh. No telemetry.
+Network: on its own, eitri contacts nothing but Anthropic's API (with the key). It asks pypi.org for the newest
+version only on `eitri update`, `eitri doctor --online`, or once a day if the person ran `eitri update --auto on`.
+The installer downloads packages from PyPI (or the release archive from GitHub) and, if needed, uv from astral.sh;
+`eitri setup firmware` downloads from Arduino and Espressif. No telemetry.

@@ -27,17 +27,28 @@ the checks are part of the build, and a failing check is fixed in the geometry, 
 ## Quickstart
 
 ```sh
-git clone https://github.com/SiddhuYen/eitri eitri && cd eitri && ./install.sh
+curl -fsSL https://eitri.io/install | sh
 eitri
 ```
 
-`install.sh` installs [uv](https://docs.astral.sh/uv/) if needed, installs eitri with Python 3.12, the CAD
-kernel and Claude Code (the binary inside Anthropic's `claude-agent-sdk` package, downloaded from PyPI at
-install time; eitri does not ship it), checks the install (`eitri doctor`) and tells you what to run.
-`eitri` opens http://127.0.0.1:8765 in your browser. Already have uv?
-`uv tool install --python 3.12 git+https://github.com/SiddhuYen/eitri` does the same in one line.
-The package is named `eitri-cad` (the name `eitri` was taken on PyPI); the command and the Python import
-are both `eitri`.
+The installer ([scripts/install-remote.sh](scripts/install-remote.sh); read it first if you like) installs
+[uv](https://docs.astral.sh/uv/) if needed, then `uv tool install --python 3.12 eitri-cad`: Python 3.12, the CAD
+kernel and Claude Code (the binary inside Anthropic's `claude-agent-sdk` package, downloaded from PyPI at install
+time; eitri does not ship it). It checks the install (`eitri doctor`) and tells you what to run. **It downloads
+about 390 MB and uses about 1 GB of disk**; that takes 1 to 5 minutes depending on your connection, and the
+first `eitri doctor` takes up to a minute more. No sudo: everything goes under your home folder.
+`EITRI_NO_UV_INSTALL=1` stops it from installing uv, `EITRI_NO_PATH_EDIT=1` leaves your shell profile alone.
+`eitri` opens http://127.0.0.1:8765 in your browser.
+
+Other ways in: already have uv? `uv tool install --python 3.12 eitri-cad`. From a clone:
+`git clone https://github.com/SiddhuYen/eitri eitri && cd eitri && ./install.sh` (the same installer, pointed at
+the checkout). The package is named `eitri-cad` (the name `eitri` was taken on PyPI); the command and the
+Python import are both `eitri`.
+
+- **Update:** `eitri update` upgrades through uv (`eitri update --check` only looks). eitri does not look for
+  updates on its own; see the privacy notes below.
+- **Firmware projects:** `eitri setup firmware` installs arduino-cli and the Arduino AVR core (`--esp32` adds
+  the ESP32 core; `--dry-run` shows the commands first). It asks before installing arduino-cli itself.
 
 **Setting it up with an AI agent?** Point it at [AGENTS.md](AGENTS.md): exact commands and expected output
 for every step.
@@ -59,9 +70,15 @@ readable only by you, never in a project). `ANTHROPIC_API_KEY` in the environmen
 - **API key only:** eitri drives Claude Code with `--bare` and your key, so a Claude.ai subscription
   logged in on the same machine is never used.
 - **Local only, no telemetry.** The editor, the CAD kernel and your projects stay on this computer; the
-  server answers only this machine. The only network calls eitri makes are to Anthropic's API, with your
-  key (Claude Code runs with its telemetry, error reporting and update checks turned off).
+  server answers only this machine. The only network calls eitri makes on its own are to Anthropic's API,
+  with your key (Claude Code runs with its telemetry, error reporting and update checks turned off).
   Fonts, icons and three.js are bundled; the pages fetch nothing from the internet.
+- **Update checks only when you ask.** eitri asks pypi.org for the newest version (one GET of
+  `https://pypi.org/pypi/eitri-cad/json`, nothing about you or your projects) only when you run `eitri update`
+  or `eitri doctor --online`. If you want a reminder, `eitri update --auto on` lets eitri make that same
+  request when it starts, at most once a day, and print one line when there is a newer version
+  (`eitri update --auto off` turns it off again). `eitri setup firmware` downloads arduino-cli and board packages
+  from Arduino and Espressif, and it only runs when you start it.
 
 ## Export for 3D printing
 
@@ -255,6 +272,14 @@ uploads to a board.** You flash it yourself from the sketch folder in `out/`. Th
 `compiles (arduino-cli)` check that says "compiler unavailable" and how to install it; the other checks still run. Install it once:
 
 ```sh
+eitri setup firmware              # arduino-cli (asks first), arduino:avr and Servo, then a test compile
+eitri setup firmware --esp32      # also the ESP32 board package and ESP32Servo
+eitri setup firmware --dry-run    # only print the commands
+```
+
+It runs the same steps you would run by hand:
+
+```sh
 brew install arduino-cli          # or: curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
 arduino-cli core update-index
 arduino-cli core install arduino:avr             # Uno and Nano
@@ -267,7 +292,7 @@ arduino-cli core install esp32:esp32
 arduino-cli lib install ESP32Servo               # if an ESP32 sketch drives a servo
 ```
 
-eitri finds `arduino-cli` on `PATH`, or at the path in `EITRI_ARDUINO_CLI`.
+eitri finds `arduino-cli` on `PATH`, at the path in `EITRI_ARDUINO_CLI`, or in `~/.local/bin`, `/opt/homebrew/bin` or `/usr/local/bin`.
 
 ```bash
 eitri build eitri/demos/pan-tilt/pan_tilt.py         # 11 pass, 0 warn, 0 FAIL
@@ -684,7 +709,7 @@ falls short, and what eitri does instead:
 | | text-to-cad | eitri |
 |---|---|---|
 | Shape | A skill pack + 68k-line Python runtime (`cadgen`) for other agents (Claude Code, Codex, Cursor...) | A standalone CAD agent with its own REPL and viewer; also usable as a library |
-| Install | uv + per-host plugin marketplaces, pinned Python 3.13, telemetry on by default, update nags | `uv tool install`; no plugins, no telemetry |
+| Install | uv + per-host plugin marketplaces, pinned Python 3.13, telemetry on by default, update nags | One line (`curl -fsSL https://eitri.io/install \| sh`, or `uv tool install eitri-cad`); no plugins, no telemetry, no update checks unless you ask |
 | Model contract | `@step/@stl/@glb` decorators, parameterless models, a content-addressed store with a build daemon, freshness gates, sidecar JSON, link-vs-component rules | `PARAMS` + `build(p)` + `verify()`; builds are fast enough that nothing needs caching |
 | Verification | Up to the agent: write ad-hoc scripts in `tmp/`, remember to snapshot | Automatic on every build: validity, holes, thinnest wall, interferences, plus the model's own checks; failures are flagged to the agent |
 | Visual review | Playwright + headless Chromium snapshots | A numpy software renderer: 4-view contact sheet in ~1 s, no browser |
@@ -754,6 +779,8 @@ eitri/
   demos/        the bundled demo projects and their recorded sessions (agent/replay.py plays them)
   config.py     the API key (user config folder)
   doctor.py     `eitri doctor` and `eitri key`
+  update.py     `eitri update` and the opt-in once-a-day "newer version" notice
+  setup_firmware.py  `eitri setup firmware` (arduino-cli and the board cores)
   cli.py        the REPL and subcommands
 bench/          tasks, runner, results
 tests/          everything above, including every snippet of the build123d reference
@@ -768,6 +795,13 @@ build and returns checks that join the report beside `verify()`; it can also ret
 
 Development: `uv venv --python 3.12 && uv pip install -e '.[dev]' && pytest`. The demos are rebuilt
 from recorded projects with `scripts/make_demos.py`.
+
+**Releasing.** Set the new version in `pyproject.toml`, `eitri/__init__.py` and `EITRI_FALLBACK_TAG` in
+`scripts/install-remote.sh` (`python scripts/check_dist.py` after `uv build` checks that they agree and that the
+wheel and sdist hold every package file), add a CHANGELOG entry, then push a tag `vX.Y.Z`. The `release` workflow
+builds, installs the wheel on clean macOS and Ubuntu runners, runs `eitri doctor`, and publishes that sdist and wheel to
+PyPI with trusted publishing (no token in the repository). The `install` workflow runs the same build and install
+check on every push to main and every pull request.
 
 ## License
 
