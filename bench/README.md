@@ -63,3 +63,8 @@ loop that eitri.io's HostedSession subclasses) with the configured API key, so i
 gets `usage.jsonl`, one line per API response (input, cache write, cache read and output tokens, cost,
 images carried in the history), and `result.json` gains `api` totals (cache-read share of the prompt,
 steps, cost) and the per-step records. Costs here are list prices computed from the response `usage`.
+
+`--followup-effort LEVEL` runs the follow-up turn at a different effort from the first request (e.g. `--effort high
+--followup-effort low`, which is how a first build and a follow-up edit would run on two routes). The session's top-level
+effort stays fixed and the follow-up's level goes out as a per-message effort change (beta
+`mid-conversation-output-config-2026-07-01`), so the follow-up still reads the whole cached history.

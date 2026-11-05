@@ -129,3 +129,74 @@ def test_history_is_cached_append_only_and_usage_is_logged_per_step(tmp_path, mo
     assert rows[0]["images_in_history"] == 0 and rows[1]["images_in_history"] == 1 and rows[2]["images_in_history"] == 2
     assert abs(res.cost_usd - sum(r["cost_usd"] for r in rows)) < 1e-6 and res.usage["output_tokens"] == 900
     assert abs(res.cost_usd - api_backend.usage_cost("claude-opus-5-5", res.usage)) < 1e-6
+
+
+class TwoTurnMessages(ThreeStepMessages):
+    """ThreeStepMessages, plus a beta namespace: per-message effort changes need the beta endpoint."""
+
+    def __init__(self):
+        super().__init__()
+        self.betas: list[list[str] | None] = []
+
+    def stream(self, betas=None, **kwargs):
+        self.betas.append(betas)
+        n = len(self.calls) + 1
+        if n >= 4:      # second turn: one text reply
+            import json
+            self.calls.append(kwargs)
+            self.snapshots.append(json.dumps(kwargs["messages"], default=lambda o: vars(o), sort_keys=True))
+            content = [SimpleNamespace(type="text", text="Edited.")]
+            return _Stream(SimpleNamespace(content=content, stop_reason="end_turn", model="claude-opus-5-5",
+                                           usage=_usage(3, 500, 25000, 100)))
+        return super().stream(**kwargs)
+
+
+def test_followup_effort_is_a_per_message_change_that_keeps_the_cached_history(tmp_path, monkeypatch):
+    msgs = TwoTurnMessages()
+    fake = SimpleNamespace(messages=msgs, beta=SimpleNamespace(messages=msgs))
+    import anthropic
+    monkeypatch.setattr(anthropic, "Anthropic", lambda: fake)
+    project = Project(tmp_path / "proj", name="plate")
+    s = api_backend.APISession(project, "system", model="opus", effort="high", followup_effort="low")
+    s.send("make a plate")
+    # the first turn is exactly today's request: top-level effort, no per-message change, no beta
+    assert all(kw["output_config"] == {"effort": "high"} for kw in msgs.calls[:3]) and msgs.betas[:3] == [None] * 3
+    assert not any(m["role"] == "system" for m in s.messages)
+    s.send("make it 70 wide")
+    req = msgs.calls[3]
+    # the top-level effort never changes (that would restart the messages cache) ...
+    assert req["output_config"] == {"effort": "high"}
+    # ... the follow-up's effort rides on an effort-only system message right after its user turn, under the beta
+    import json
+    sent = json.loads(msgs.snapshots[3])          # the request as sent (the session shares its list by reference)
+    assert sent[-2]["role"] == "user" and sent[-2]["content"][-1]["text"] == "make it 70 wide"
+    assert sent[-1] == {"role": "system", "content": [], "output_config": {"effort": "low"}}
+    assert msgs.betas[3] == [api_backend.EFFORT_BETA]
+    # and the history is still append-only: the follow-up request extends the first turn's last request
+    assert msgs.snapshots[3].startswith(msgs.snapshots[2][:-1])
+    # a third turn at the same follow-up level adds nothing; an explicit per-turn effort adds one more change
+    n_sys = sum(m["role"] == "system" for m in s.messages)
+    s.send("thanks")
+    assert sum(m["role"] == "system" for m in s.messages) == n_sys
+    s.send("now a hard one", effort="xhigh")
+    assert s.messages[-2] == {"role": "system", "content": [], "output_config": {"effort": "xhigh"}}
+    # a resumed chat (new session, project already built): its first turn is a follow-up edit
+    msgs2 = TwoTurnMessages()
+    msgs2.calls = [None] * 3                       # answer with the one-reply second-turn script
+    monkeypatch.setattr(anthropic, "Anthropic", lambda: SimpleNamespace(messages=msgs2, beta=SimpleNamespace(messages=msgs2)))
+    s2 = api_backend.APISession(project, "system", model="opus", effort="high", followup_effort="low")
+    s2.send("make it 80 wide")
+    assert msgs2.betas == [[api_backend.EFFORT_BETA]]
+    assert s2.messages[1] == {"role": "system", "content": [], "output_config": {"effort": "low"}}
+
+
+def test_without_followup_effort_requests_are_unchanged(tmp_path, monkeypatch):
+    msgs = TwoTurnMessages()
+    fake = SimpleNamespace(messages=msgs, beta=SimpleNamespace(messages=msgs))
+    import anthropic
+    monkeypatch.setattr(anthropic, "Anthropic", lambda: fake)
+    s = api_backend.APISession(Project(tmp_path / "proj", name="plate"), "system", model="opus", effort="high")
+    s.send("make a plate")
+    s.send("make it 70 wide")
+    assert msgs.betas == [None] * 4 and not any(m["role"] == "system" for m in s.messages)
+    assert all(kw["output_config"] == {"effort": "high"} for kw in msgs.calls)

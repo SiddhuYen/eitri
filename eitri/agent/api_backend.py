@@ -22,6 +22,11 @@ EventHandler = Callable[[str, dict], None]
 
 log = logging.getLogger(__name__)
 
+# per-message effort: a role "system" message carrying output_config.effort changes the effort for later turns
+# without restarting the cached history (a top-level effort change would invalidate the messages cache)
+EFFORT_BETA = "mid-conversation-output-config-2026-07-01"
+FALLBACK_BETA = "server-side-fallback-2026-07-01"
+
 USAGE_KEYS = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens")
 
 MODEL_ALIASES = {"opus": "claude-opus-5-5", "sonnet": "claude-sonnet-5-5", "haiku": "claude-haiku-5-5",
@@ -86,12 +91,17 @@ class APISession:
     def __init__(self, project: Project, system_prompt: str, model: str = "opus", effort: str | None = "high",
                  on_event: EventHandler | None = None, render_quality: float = 1.0, max_steps: int = 40,
                  api_key: str | None = None, allowed_tools: set[str] | None = None, fallbacks: bool = False,
-                 on_usage: Callable[[dict[str, int], float], None] | None = None, usage_log: str | Path | None = None):
+                 on_usage: Callable[[dict[str, int], float], None] | None = None, usage_log: str | Path | None = None,
+                 followup_effort: str | None = None):
         """allowed_tools: the only tools Claude may call (default: every advertised one). on_usage(usage,
         cost) runs after each response; it may call interrupt() to end the turn (a budget ran out).
         fallbacks: the API's server-side refusal fallback (beta). usage_log: a JSONL file that gets one line per
         API response (tokens by kind, cost, step); default $EITRI_USAGE_LOG. Every record is also kept in
-        self.step_log."""
+        self.step_log. effort is the session's (top-level, fixed for its life so the cache holds). followup_effort,
+        if set, is the effort for a follow-up edit: a turn that starts on a project that already has a good build
+        (so a resumed chat counts too). send(effort=...) sets one turn's effort. Both go out as per-message effort
+        changes, which keep the cached history. A caller whose single turn spans several send() calls on a design
+        that is still being created (eitri.io's combined-design nudges) should not set followup_effort."""
         import anthropic
         from ..config import api_key as configured_key
         key = api_key or configured_key()
@@ -109,6 +119,9 @@ class APISession:
         self.system_prompt = system_prompt
         self.model = MODEL_ALIASES.get(model, model)
         self.effort = effort
+        self.followup_effort = followup_effort
+        self._active_effort = effort          # the level the next reply runs at
+        self._effort_messages = False         # the history holds a per-message effort change: requests need its beta
         self.on_event = on_event or (lambda kind, data: None)
         self.tools = Tools(project, render_quality=render_quality)
         self.messages: list[dict[str, Any]] = []
@@ -173,7 +186,18 @@ class APISession:
         self._stop = True
         return True
 
-    def send(self, text: str, images: list[str] | None = None, timeout: float = 3600.0) -> TurnResult:
+    def _turn_effort(self, effort: str | None) -> None:
+        """Switch this turn's effort if it differs from the active one, by appending an effort-only system message
+        right after the user turn (append-only, so the cached history and earlier thinking blocks stay valid)."""
+        edit = self.followup_effort is not None and self.project.last_ok_revision() is not None
+        want = effort or (self.followup_effort if edit else None) or self.effort
+        if want and want != self._active_effort:
+            self.messages.append({"role": "system", "content": [], "output_config": {"effort": want}})
+            self._active_effort = want
+            self._effort_messages = True
+
+    def send(self, text: str, images: list[str] | None = None, timeout: float = 3600.0,
+             effort: str | None = None) -> TurnResult:
         self._stop = False
         self._turn += 1
         t_turn, cost0, usage0 = time.time(), self.total_cost, dict(self.usage)
@@ -184,6 +208,7 @@ class APISession:
                 content.append(block)
         content.append({"type": "text", "text": text})
         self.messages.append({"role": "user", "content": content})
+        self._turn_effort(effort)
         texts: list[str] = []
         tool_calls = 0
         steps = 0
@@ -203,8 +228,10 @@ class APISession:
             if self.effort:
                 kwargs["output_config"] = {"effort": self.effort}
             t_step, n_images = time.time(), self._images_in_history()
-            if self.fallbacks:
-                with self.client.beta.messages.stream(**kwargs, betas=["server-side-fallback-2026-07-01"], fallbacks="default") as stream:
+            betas = ([EFFORT_BETA] if self._effort_messages else []) + ([FALLBACK_BETA] if self.fallbacks else [])
+            if betas:
+                extra = {"fallbacks": "default"} if self.fallbacks else {}
+                with self.client.beta.messages.stream(**kwargs, betas=betas, **extra) as stream:
                     response = stream.get_final_message()
             else:
                 with self.client.messages.stream(**kwargs) as stream:
