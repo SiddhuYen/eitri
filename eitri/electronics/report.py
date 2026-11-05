@@ -72,7 +72,8 @@ def analyze(c: Circuit, checker: Checker | None = None) -> ElectronicsReport:
     for r in (checker.results if checker else []):
         checks.append(from_verify(r))
     rep = ElectronicsReport(c.name, len(c.parts), len(c.nets), rails_of(c, an),
-                            [{"parts": s.parts, "from": s.flow[0], "to": s.flow[1], "current_A": None if s.current == INF else round(s.current, 6)}
+                            [{"parts": s.parts, "from": s.flow[0], "to": s.flow[1], "current_A": None if s.current == INF else round(s.current, 6),
+                              "typical_A": None if s.typical is None or s.typical == INF else round(s.typical, 6)}
                              for s in an.strings if s.current], checks, sources=used_sources(c))
     rep.analysis_seconds = round(time.time() - t0, 3)
     c._analysis = an
@@ -91,7 +92,10 @@ def summarize(rep: ElectronicsReport) -> str:
     if rep.strings:
         lines.append("Currents:")
         for s in rep.strings[:20]:
-            lines.append(f"  {s['from']} -> {' -> '.join(s['parts'])} -> {s['to']}: " + ("unlimited" if s["current_A"] is None else amps_text(s["current_A"])))
+            typ = s.get("typical_A")
+            shared = typ is not None and s["current_A"] is not None and abs(typ - s["current_A"]) > 1e-9
+            lines.append(f"  {s['from']} -> {' -> '.join(s['parts'])} -> {s['to']}: " + ("unlimited" if s["current_A"] is None else amps_text(s["current_A"]))
+                         + (f" worst case ({amps_text(typ)} at typical Vf)" if shared else ""))
     order = {"fail": 0, "warn": 1, "pass": 2}
     for ch in sorted(rep.checks, key=lambda c: order[c.severity]):
         lines.append(ch.line())
