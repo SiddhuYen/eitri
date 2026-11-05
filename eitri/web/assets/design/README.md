@@ -51,7 +51,7 @@ the rail becomes a bottom tab bar, the top bar sticks, and the canvas scrolls.
 
 - Surfaces, darkest to lightest: `--bg`, `--bg-2`, `--panel`, `--raised`, `--raised-2`. Lines: `--line`, `--line-2`.
   Text: `--fg`, `--fg-2`, `--muted`; `--faint` for borders and decorative separators. States: `--ok`, `--bad`, `--warn` and their `-soft` backgrounds. `--scrim` behind dialogs.
-- Tool accents: `--c-cad`, `--c-wires`, `--c-motion`, `--c-pneumatics`, `--c-firmware`, and `--c-all` (neutral, for anything that is not
+- Tool accents: `--c-cad`, `--c-wires`, `--c-motion`, `--c-pneumatics`, `--c-firmware`, `--c-electronics`, and `--c-all` (neutral, for anything that is not
   one tool). `data-tool="<tool>"` on any element sets `--tool` for everything inside (`--tool-ink`, the text colour on it, is set per theme); components
   use `--tool` for focus rings, the active rail item, primary buttons, pressed chips.
 - Theme: dark by default, light under `prefers-color-scheme: light`; `data-theme="dark|light"` on `<html>` forces one.
@@ -103,7 +103,7 @@ the button), Tab, an outside click, scroll or resize close it. The list is moved
 `eitriShell.ask({title, label, value, ok, max})` → `Promise<string|null>` (a text field, preselected); both are native `<dialog>`s with
 focus kept inside. `eitriShell.toast(text, {bad})` shows a short message in a polite live region. `dialog.dialog` styles any other dialog.
 
-**Glyphs**: `<e-glyph name="cad">`, 20 px, `currentColor`. Names: `all cad wires motion pneumatics firmware projects search user more plus
+**Glyphs**: `<e-glyph name="cad">`, 20 px, `currentColor`. Names: `all cad wires motion pneumatics firmware electronics projects search user more plus
 share pencil trash github doc out gauge`. `window.eitriGlyphs[name]` is the SVG markup.
 
 All text that comes from outside the page (crumbs, palette items, menu labels, dialog text) is set with `textContent`, never as HTML.
@@ -176,7 +176,7 @@ makes current.
 | Field | |
 |---|---|
 | `file` | the current model file, e.g. `"wiring.py"` |
-| `models` | `[{file, kind, name, current, ok_revision, checks: {pass, warn, fail}}]`, in the tools' order (CAD, wires, motion, pneumatics, firmware), then by file: `kind` is the domain (`"cad"`, `"harness"`, `"mechanism"`, `"pneumatics"`, `"firmware"`), `name` the file without `.py`, `ok_revision` its last good build (0: none), `checks` that build's verdicts counted as the editor counts them. One entry for a project with one file |
+| `models` | `[{file, kind, name, current, ok_revision, checks: {pass, warn, fail}}]`, in the tools' order (CAD, wires, motion, pneumatics, firmware, electronics), then by file: `kind` is the domain (`"cad"`, `"harness"`, `"mechanism"`, `"pneumatics"`, `"firmware"`, `"electronics"`), `name` the file without `.py`, `ok_revision` its last good build (0: none), `checks` that build's verdicts counted as the editor counts them. One entry for a project with one file |
 
 ### A host's own view beside the tabs: `views(state)` and `switchView(key)`
 

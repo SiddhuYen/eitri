@@ -1,4 +1,4 @@
-// A diagram editor shared by the non-CAD domains (mechanism, pneumatics, firmware): the stage with pan and zoom, the SVG the
+// A diagram editor shared by the non-CAD domains (mechanism, pneumatics, firmware, electronics): the stage with pan and zoom, the SVG the
 // kernel wrote (every element carries data-kind / data-id), selection and check highlighting, drag of nodes into LAYOUT hints,
 // and the floating inspector whose contents each domain supplies. Edits go through the page's direct-edit path (api.send), so
 // the agent sees them (list_edits) and carries on from them. The harness editor (harness.js) predates this and keeps its own copy.

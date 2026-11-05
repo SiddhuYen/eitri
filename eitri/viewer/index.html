@@ -3738,7 +3738,7 @@ function resetForFile() {
   harnessEd = null; harnessLoading = false; window.__harness = null; window.__domain = null;
   const host = $('hostharness'); if (host) host.remove();
   $('domaininsp').textContent = '';
-  document.body.classList.remove('domain', 'harness', 'mechanism', 'pneumatics', 'firmware');
+  document.body.classList.remove('domain', 'harness', 'mechanism', 'pneumatics', 'firmware', 'electronics');
   stopJointAnim(); if (cageMode) endCage(); cancelTool(true);
   selected.clear(); hidden.clear(); hovered = null;
   if (model) { scene.remove(model); model = null; }

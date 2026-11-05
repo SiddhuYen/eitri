@@ -1,4 +1,4 @@
-// eitri design system: the tool glyphs, as <e-glyph name="cad|wires|motion|pneumatics|firmware|all|projects|...">. 24-unit grid, 1.6 strokes
+// eitri design system: the tool glyphs, as <e-glyph name="cad|wires|motion|pneumatics|firmware|electronics|all|projects|...">. 24-unit grid, 1.6 strokes
 // with round joins. Hosts may add their own: window.eitriGlyphs.mine = '<path d="..."/>' before the element is parsed.
 (function () {
   'use strict';
@@ -9,6 +9,7 @@
     motion: '<path d="M3.5 20.5h9"/><circle cx="8" cy="17" r="2"/><path d="m9.3 15.5 4.1-5.3"/><circle cx="14.6" cy="8.7" r="1.8"/><path d="m16.3 8 3.6-1.6M19.9 6.4l.6 2.3M19.9 6.4l-1-2.1"/>',
     pneumatics: '<rect x="2.5" y="8" width="11.5" height="8" rx="1.5"/><path d="M10 12h11.5M21.5 10v4M5.5 8V5h3v3"/><path d="M10 9v6"/>',
     firmware: '<rect x="6" y="6" width="12" height="12" rx="1.5"/><path d="M9.5 6V3M12 6V3M14.5 6V3M9.5 21v-3M12 21v-3M14.5 21v-3M6 9.5H3M6 12H3M6 14.5H3M21 9.5h-3M21 12h-3M21 14.5h-3"/><circle cx="9.3" cy="9.3" r=".9" fill="currentColor" stroke="none"/>',
+    electronics: '<path d="M2.5 12h3l1.5-4 3 8 3-8 1.5 4h3"/><path d="M17.5 7.5v9M21.5 12h-4"/><circle cx="17.5" cy="12" r="1.2" fill="currentColor" stroke="none"/>',
     projects: '<rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/>',
     search: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>',
     user: '<circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/>',
