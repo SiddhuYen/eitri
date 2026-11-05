@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
+import os
+import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -16,6 +19,10 @@ from .claude_cli import TurnResult
 from .tools import ToolResult, Tools
 
 EventHandler = Callable[[str, dict], None]
+
+log = logging.getLogger(__name__)
+
+USAGE_KEYS = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens")
 
 MODEL_ALIASES = {"opus": "claude-opus-5-5", "sonnet": "claude-sonnet-5-5", "haiku": "claude-haiku-5-5",
                  "fable": "claude-fable-5-1"}
@@ -79,10 +86,12 @@ class APISession:
     def __init__(self, project: Project, system_prompt: str, model: str = "opus", effort: str | None = "high",
                  on_event: EventHandler | None = None, render_quality: float = 1.0, max_steps: int = 40,
                  api_key: str | None = None, allowed_tools: set[str] | None = None, fallbacks: bool = False,
-                 on_usage: Callable[[dict[str, int], float], None] | None = None):
+                 on_usage: Callable[[dict[str, int], float], None] | None = None, usage_log: str | Path | None = None):
         """allowed_tools: the only tools Claude may call (default: every advertised one). on_usage(usage,
         cost) runs after each response; it may call interrupt() to end the turn (a budget ran out).
-        fallbacks: the API's server-side refusal fallback (beta)."""
+        fallbacks: the API's server-side refusal fallback (beta). usage_log: a JSONL file that gets one line per
+        API response (tokens by kind, cost, step); default $EITRI_USAGE_LOG. Every record is also kept in
+        self.step_log."""
         import anthropic
         from ..config import api_key as configured_key
         key = api_key or configured_key()
@@ -92,7 +101,10 @@ class APISession:
         self.tool_schemas = [t for t in TOOL_SCHEMAS if t["name"] in self.allowed_tools]
         self.fallbacks = fallbacks
         self.on_usage = on_usage
-        self.usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}
+        self.usage: dict[str, int] = {k: 0 for k in USAGE_KEYS}
+        self.step_log: list[dict[str, Any]] = []
+        self.usage_log = Path(usage_log) if usage_log else (Path(os.environ["EITRI_USAGE_LOG"]) if os.environ.get("EITRI_USAGE_LOG") else None)
+        self._turn = 0
         self.project = project
         self.system_prompt = system_prompt
         self.model = MODEL_ALIASES.get(model, model)
@@ -117,15 +129,42 @@ class APISession:
         except Exception as exc:
             return ToolResult(f"{name} failed: {type(exc).__name__}: {exc}", is_error=True)
 
-    def _account(self, response) -> None:
+    def _images_in_history(self) -> int:
+        """Image blocks the next request carries (in user turns and inside tool results)."""
+        n = 0
+        for m in self.messages:
+            if m["role"] != "user" or not isinstance(m["content"], list):
+                continue
+            for b in m["content"]:
+                if isinstance(b, dict):
+                    n += b.get("type") == "image"
+                    if b.get("type") == "tool_result" and isinstance(b.get("content"), list):
+                        n += sum(1 for c in b["content"] if isinstance(c, dict) and c.get("type") == "image")
+        return n
+
+    def _account(self, response, step: int = 0, seconds: float = 0.0, images: int = 0) -> None:
         u = getattr(response, "usage", None)
         if u is None:
             return
-        one = {k: int(getattr(u, k, 0) or 0) for k in self.usage}
+        one = {k: int(getattr(u, k, 0) or 0) for k in USAGE_KEYS}
         for k, v in one.items():
             self.usage[k] += v
         cost = usage_cost(self.model, one)
         self.total_cost += cost
+        prompt = one["input_tokens"] + one["cache_creation_input_tokens"] + one["cache_read_input_tokens"]
+        rec = {"turn": self._turn, "step": step, **one, "prompt_tokens": prompt,
+               "cache_read_share": round(one["cache_read_input_tokens"] / prompt, 4) if prompt else 0.0,
+               "cost_usd": round(cost, 6), "seconds": round(seconds, 2), "images_in_history": images,
+               "stop_reason": getattr(response, "stop_reason", None), "model": getattr(response, "model", self.model)}
+        self.step_log.append(rec)
+        log.info("api step %(turn)s.%(step)s: in %(input_tokens)s, cache write %(cache_creation_input_tokens)s, "
+                 "cache read %(cache_read_input_tokens)s, out %(output_tokens)s, $%(cost_usd).4f", rec)
+        if self.usage_log:
+            try:
+                with self.usage_log.open("a", encoding="utf-8") as f:
+                    f.write(json.dumps(rec) + "\n")
+            except OSError as exc:
+                log.warning("usage log not written: %s", exc)
         if self.on_usage:
             self.on_usage(one, cost)
 
@@ -136,6 +175,8 @@ class APISession:
 
     def send(self, text: str, images: list[str] | None = None, timeout: float = 3600.0) -> TurnResult:
         self._stop = False
+        self._turn += 1
+        t_turn, cost0, usage0 = time.time(), self.total_cost, dict(self.usage)
         content: list[dict[str, Any]] = []
         for img in images or []:
             block = _image_block(img)
@@ -148,20 +189,27 @@ class APISession:
         steps = 0
         while True:
             steps += 1
+            # Caching: an explicit breakpoint on the system prompt (tools + system, identical for every project of a
+            # kind) plus top-level automatic caching, which puts a breakpoint on the last block of the history and
+            # moves it forward each step, so every step reads the conversation so far at the cache-read price and
+            # writes only what the last step appended. This needs the history to be append-only: self.messages is
+            # never edited, and assistant turns (thinking blocks included) go back exactly as they arrived.
             kwargs: dict[str, Any] = dict(
                 model=self.model, max_tokens=32000,
                 system=[{"type": "text", "text": self.system_prompt, "cache_control": {"type": "ephemeral"}}],
                 messages=self.messages, tools=self.tool_schemas, thinking={"type": "adaptive"},
+                cache_control={"type": "ephemeral"},
             )
             if self.effort:
                 kwargs["output_config"] = {"effort": self.effort}
+            t_step, n_images = time.time(), self._images_in_history()
             if self.fallbacks:
                 with self.client.beta.messages.stream(**kwargs, betas=["server-side-fallback-2026-07-01"], fallbacks="default") as stream:
                     response = stream.get_final_message()
             else:
                 with self.client.messages.stream(**kwargs) as stream:
                     response = stream.get_final_message()
-            self._account(response)
+            self._account(response, steps, time.time() - t_step, n_images)
             self.messages.append({"role": "assistant", "content": response.content})
             tool_uses = []
             for block in response.content:
@@ -179,7 +227,8 @@ class APISession:
                 self.messages.append({"role": "user", "content": [{"type": "tool_result", "tool_use_id": tu.id, "content": "stopped by the user", "is_error": True} for tu in tool_uses]})
                 texts.append("[stopped]")
                 self.on_event("result", {"num_turns": steps, "duration_ms": 0, "total_cost_usd": None, "stopped": True})
-                return TurnResult("\n".join(texts), turns=steps, tool_calls=tool_calls, stopped=True)
+                return TurnResult("\n".join(texts), turns=steps, tool_calls=tool_calls, stopped=True,
+                                  **self._turn_totals(t_turn, cost0, usage0))
             results: list[dict[str, Any]] = []
             for tu in tool_uses:
                 tool_calls += 1
@@ -199,4 +248,9 @@ class APISession:
                 break
         final = "\n".join(texts)
         self.on_event("result", {"num_turns": steps, "duration_ms": 0, "total_cost_usd": None})
-        return TurnResult(final, turns=steps, tool_calls=tool_calls)
+        return TurnResult(final, turns=steps, tool_calls=tool_calls, **self._turn_totals(t_turn, cost0, usage0))
+
+    def _turn_totals(self, t0: float, cost0: float, usage0: dict[str, int]) -> dict[str, Any]:
+        """This turn's share of the session's cost and tokens, for TurnResult."""
+        return {"cost_usd": self.total_cost - cost0, "duration_ms": int((time.time() - t0) * 1000),
+                "usage": {k: self.usage[k] - usage0.get(k, 0) for k in USAGE_KEYS}}
