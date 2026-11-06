@@ -526,6 +526,9 @@ body.domain #canvas::after { display: none; }
 .hinspector .hnr.pneu { grid-template-columns: 56px 1fr 40px; }
 .hinspector .hph.fw, .hinspector .hpr.fw { grid-template-columns: 64px 1fr 1fr 18px; }
 .hinspector .hpr.fw b.bad { color: var(--bad); }
+.hinspector .hnh.elec, .hinspector .hnr.elec { grid-template-columns: 58px 1fr 64px 16px; }
+.hinspector .hnr.elec b.bad { color: var(--bad); } .hinspector .hnr.elec b.warn { color: var(--warn); }
+.hinspector h4.hsec { margin: 8px 0 2px; font: 600 var(--t-xs) var(--font-sans); color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
 .hinspector .hnr:hover, .hinspector .hpr.fw:hover { background: var(--raised); border-radius: 4px; }
 .hinspector .hcode { background: var(--code-bg); color: var(--code-fg); border: 1px solid var(--line); border-radius: var(--r1); padding: 8px; font: 400 11px/1.45 var(--font-mono); max-height: 46vh; overflow: auto; white-space: pre; }
 .hinspector .hrow button.on { background: var(--accent-soft); border-color: var(--tool); color: var(--fg); }

@@ -57,7 +57,7 @@ def test_editor_in_the_shell_with_oss_defaults(editor):
         assert "wires" in crumbs and page.inner_text("eitri-topbar .crumbs .here") == title == "lead"
         # the rail: the five tools, the current one marked, then the local project list; no combined-workspace item
         rail = _rail(page)
-        assert [r[0] for r in rail] == ["cad", "wires", "motion", "pneumatics", "firmware", "projects"]
+        assert [r[0] for r in rail] == ["cad", "wires", "motion", "pneumatics", "firmware", "electronics", "projects"]
         assert [r[0] for r in rail if r[1] == "page"] == ["wires"] and rail[-1][2]
         assert page.locator("eitri-rail").inner_text().lower().count("combined") == 0
         # OSS slot defaults: a "local" badge; the status bar: tool, core version, local, folder, build state, one eitri.io link
@@ -118,7 +118,7 @@ def test_home_is_the_local_project_list_in_the_shell(tmp_path):
             page.on("pageerror", lambda e: errors.append(str(e)))
             page.goto(url)
             page.wait_for_selector("#grid .card[data-id='lead']")
-            assert [r[0] for r in _rail(page)] == ["cad", "wires", "motion", "pneumatics", "firmware", "projects"]
+            assert [r[0] for r in _rail(page)] == ["cad", "wires", "motion", "pneumatics", "firmware", "electronics", "projects"]
             assert _rail(page)[-1][1] == "page"                     # the project list is the rail-bottom item, and it is this page
             assert page.inner_text("eitri-topbar .end .local-badge").lower() == "local"
             assert page.get_attribute("#grid .card[data-id='lead']", "data-tool") == "wires" and page.get_attribute("#grid .card[data-id='cube']", "data-tool") == "cad"

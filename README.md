@@ -13,7 +13,7 @@ Fusion-style 3D editor in your browser, by hand or by chat: both edit the same m
   1. editor tour (docs/editor-tour.gif): still shows the editor before the shell.
   2. manual drag, then the agent continues (docs/edit-agent-loop.gif / .mp4): still the old editor; needs a key.
 -->
-![A recorded eitri session, replayed in the editor: eitri plans the hook, writes the model, a check fails, eitri rebuilds, and all 10 checks pass](docs/check-fix-green.gif)
+![A recorded eitri session, replayed in the editor: eitri plans the hook, writes the model, a check fails, eitri rebuilds, and all 10 checks pass](https://raw.githubusercontent.com/SiddhuYen/eitri/main/docs/check-fix-green.gif)
 
 <sub>A real recorded session (the Wall racket holder demo, which anyone can replay without a key), played back
 in the editor: the plan, eitri writing the model, the failed builds, the fix, all 10 checks passing. 3 min 17 s
@@ -27,19 +27,31 @@ the checks are part of the build, and a failing check is fixed in the geometry, 
 ## Quickstart
 
 ```sh
-git clone https://github.com/SiddhuYen/eitri eitri && cd eitri && ./install.sh
+curl -fsSL https://eitri.io/install | sh
 eitri
 ```
 
-`install.sh` installs [uv](https://docs.astral.sh/uv/) if needed, installs eitri with Python 3.12, the CAD
-kernel and Claude Code (the binary inside Anthropic's `claude-agent-sdk` package, downloaded from PyPI at
-install time; eitri does not ship it), checks the install (`eitri doctor`) and tells you what to run.
-`eitri` opens http://127.0.0.1:8765 in your browser. Already have uv?
-`uv tool install --python 3.12 git+https://github.com/SiddhuYen/eitri` does the same in one line.
-The package is named `eitri-cad` (the name `eitri` was taken on PyPI); the command and the Python import
-are both `eitri`.
+The installer ([scripts/install-remote.sh](https://github.com/SiddhuYen/eitri/blob/main/scripts/install-remote.sh); read it first if you like) installs
+[uv](https://docs.astral.sh/uv/) if needed, then `uv tool install --python 3.12 eitri-hardware`: Python 3.12, the CAD
+kernel and Claude Code (the binary inside Anthropic's `claude-agent-sdk` package, downloaded from PyPI at install
+time; eitri does not ship it). It checks the install (`eitri doctor`) and tells you what to run. **It downloads
+about 390 MB and uses about 1 GB of disk**; that takes 1 to 5 minutes depending on your connection, and the
+first `eitri doctor` takes up to a minute more. No sudo: everything goes under your home folder.
+`EITRI_NO_UV_INSTALL=1` stops it from installing uv, `EITRI_NO_PATH_EDIT=1` leaves your shell profile alone.
+`eitri` opens http://127.0.0.1:8765 in your browser.
 
-**Setting it up with an AI agent?** Point it at [AGENTS.md](AGENTS.md): exact commands and expected output
+Other ways in: already have uv? `uv tool install --python 3.12 eitri-hardware`. From a clone:
+`git clone https://github.com/SiddhuYen/eitri eitri && cd eitri && ./install.sh` (the same installer, pointed at
+the checkout). The package is named `eitri-hardware` (the name `eitri` was taken on PyPI); the command and the
+Python import are both `eitri`. Installed eitri 0.5.6 or older? It was called `eitri-cad`: run the installer again,
+or `uv tool uninstall eitri-cad && uv tool install --python 3.12 eitri-hardware` (projects and settings are kept).
+
+- **Update:** `eitri update` upgrades through uv (`eitri update --check` only looks). eitri does not look for
+  updates on its own; see the privacy notes below.
+- **Firmware projects:** `eitri setup firmware` installs arduino-cli and the Arduino AVR core (`--esp32` adds
+  the ESP32 core; `--dry-run` shows the commands first). It asks before installing arduino-cli itself.
+
+**Setting it up with an AI agent?** Point it at [AGENTS.md](https://github.com/SiddhuYen/eitri/blob/main/AGENTS.md): exact commands and expected output
 for every step.
 
 > **See it in action without a key.** The home page opens with three demo projects (a 43-part V8 engine kit, a wall
@@ -59,9 +71,15 @@ readable only by you, never in a project). `ANTHROPIC_API_KEY` in the environmen
 - **API key only:** eitri drives Claude Code with `--bare` and your key, so a Claude.ai subscription
   logged in on the same machine is never used.
 - **Local only, no telemetry.** The editor, the CAD kernel and your projects stay on this computer; the
-  server answers only this machine. The only network calls eitri makes are to Anthropic's API, with your
-  key (Claude Code runs with its telemetry, error reporting and update checks turned off).
+  server answers only this machine. The only network calls eitri makes on its own are to Anthropic's API,
+  with your key (Claude Code runs with its telemetry, error reporting and update checks turned off).
   Fonts, icons and three.js are bundled; the pages fetch nothing from the internet.
+- **Update checks only when you ask.** eitri asks pypi.org for the newest version (one GET of
+  `https://pypi.org/pypi/eitri-hardware/json`, nothing about you or your projects) only when you run `eitri update`
+  or `eitri doctor --online`. If you want a reminder, `eitri update --auto on` lets eitri make that same
+  request when it starts, at most once a day, and print one line when there is a newer version
+  (`eitri update --auto off` turns it off again). `eitri setup firmware` downloads arduino-cli and board packages
+  from Arduino and Espressif, and it only runs when you start it.
 
 ## Export for 3D printing
 
@@ -78,14 +96,14 @@ files a slicer wants:
   written (closed, manifold, consistently wound, the solid's volume) and every file is read back and checked
   again; a part that fails is not written, and the dialog says which and where.
 
-![The V8 engine kit: 43 printable parts on 2 plates](docs/print-dialog.png)
+![The V8 engine kit: 43 printable parts on 2 plates](https://raw.githubusercontent.com/SiddhuYen/eitri/main/docs/print-dialog.png)
 
 On the V8 demo: **43 printable parts, 2 plates** of 220 x 220 mm, all 43 written and verified in about
 3 s after a 3 s plan; 12 parts are flagged with walls under 0.8 mm (the model's own report flags them too).
 
 | Plate 1 | Plate 2 |
 |---|---|
-| ![V8 plate 1](docs/v8-plate1.png) | ![V8 plate 2](docs/v8-plate2.png) |
+| ![V8 plate 1](https://raw.githubusercontent.com/SiddhuYen/eitri/main/docs/v8-plate1.png) | ![V8 plate 2](https://raw.githubusercontent.com/SiddhuYen/eitri/main/docs/v8-plate2.png) |
 
 ## Use
 
@@ -99,14 +117,14 @@ the conversation) or **New chat** to start over; every direct-modeling tool work
 without a prompt. Each project keeps its conversation, so it is still there after a restart.
 
 Every page shares one layout: a top bar with where you are (`eitri / wires / Quad power harness`), a rail with
-the five tools (CAD, Wires, Motion, Pneumatics, Firmware; each opens that tool's projects) and your project list
+the six tools (CAD, Wires, Motion, Pneumatics, Firmware, Electronics; each opens that tool's projects) and your project list
 at its foot, and a status bar with the tool, the core version, the project folder and the build's verdict. In a
 project the model (or a domain's diagram) fills the canvas; the inspector (checks, parameters, the selection,
 revisions) and the chat sit in panels docked on the right. The chat collapses to its header, the panels fold to
 a strip for more room, and the Export menu at the top of the inspector lists every file the project can be
 downloaded as. Dark by default, light when the system is.
 
-![The V8 engine kit demo: the prompt, eitri writing the model, the build, all 43 checks passing](docs/v8-build.gif)
+![The V8 engine kit demo: the prompt, eitri writing the model, the build, all 43 checks passing](https://raw.githubusercontent.com/SiddhuYen/eitri/main/docs/v8-build.gif)
 
 <sub>The 43-part V8 demo: one prompt → eitri writes a 398-line model → all 43 checks pass (a recorded
 23-minute session, replayed and compressed to 18 s).</sub>
@@ -255,6 +273,14 @@ uploads to a board.** You flash it yourself from the sketch folder in `out/`. Th
 `compiles (arduino-cli)` check that says "compiler unavailable" and how to install it; the other checks still run. Install it once:
 
 ```sh
+eitri setup firmware              # arduino-cli (asks first), arduino:avr and Servo, then a test compile
+eitri setup firmware --esp32      # also the ESP32 board package and ESP32Servo
+eitri setup firmware --dry-run    # only print the commands
+```
+
+It runs the same steps you would run by hand:
+
+```sh
 brew install arduino-cli          # or: curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
 arduino-cli core update-index
 arduino-cli core install arduino:avr             # Uno and Nano
@@ -267,7 +293,7 @@ arduino-cli core install esp32:esp32
 arduino-cli lib install ESP32Servo               # if an ESP32 sketch drives a servo
 ```
 
-eitri finds `arduino-cli` on `PATH`, or at the path in `EITRI_ARDUINO_CLI`.
+eitri finds `arduino-cli` on `PATH`, at the path in `EITRI_ARDUINO_CLI`, or in `~/.local/bin`, `/opt/homebrew/bin` or `/usr/local/bin`.
 
 ```bash
 eitri build eitri/demos/pan-tilt/pan_tilt.py         # 11 pass, 0 warn, 0 FAIL
@@ -276,6 +302,64 @@ eitri build eitri/demos/servo-sweep/servo_sweep.py   # 11 pass, 0 warn, 0 FAIL w
 eitri bom ~/eitri-projects/clamp                     # pneumatics: the bill of materials (--csv)
 ```
 
+## Electronics (breadboard and module level)
+
+The sixth domain: a circuit as code. A model file that starts `from eitri.electronics import *` builds a `Circuit`: a board (Arduino
+Uno, Nano, ESP32 DevKitC), supplies, regulators, breakout modules from a catalog (PCA9685, BME280, SSD1306, HC-SR04), resistors,
+LEDs, diodes, capacitors, switches, MOSFETs, transistors, relays, motors, solenoids and servos, and the nets that join them. It is
+breadboard and module level only: no PCB layout, no footprints, no KiCad export (the netlist CSV is the hand-off).
+
+Every build classifies each net (a rail at a voltage, a ground, a pin a board drives, a transistor's switched low side), solves the
+currents through the two-terminal parts between them, and grades the result. Series strings (a pin, a resistor and an LED to
+ground; a rail, a relay coil and a MOSFET's drain) are solved in closed form; branched networks (two LEDs sharing a resistor, a
+divider feeding two loads) by nodal analysis, written for eitri, with an ideal-diode iteration. The two agree on every series string. Every limit comes from a datasheet, standard or vendor page whose URL, words and fetch date
+are recorded in `eitri/electronics/sources.py`; each check names its source, and each build writes the ones it used to
+`<name>.sources.md`. Where sources disagree the conservative figure is used and both are quoted: the lower figure for a
+limit, the higher for a draw or load (an MG996R draws 2.5 A at stall, not 1.4 A); a figure no document gives is marked ASSUMPTION. The checks:
+
+- **Current.** Per GPIO (Uno / Nano 20 mA, ESP32 28 mA) and per chip (ATmega328P 200 mA); module outputs; every LED against its DC
+  maximum (Kingbright 5 mm catalog parts by `part=`, a typical part by colour, or your LED's own figures; LEDs sharing a resistor
+  are graded for current hogging); every resistor's I²R against its rating; nothing
+  without a current limit (an LED with no resistor, a switch from a driven pin to ground).
+- **Power.** No rail tied to ground or fed by two supplies; every supply pin within its part's range (a BME280 on 5 V fails); the
+  budget of every source (a board's 5V pin on USB or VIN, its 3V3 pin, a supply's rating, a regulator's rating), servos at stall;
+  regulator dropout and junction temperature; VIN range; one common ground for everything that exchanges signals.
+- **Logic levels.** No input above its absolute maximum (a 5 V sensor's output into an ESP32 pin fails); the driver's guaranteed
+  VOH against the receiver's VIH; no floating inputs.
+- **I2C** (NXP UM10204). Pull-ups present and between Rp(min) and Rp(max) for the clock and the bus capacitance; unique addresses.
+  On an Uno or Nano, Wire's internal pull-ups to 5 V against any 3.3 V device on the bus (a warning, with the fixes).
+- **Inductive loads.** A flyback diode across every coil a transistor or pin switches, the right way round and rated for the coil current.
+- **Switching.** A MOSFET's gate drive against the VGS its RDS(on) is specified at (an IRF540N from a 5 V pin fails) and its heat; a
+  transistor's base drive for saturation; relay contacts against their rating.
+
+It writes a schematic (SVG and PNG: rails and grounds as flags, every other net routed), a BOM, a netlist (CSV and Markdown) and the
+sources file. The editor shows the schematic beside a parts table and a nets table: edit a value, move a pin to another net, add a
+resistor, LED, diode, capacitor or switch, drag parts. The demo `eitri/demos/uno-arm-circuit` is an Uno driving four MG996R servos
+through a PCA9685, a status LED, an end-stop and a relay-switched gripper solenoid. Its `bad` configuration powers the servos from
+the Uno's 5V pin and leaves out the relay's flyback diode, and fails exactly those two checks.
+
+```python
+from eitri.electronics import *
+
+def build(p):
+    c = Circuit("Status LED")
+    uno = c.board("UNO", "uno")
+    c.net("GND", uno["GND"])
+    r, led = c.resistor("R1", 330), c.led("LED1", part="WP7113SRD/D")   # (5 V - 1.85 V) / 330 = 9.5 mA
+    c.net("LED_A", uno["D13"], r["1"])
+    c.connect(r["2"], led["A"])
+    c.connect(led["K"], "UNO.GND")
+    return c
+```
+
+```bash
+eitri build eitri/demos/uno-arm-circuit/uno_arm_circuit.py                 # 31 pass, 0 warn, 0 FAIL
+eitri build eitri/demos/uno-arm-circuit/uno_arm_circuit.py --config bad    # 28 pass, 0 warn, 2 FAIL (on purpose)
+eitri bom eitri/demos/uno-arm-circuit/uno_arm_circuit.py                   # the bill of materials (--csv)
+```
+
+The servos run from a 5 V 15 A supply: four MG996R at their 2.5 A stall and the relay coil draw 10.07 A, 67 % of it.
+
 ## Direct modeling in the viewer (Fusion-style)
 
 A new project starts as a **blank design**, like Fusion: `eitri ~/parts/thing` opens
@@ -283,7 +367,7 @@ an empty grid. Press **S** and click the grid to sketch on the ground plane and 
 the first part, drop a **primitive** (B), or describe the part in the chat and let
 eitri write it - every later edit works the same on either.
 
-![A tour of the editor on the V8: combine, mirror, align and mate, form bodies, holes from fastener tables, export](docs/editor-tour.gif)
+![A tour of the editor on the V8: combine, mirror, align and mate, form bodies, holes from fastener tables, export](https://raw.githubusercontent.com/SiddhuYen/eitri/main/docs/editor-tour.gif)
 
 <sub>Thirteen seconds of the editor on the V8 demo: combine, mirror, align and mate faces, form bodies, holes
 sized from fastener tables, export to STEP / STL / 3MF / drawings / G-code.</sub>
@@ -525,11 +609,11 @@ steps (pattern -> `GridLocations`, mirror -> `mirror(...)`, shell -> `offset(...
 revolve -> `revolve(...)`, thread -> `IsoThread`, a dragged corner ->
 `move_vertices(shape, near=[(x, y, z)], delta=...)` from the library, ...).
 
-![Stretch the plate by hand and tell eitri to continue: it reads the edit, adds the holes, then builds a hook on the circle you sketched and writes checks for it](docs/edit-agent-loop.gif)
+![Stretch the plate by hand and tell eitri to continue: it reads the edit, adds the holes, then builds a hook on the circle you sketched and writes checks for it](https://raw.githubusercontent.com/SiddhuYen/eitri/main/docs/edit-agent-loop.gif)
 
 <sub>Stretch the plate by hand, tell eitri to continue: it reads your edits, adds the holes, then builds a hook
 on the circle you sketched and writes new checks for it ($0.61 of API usage, a real session;
-[MP4](docs/edit-agent-loop.mp4)).</sub>
+[MP4](https://github.com/SiddhuYen/eitri/blob/main/docs/edit-agent-loop.mp4)).</sub>
 
 For anything else, click the geometry and type in the chat box ("make this hole
 M5 and counterbore it", "this wall is too thin, 3 mm please"): the message goes
@@ -580,7 +664,7 @@ nuts, washers and ball bearings (via bd_warehouse), bearing pockets.
 
 ## What the automatic checks catch
 
-![The checks card after the fix: all 10 checks of the racket holder pass, each with what was measured and what was expected](docs/editor-checks.png)
+![The checks card after the fix: all 10 checks of the racket holder pass, each with what was measured and what was expected](https://raw.githubusercontent.com/SiddhuYen/eitri/main/docs/editor-checks.png)
 
 Things that went wrong during development and are now caught by the build, not by
 hoping the agent notices:
@@ -664,7 +748,7 @@ evidence, not independent proof.
 - Imported meshes stay faceted: an STL becomes a solid of flat facets, not smooth cylinders.
 - Big assemblies are slower: the clearance check measures every pair of parts whose boxes come close
   (about 9 s of the V8's 21 s build); farther pairs are counted, not measured.
-- Not included: FEA/thermal/modal simulation, generative design, electronics/PCB, lathe and multi-axis CAM,
+- Not included: FEA/thermal/modal simulation, generative design, PCB layout (electronics is breadboard and module level), lathe and multi-axis CAM,
   DWG/SAT/native Fusion or SolidWorks import, cloud sharing, photorealistic rendering, true T-splines (the
   Form workspace is subdivision-based). CAM is 2.5-axis; sheet-metal corner reliefs are basic.
 - Needs an Anthropic API key to chat (billed to you); everything else works without one. Tested on macOS
@@ -684,7 +768,7 @@ falls short, and what eitri does instead:
 | | text-to-cad | eitri |
 |---|---|---|
 | Shape | A skill pack + 68k-line Python runtime (`cadgen`) for other agents (Claude Code, Codex, Cursor...) | A standalone CAD agent with its own REPL and viewer; also usable as a library |
-| Install | uv + per-host plugin marketplaces, pinned Python 3.13, telemetry on by default, update nags | `uv tool install`; no plugins, no telemetry |
+| Install | uv + per-host plugin marketplaces, pinned Python 3.13, telemetry on by default, update nags | One line (`curl -fsSL https://eitri.io/install \| sh`, or `uv tool install eitri-hardware`); no plugins, no telemetry, no update checks unless you ask |
 | Model contract | `@step/@stl/@glb` decorators, parameterless models, a content-addressed store with a build daemon, freshness gates, sidecar JSON, link-vs-component rules | `PARAMS` + `build(p)` + `verify()`; builds are fast enough that nothing needs caching |
 | Verification | Up to the agent: write ad-hoc scripts in `tmp/`, remember to snapshot | Automatic on every build: validity, holes, thinnest wall, interferences, plus the model's own checks; failures are flagged to the agent |
 | Visual review | Playwright + headless Chromium snapshots | A numpy software renderer: 4-view contact sheet in ~1 s, no browser |
@@ -709,7 +793,7 @@ eitri or through the baseline (headless Claude Code with the text-to-cad
 plugin installed, same model, same prompt) and scores the result identically.
 
 Results (Claude Opus 5.5 at effort high for both, 2026-10-11; full tables and
-per-check verdicts in [`bench/RESULTS.md`](bench/RESULTS.md)):
+per-check verdicts in [`bench/RESULTS.md`](https://github.com/SiddhuYen/eitri/blob/main/bench/RESULTS.md)):
 
 | | baseline (Claude Code + text-to-cad) | eitri |
 |---|---|---|
@@ -750,10 +834,13 @@ eitri/
   mechanism/    mechanisms: links, joints, actuators; reach (IK), worst-pose torque, speed, limits, mass; kinematic diagram
   pneumatics/   ISO 1219 circuits: force, ISO 6358 flow, air consumption, pressure drop, validity; schematic, BOM
   firmware/     board, pinout, peripherals, sources; pin checks, arduino-cli compile (never uploads); pinout diagram
+  electronics/  circuits: boards, modules, passives, nets; sourced current, power, logic, I2C, flyback, gate checks; schematic, BOM, netlist
   domains.py    the registry of non-CAD domains (one `domain.py` per package); checks.py and diagram.py are shared by them
   demos/        the bundled demo projects and their recorded sessions (agent/replay.py plays them)
   config.py     the API key (user config folder)
   doctor.py     `eitri doctor` and `eitri key`
+  update.py     `eitri update` and the opt-in once-a-day "newer version" notice
+  setup_firmware.py  `eitri setup firmware` (arduino-cli and the board cores)
   cli.py        the REPL and subcommands
 bench/          tasks, runner, results
 tests/          everything above, including every snippet of the build123d reference
@@ -769,9 +856,16 @@ build and returns checks that join the report beside `verify()`; it can also ret
 Development: `uv venv --python 3.12 && uv pip install -e '.[dev]' && pytest`. The demos are rebuilt
 from recorded projects with `scripts/make_demos.py`.
 
+**Releasing.** Set the new version in `pyproject.toml`, `eitri/__init__.py` and `EITRI_FALLBACK_TAG` in
+`scripts/install-remote.sh` (`python scripts/check_dist.py` after `uv build` checks that they agree and that the
+wheel and sdist hold every package file), add a CHANGELOG entry, then push a tag `vX.Y.Z`. The `release` workflow
+builds, installs the wheel on clean macOS and Ubuntu runners, runs `eitri doctor`, and publishes that sdist and wheel to
+PyPI with trusted publishing (no token in the repository). The `install` workflow runs the same build and install
+check on every push to main and every pull request.
+
 ## License
 
-eitri is licensed under the [Functional Source License, Version 1.1, MIT Future License](LICENSE.md)
+eitri is licensed under the [Functional Source License, Version 1.1, MIT Future License](https://github.com/SiddhuYen/eitri/blob/main/LICENSE.md)
 (FSL-1.1-MIT): you may use, modify and redistribute it for any purpose except offering a competing
 commercial product or service; each version becomes MIT-licensed two years after it is released. Bundled
 third-party assets keep their own licenses: three.js (MIT, `eitri/viewer/vendor/three/LICENSE`), IBM Plex

@@ -178,7 +178,7 @@
       <div class="fact"><span class="ico"><svg class="i"><use href="assets/icons.svg#i-shield-check"/></svg></span>
         <div><b>Where the key is kept</b><p>In <code id="setuppath">your eitri config file</code>, readable only by you. Never in a project folder.</p></div></div>
       <div class="fact"><span class="ico"><svg class="i"><use href="assets/icons.svg#i-cpu"/></svg></span>
-        <div><b>Nothing else leaves this computer</b><p>eitri makes no network calls except to Anthropic's API. Checking the key makes one free call that lists models.</p></div></div>
+        <div><b>Nothing else leaves this computer</b><p>On its own, eitri makes no network calls except to Anthropic's API. Checking the key makes one free call that lists models. It asks pypi.org for a newer version only when you ask it to (<code>eitri update</code>).</p></div></div>
     </aside>
   </section>
 
@@ -222,7 +222,7 @@
   <!-- describe a new design -->
   <section class="panel compose" id="compose" aria-labelledby="composetitle">
     <h2 id="composetitle">What do you want to make?</h2>
-    <p class="lede" id="composelede">Describe a part, a harness, a mechanism, an air circuit or firmware. eitri builds it, checks it, and you keep editing it by hand or by chat.</p>
+    <p class="lede" id="composelede">Describe a part, a harness, a mechanism, an air circuit, firmware or a circuit. eitri builds it, checks it, and you keep editing it by hand or by chat.</p>
     <div class="prompt">
       <label class="sr" for="prompt">Describe the design</label>
       <textarea id="prompt" placeholder="e.g. a wall bracket for a 25 mm pipe, 3 mm thick, two M4 screw holes 40 mm apart"></textarea>
@@ -265,11 +265,12 @@ const EXAMPLES = {
   wires: ['a power harness: XT60 battery to four ESCs at 20 A', 'a JST-XH sensor loom for three sensors on a 300 mm run', 'a 12 V LED strip harness with a fuse and a switch'],
   motion: ['a pan-tilt camera mount on two SG90 servos', 'a 3-DOF desk arm reaching 250 mm with a 200 g payload', 'a linear stage on a lead screw with 100 mm of travel'],
   pneumatics: ['a double-acting air clamp with meter-out speed control', 'a single-acting clamp on a 3/2 valve at 6 bar', 'a 40 mm cylinder pushing 300 N at 200 mm/s, 20 cycles a minute'],
-  firmware: ['Arduino Uno firmware that sweeps a servo on D9 while a button on D2 is held', 'a Nano reading a potentiometer on A0 to drive a PWM motor', 'ESP32 firmware with a limit switch homing a stepper driver']
+  firmware: ['Arduino Uno firmware that sweeps a servo on D9 while a button on D2 is held', 'a Nano reading a potentiometer on A0 to drive a PWM motor', 'ESP32 firmware with a limit switch homing a stepper driver'],
+  electronics: ['an Uno driving a status LED on D13 and reading a button on D2', 'an Uno with a PCA9685 running four MG996R servos from a 5 V supply', 'a 12 V solenoid switched from an Uno pin through a MOSFET']
 };
 const PLACEHOLDER = { all: 'e.g. a wall bracket for a 25 mm pipe, 3 mm thick, two M4 screw holes 40 mm apart', cad: 'e.g. a wall bracket for a 25 mm pipe, 3 mm thick, two M4 screw holes 40 mm apart',
   wires: 'e.g. a harness from an XT60 battery lead to four ESCs at 20 A each, 14 AWG', motion: 'e.g. a pan-tilt mount for a 90 g camera on two micro servos',
-  pneumatics: 'e.g. a double-acting cylinder clamping 400 N at 6 bar with speed control', firmware: 'e.g. Uno firmware: servo on D9 sweeps while a button on D2 is held, LED on D13' };
+  pneumatics: 'e.g. a double-acting cylinder clamping 400 N at 6 bar with speed control', firmware: 'e.g. Uno firmware: servo on D9 sweeps while a button on D2 is held, LED on D13', electronics: 'e.g. an Uno with a BME280 on I2C and a relay switched through a transistor' };
 const ICON = (name, cls) => `<svg class="i${cls ? ' ' + cls : ''}" aria-hidden="true"><use href="assets/icons.svg#i-${name}"/></svg>`;
 const TOOLS = window.eitriTools;
 const DISMISS_KEY = 'eitri.setup.dismissed';
@@ -284,7 +285,7 @@ let last = '', lastDemos = '', projects = [], demos = [], agent = null, busyCrea
     $('topbar').setAttribute('crumbs', JSON.stringify([['eitri', '/'], ['projects', '/'], [t.key]]));
     $('rail').querySelectorAll('a').forEach(a => { if (a.dataset.tool === t.key && !a.classList.contains('neutral')) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
     $('pagetitle').textContent = t.name; document.title = t.name + ' · eitri';
-    $('composetitle').textContent = { cad: 'Describe a part', wires: 'Describe a harness', motion: 'Describe a mechanism', pneumatics: 'Describe an air circuit', firmware: 'Describe firmware' }[t.key];
+    $('composetitle').textContent = { cad: 'Describe a part', wires: 'Describe a harness', motion: 'Describe a mechanism', pneumatics: 'Describe an air circuit', firmware: 'Describe firmware', electronics: 'Describe a circuit' }[t.key];
     $('composelede').textContent = t.line + '. eitri builds it, checks it on every build, and you keep editing it by hand or by chat.';
     $('st-tool').textContent = t.name;
   }

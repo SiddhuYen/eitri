@@ -1,7 +1,7 @@
 """`eitri doctor` (is this install complete and working?) and `eitri key` (the Anthropic API key).
 
 Both are written to be run by a person or by an AI agent setting eitri up: plain lines, a stable
-first word per line (ok / warn / FAIL), `--json` for machines, and a non-zero exit code when eitri
+first word per line (ok / info / warn / FAIL; info is something optional that is not installed), `--json` for machines, and a non-zero exit code when eitri
 cannot work.
 """
 from __future__ import annotations
@@ -30,6 +30,7 @@ def run_doctor(online: bool = False, as_json: bool = False) -> int:
         print("eitri doctor")
     v = sys.version_info
     add("ok" if v >= (3, 10) else "FAIL", "python", f"{v.major}.{v.minor}.{v.micro} ({sys.executable})")
+    _version_check(add, online)
 
     t = time.time()
     try:
@@ -104,6 +105,8 @@ def run_doctor(online: bool = False, as_json: bool = False) -> int:
     except Exception as exc:  # noqa: BLE001
         add("warn", "demo projects", f"{type(exc).__name__}: {exc}")
 
+    _firmware_check(add)
+
     failed = [c for c in checks if c["status"] == "FAIL"]
     ready = not failed
     next_step = "run `eitri` - it opens http://127.0.0.1:8765 in your browser"
@@ -114,6 +117,52 @@ def run_doctor(online: bool = False, as_json: bool = False) -> int:
     else:
         print("eitri is NOT ready: fix the FAIL lines above (reinstalling usually does it).")
     return 0 if ready else 1
+
+
+def _version_check(add, online: bool) -> None:
+    """The installed version and how it was installed. Asks pypi.org for the newest version only with --online;
+    otherwise it reads the cache that `eitri update` keeps (no network)."""
+    try:
+        from .update import cached_newer, check, install_source, installed_version
+        src = install_source()
+        how = {"pypi": "from PyPI with uv tool", "git": f"with uv tool from {src['detail']}", "url": f"with uv tool from {src['detail']}",
+               "path": f"with uv tool from {src['detail']}", "directory": f"with uv tool from the checkout at {src['detail']}",
+               "other": "not with uv tool (`eitri update` will not upgrade it)"}[src["kind"]]
+        current = installed_version()
+        if online:
+            info = check()
+            newer = info["latest"] if info["newer"] else None
+            note = f"; could not check for a newer version: {info['error']}" if info["error"] else ("" if newer else "; the newest")
+        else:
+            newer, note = cached_newer(), ""
+        if newer:
+            add("warn", "eitri", f"{current} (installed {how}); {newer} is available: run `eitri update`")
+        else:
+            add("ok", "eitri", f"{current} (installed {how}){note}")
+    except Exception as exc:  # noqa: BLE001 - informational
+        add("warn", "eitri", f"could not read the version: {type(exc).__name__}: {exc}")
+
+
+def _firmware_check(add) -> None:
+    """arduino-cli and the AVR core: only firmware projects need them, so a missing toolchain is info, not a warning."""
+    try:
+        import subprocess
+        from .firmware.compile import find_cli
+        cli = find_cli()
+        if cli is None:
+            add("info", "firmware toolchain", "arduino-cli not installed - only firmware projects need it; "
+                "`eitri setup firmware` installs it")
+            return
+        ver = subprocess.run([cli, "version"], capture_output=True, text=True, timeout=30).stdout.strip().splitlines()
+        cores = subprocess.run([cli, "core", "list"], capture_output=True, text=True, timeout=60).stdout
+        have = sorted({ln.split()[0] for ln in cores.splitlines()[1:] if ln.split()} & {"arduino:avr", "esp32:esp32"})
+        if "arduino:avr" in have:
+            add("ok", "firmware toolchain", f"{(ver or ['arduino-cli'])[0]} ({cli}); cores: {', '.join(have)}")
+        else:
+            add("info", "firmware toolchain", f"arduino-cli at {cli} but the arduino:avr core is missing (only firmware projects need it); "
+                "`eitri setup firmware` installs it")
+    except Exception as exc:  # noqa: BLE001 - informational
+        add("warn", "firmware toolchain", f"could not ask arduino-cli: {type(exc).__name__}: {exc}")
 
 
 def run_key(action: str, key: str | None = None, check: bool = True) -> int:

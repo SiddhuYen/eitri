@@ -75,7 +75,7 @@ class Project:
     # -- paths -------------------------------------------------------------
     @property
     def kind(self) -> str:
-        """The model file's domain from its import: "cad", or "harness", "mechanism", "pneumatics", "firmware" (eitri.domains)."""
+        """The model file's domain from its import: "cad", or "harness", "mechanism", "pneumatics", "firmware", "electronics" (eitri.domains)."""
         from .domains import kind_of_source
         return kind_of_source(self.read_model())
 

@@ -253,7 +253,7 @@ def test_tabs_switch_between_the_files_when_the_host_can(tmp_path):
         # Add: one entry per kind the project has no file of; it calls the host with that kind
         page.click("#fileadd")
         items = page.eval_on_selector_all(".filemenu [role=menuitem]", "els => els.map(e => e.dataset.kind)")
-        assert items == ["mechanism", "pneumatics"]
+        assert items == ["mechanism", "pneumatics", "electronics"]
         page.click(".filemenu [role=menuitem][data-kind='pneumatics']")
         assert page.evaluate("() => window.__added") == "pneumatics"
         assert not errors, errors
