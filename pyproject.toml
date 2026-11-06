@@ -12,7 +12,9 @@ license = { file = "LICENSE.md" }
 keywords = ["cad", "build123d", "opencascade", "claude", "3d-printing", "step", "wire-harness"]
 classifiers = [
   "Programming Language :: Python :: 3",
-  "Topic :: Scientific/Engineering :: Computer Aided Design",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+  "Topic :: Multimedia :: Graphics :: 3D Modeling",
   "License :: Other/Proprietary License",
 ]
 dependencies = [

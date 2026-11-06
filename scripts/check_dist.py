@@ -5,7 +5,9 @@
   assets, the viewer's three.js, the agent's .md prompts, the demo projects' tarballs) - nothing is left behind
   by a too-narrow [tool.setuptools.package-data] glob;
 - pyproject.toml, eitri/__init__.py, the install script's fallback tag and (with --tag, in the release workflow)
-  the git tag all name the same version.
+  the git tag all name the same version;
+- every classifier in the wheel's metadata is a valid trove classifier (PyPI rejects the upload otherwise);
+  needs the trove-classifiers package: `uv run --no-project --with trove-classifiers python scripts/check_dist.py`.
 
     python scripts/check_dist.py [--dist dist] [--tag v0.5.5]
 
@@ -56,6 +58,18 @@ def main() -> int:
             if not p.name.startswith(f"eitri_hardware-{version}"):
                 problems.append(f"{p.name} is not named eitri_hardware-{version}-... (the PyPI package is eitri-hardware)")
         in_wheel = set(zipfile.ZipFile(wheel).namelist())
+        meta = next((n for n in in_wheel if n.endswith(".dist-info/METADATA")), None)
+        classifiers = []
+        if meta:
+            text = zipfile.ZipFile(wheel).read(meta).decode("utf-8")
+            classifiers = [ln.split(":", 1)[1].strip() for ln in text.splitlines() if ln.startswith("Classifier:")]
+        try:
+            from trove_classifiers import classifiers as valid
+            bad = [c for c in classifiers if c not in valid]
+            if bad:
+                problems.append(f"not valid trove classifiers (PyPI rejects the upload): {bad}")
+        except ImportError:
+            print("note: trove-classifiers is not installed; the classifiers were not checked")
         with tarfile.open(sdist) as t:
             in_sdist = {n.split("/", 1)[1] for n in t.getnames() if "/" in n}
         try:
