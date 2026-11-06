@@ -25,7 +25,7 @@ curl -fsSL https://eitri.io/install | sh
 **B. Already have `uv` (https://docs.astral.sh/uv/):**
 
 ```sh
-uv tool install --python 3.12 eitri-cad
+uv tool install --python 3.12 eitri-hardware
 eitri doctor
 ```
 
@@ -39,12 +39,13 @@ cd eitri
 
 The installer (A, and C, which runs the same script on the clone) installs `uv` if it is missing (from
 `https://astral.sh/uv/install.sh`), installs eitri as a command-line tool in its own environment with
-`uv tool install --python 3.12 eitri-cad` (the CAD kernel and Claude Code, which comes inside Anthropic's
+`uv tool install --python 3.12 eitri-hardware` (the CAD kernel and Claude Code, which comes inside Anthropic's
 `claude-agent-sdk` package from PyPI: about 390 MB of downloads, 1 to 5 minutes), runs `eitri doctor` (up to a
 minute the first time), and adds the tool folder to the shell `PATH`. It needs no sudo. Set
 `EITRI_NO_PATH_EDIT=1` to leave the shell profile alone (then call eitri by the full path it prints),
 `EITRI_NO_UV_INSTALL=1` to stop it from installing uv, `EITRI_VERSION=0.6.0` to pin a version. If the
-`eitri-cad` package is not on PyPI, the installer installs the matching GitHub release archive instead.
+PyPI is unreachable, the installer installs the matching GitHub release archive instead. An older eitri installed as
+`eitri-cad` (the package name up to 0.5.6) is uninstalled first; projects, key and settings are kept.
 
 **Success:** the install ends with `eitri doctor` output (step 2) and then:
 
@@ -193,7 +194,7 @@ eitri also looks in `~/.local/bin`, `/opt/homebrew/bin` and `/usr/local/bin`. If
 
 ```sh
 eitri update --check   # is there a newer release? (asks pypi.org)
-eitri update           # install it (uv tool upgrade eitri-cad)
+eitri update           # install it (uv tool upgrade eitri-hardware)
 ```
 
 An install from a clone is updated with `git pull && ./install.sh` in the clone; `eitri update` says so.
@@ -204,7 +205,7 @@ eitri never checks for updates on its own unless the person turns it on with `ei
 | Symptom | Fix |
 |---|---|
 | `eitri: command not found` after install | open a new shell, or run the full path printed by the installer (`$(uv tool dir --bin)/eitri`) |
-| `FAIL CAD kernel` or `FAIL test build` | reinstall: `uv tool install --force --python 3.12 eitri-cad` (or the clone folder); Python 3.10–3.13 only |
+| `FAIL CAD kernel` or `FAIL test build` | reinstall: `uv tool install --force --python 3.12 eitri-hardware` (or the clone folder); Python 3.10–3.13 only |
 | `FAIL Claude Code binary` | the `claude-agent-sdk` wheel is missing for this platform; reinstall, or set `EITRI_CLAUDE_BIN` to a recent `claude` that supports `--bare` |
 | `uv` will not install | install it by hand (https://docs.astral.sh/uv/getting-started/installation/), then run the installer again |
 | the page says it could not start three.js / WebGL | use a current Chrome, Edge, Firefox or Safari with hardware acceleration on |

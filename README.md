@@ -32,7 +32,7 @@ eitri
 ```
 
 The installer ([scripts/install-remote.sh](https://github.com/SiddhuYen/eitri/blob/main/scripts/install-remote.sh); read it first if you like) installs
-[uv](https://docs.astral.sh/uv/) if needed, then `uv tool install --python 3.12 eitri-cad`: Python 3.12, the CAD
+[uv](https://docs.astral.sh/uv/) if needed, then `uv tool install --python 3.12 eitri-hardware`: Python 3.12, the CAD
 kernel and Claude Code (the binary inside Anthropic's `claude-agent-sdk` package, downloaded from PyPI at install
 time; eitri does not ship it). It checks the install (`eitri doctor`) and tells you what to run. **It downloads
 about 390 MB and uses about 1 GB of disk**; that takes 1 to 5 minutes depending on your connection, and the
@@ -40,10 +40,11 @@ first `eitri doctor` takes up to a minute more. No sudo: everything goes under y
 `EITRI_NO_UV_INSTALL=1` stops it from installing uv, `EITRI_NO_PATH_EDIT=1` leaves your shell profile alone.
 `eitri` opens http://127.0.0.1:8765 in your browser.
 
-Other ways in: already have uv? `uv tool install --python 3.12 eitri-cad`. From a clone:
+Other ways in: already have uv? `uv tool install --python 3.12 eitri-hardware`. From a clone:
 `git clone https://github.com/SiddhuYen/eitri eitri && cd eitri && ./install.sh` (the same installer, pointed at
-the checkout). The package is named `eitri-cad` (the name `eitri` was taken on PyPI); the command and the
-Python import are both `eitri`.
+the checkout). The package is named `eitri-hardware` (the name `eitri` was taken on PyPI); the command and the
+Python import are both `eitri`. Installed eitri 0.5.6 or older? It was called `eitri-cad`: run the installer again,
+or `uv tool uninstall eitri-cad && uv tool install --python 3.12 eitri-hardware` (projects and settings are kept).
 
 - **Update:** `eitri update` upgrades through uv (`eitri update --check` only looks). eitri does not look for
   updates on its own; see the privacy notes below.
@@ -74,7 +75,7 @@ readable only by you, never in a project). `ANTHROPIC_API_KEY` in the environmen
   with your key (Claude Code runs with its telemetry, error reporting and update checks turned off).
   Fonts, icons and three.js are bundled; the pages fetch nothing from the internet.
 - **Update checks only when you ask.** eitri asks pypi.org for the newest version (one GET of
-  `https://pypi.org/pypi/eitri-cad/json`, nothing about you or your projects) only when you run `eitri update`
+  `https://pypi.org/pypi/eitri-hardware/json`, nothing about you or your projects) only when you run `eitri update`
   or `eitri doctor --online`. If you want a reminder, `eitri update --auto on` lets eitri make that same
   request when it starts, at most once a day, and print one line when there is a newer version
   (`eitri update --auto off` turns it off again). `eitri setup firmware` downloads arduino-cli and board packages
@@ -767,7 +768,7 @@ falls short, and what eitri does instead:
 | | text-to-cad | eitri |
 |---|---|---|
 | Shape | A skill pack + 68k-line Python runtime (`cadgen`) for other agents (Claude Code, Codex, Cursor...) | A standalone CAD agent with its own REPL and viewer; also usable as a library |
-| Install | uv + per-host plugin marketplaces, pinned Python 3.13, telemetry on by default, update nags | One line (`curl -fsSL https://eitri.io/install \| sh`, or `uv tool install eitri-cad`); no plugins, no telemetry, no update checks unless you ask |
+| Install | uv + per-host plugin marketplaces, pinned Python 3.13, telemetry on by default, update nags | One line (`curl -fsSL https://eitri.io/install \| sh`, or `uv tool install eitri-hardware`); no plugins, no telemetry, no update checks unless you ask |
 | Model contract | `@step/@stl/@glb` decorators, parameterless models, a content-addressed store with a build daemon, freshness gates, sidecar JSON, link-vs-component rules | `PARAMS` + `build(p)` + `verify()`; builds are fast enough that nothing needs caching |
 | Verification | Up to the agent: write ad-hoc scripts in `tmp/`, remember to snapshot | Automatic on every build: validity, holes, thinnest wall, interferences, plus the model's own checks; failures are flagged to the agent |
 | Visual review | Playwright + headless Chromium snapshots | A numpy software renderer: 4-view contact sheet in ~1 s, no browser |

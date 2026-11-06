@@ -6,7 +6,7 @@ annotated tags (`git show v0.4.0`).
 ## 0.6.0: electronics, and a one-command install
 
 eitri gains its sixth domain, circuits at breadboard and module level, and becomes installable with one command from PyPI
-(`eitri-cad`).
+(`eitri-hardware`).
 
 ### Added
 
@@ -35,7 +35,7 @@ eitri gains its sixth domain, circuits at breadboard and module level, and becom
 - **Catalog LEDs.** `c.led(name, part="WP7113SGD")` (also WP7113SRD/D, WP7113QBC/D, WP7113QWC/D) is graded on that part's own
   datasheet, with no "typical figures" warning; `vf_max=` for your own LED.
 - **One-command install.** `curl -fsSL https://eitri.io/install | sh` (`scripts/install-remote.sh`) installs uv if it is missing, then
-  `uv tool install eitri-cad` from PyPI (or, if PyPI is unreachable, the tagged GitHub release archive), and runs `eitri doctor`.
+  `uv tool install eitri-hardware` from PyPI (or, if PyPI is unreachable, the tagged GitHub release archive), and runs `eitri doctor`.
   `./install.sh` in a checkout runs the same script against the checkout. It prints the download size and time first and never uses
   sudo (on Linux without libGL it prints the apt / dnf command).
 - **`eitri update`** (`--check`, `--dry-run`, `--auto on|off`). It reads how eitri was installed (uv's receipt) and upgrades from
@@ -80,7 +80,10 @@ eitri gains its sixth domain, circuits at breadboard and module level, and becom
 - **Electronics analysis objects.** `Analysis.branches` now lists only networks the nodal solver could not solve (it listed every
   branch node), `Analysis.networks` is new, and a `String` can end at a branch node (`String.network`, `String.typical`).
 - Nothing else: `state.json`, routes, export formats, the build-extension API, the shell slots and `APISession` are unchanged. The
-  package name on PyPI is `eitri-cad`; installing from a git ref still works.
+  package name on PyPI is `eitri-hardware`; tags up to 0.5.6 installed from GitHub as `eitri-cad` (never on PyPI). The
+  installer removes an `eitri-cad` tool before installing, and `eitri update` in one prints the switch:
+  `uv tool uninstall eitri-cad && uv tool install eitri-hardware`. The command and the import stay `eitri`; installing from a
+  git ref still works.
 
 ## 0.5.6: depth that holds at desk scale, and a cheaper API loop
 

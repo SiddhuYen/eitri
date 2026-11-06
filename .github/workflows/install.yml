@@ -1,4 +1,4 @@
-# Build eitri-cad, check the package data, then install the built wheel on clean macOS and Linux runners with the
+# Build eitri-hardware, check the package data, then install the built wheel on clean macOS and Linux runners with the
 # one-line installer (which installs uv itself) and check the install with `eitri doctor`.
 # The release workflow (release.yml) runs this first and publishes the exact wheel it tested.
 name: install
@@ -63,6 +63,6 @@ jobs:
         run: eitri setup firmware --dry-run --esp32
       - name: the install tests, against the installed wheel
         run: |
-          py="$(uv tool dir)/eitri-cad/bin/python"
+          py="$(uv tool dir)/eitri-hardware/bin/python"
           uv pip install --python "$py" pytest
           cd tests && "$(dirname "$py")/pytest" -q -p no:cacheprovider test_install_cli.py

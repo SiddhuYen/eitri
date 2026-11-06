@@ -12,8 +12,9 @@ newer version, it prints one line saying so. Reading the cache is local and make
 EITRI_NO_UPDATE_NOTICE=1 hides the line.
 
 How the upgrade runs depends on how eitri was installed. uv writes a receipt (uv-receipt.toml) into every tool
-environment it creates. From PyPI: `uv tool upgrade eitri-cad`. From a git URL or a release archive (the installer's
-fallback before eitri-cad was on PyPI): reinstall from PyPI. From a local checkout (`./install.sh`): eitri says how
+environment it creates. From PyPI: `uv tool upgrade eitri-hardware`. From a git URL or a release archive (the installer's
+fallback when PyPI is unreachable): reinstall from PyPI. Installed as `eitri-cad` (the name up to 0.5.6): eitri prints
+the uninstall-and-reinstall command, because uv cannot rename a tool. From a local checkout (`./install.sh`): eitri says how
 to pull and reinstall and changes nothing. Not installed with uv tool (pip, a dev venv): eitri prints the pip command.
 """
 from __future__ import annotations
@@ -27,7 +28,8 @@ import sys
 import time
 from pathlib import Path
 
-PACKAGE = "eitri-cad"
+PACKAGE = "eitri-hardware"
+OLD_PACKAGE = "eitri-cad"        # the distribution name up to 0.5.6 (installed from GitHub; never on PyPI)
 PYPI_JSON = f"https://pypi.org/pypi/{PACKAGE}/json"
 INSTALL_URL = "https://eitri.io/install"
 CHECK_EVERY_S = 24 * 3600
@@ -166,20 +168,21 @@ def startup_notice(stream=None) -> str | None:
 
 # ----------------------------------------------------------------------------- how eitri was installed
 
-def _receipt_requirement(text: str) -> dict:
-    """The eitri-cad requirement from a uv-receipt.toml."""
+def _receipt_requirement(text: str, package: str = PACKAGE) -> dict:
+    """The requirement for `package` (eitri-hardware by default) from a uv-receipt.toml."""
     try:
         import tomllib                                         # Python 3.11+
         data = tomllib.loads(text)
         for req in (data.get("tool") or {}).get("requirements") or []:
-            if isinstance(req, dict) and str(req.get("name", "")).replace("_", "-").lower() == PACKAGE:
+            if isinstance(req, dict) and str(req.get("name", "")).replace("_", "-").lower() == package:
                 return req
         return {}
     except ImportError:                                        # Python 3.10: read the inline table by hand
-        m = re.search(r'\{\s*name\s*=\s*"eitri[-_]cad"([^}]*)\}', text)
+        pat = package.replace("-", "[-_]")
+        m = re.search(r'\{\s*name\s*=\s*"' + pat + r'"([^}]*)\}', text)
         if not m:
             return {}
-        req = {"name": PACKAGE}
+        req = {"name": package}
         for k, v in re.findall(r'(\w+)\s*=\s*"([^"]*)"', m.group(1)):
             req[k] = v
         return req
@@ -188,15 +191,18 @@ def _receipt_requirement(text: str) -> dict:
 
 
 def install_source(prefix: str | None = None) -> dict:
-    """{kind, detail}: kind is pypi, git, url, path (a wheel or archive file), directory (a checkout), or other
-    (not a uv tool environment)."""
+    """{kind, detail}: kind is pypi, git, url, path (a wheel or archive file), directory (a checkout), renamed (a uv
+    tool still named eitri-cad), or other (not a uv tool environment)."""
     receipt = Path(prefix or sys.prefix) / "uv-receipt.toml"
     if not receipt.is_file():
         return {"kind": "other", "detail": sys.prefix}
     try:
-        req = _receipt_requirement(receipt.read_text(encoding="utf-8"))
+        text = receipt.read_text(encoding="utf-8")
     except OSError:
-        req = {}
+        text = ""
+    req = _receipt_requirement(text)
+    if not req and _receipt_requirement(text, OLD_PACKAGE):
+        return {"kind": "renamed", "detail": OLD_PACKAGE}
     for kind in ("git", "url", "directory", "editable", "path"):
         val = req.get(kind)
         if val:
@@ -225,6 +231,10 @@ def plan_upgrade(source: dict, uv: str | None) -> tuple[list[str] | None, str]:
         return None, (f"this eitri was not installed with `uv tool` (it runs from {source['detail']}); "
                       f"upgrade it the way it was installed, e.g. `python -m pip install -U {PACKAGE}`, "
                       f"or reinstall with `curl -fsSL {INSTALL_URL} | sh`")
+    if kind == "renamed":
+        return None, (f"this eitri was installed as `{OLD_PACKAGE}`, its package name up to 0.5.6; it is now `{PACKAGE}`. "
+                      f"Switch with: `uv tool uninstall {OLD_PACKAGE} && uv tool install --python 3.12 {PACKAGE}` "
+                      f"(your projects, key and settings are kept)")
     if uv is None:
         return None, f"uv was not found; reinstall with `curl -fsSL {INSTALL_URL} | sh`"
     if kind == "pypi":

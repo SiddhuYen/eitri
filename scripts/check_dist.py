@@ -1,4 +1,4 @@
-"""Check a built eitri-cad before it is installed or published:
+"""Check a built eitri-hardware before it is installed or published:
 
 - dist/ holds exactly one wheel and one sdist, both of the version in pyproject.toml;
 - every file git tracks under eitri/ is in the wheel and in the sdist (the package data: the web app and its
@@ -34,9 +34,9 @@ def main() -> int:
     args = ap.parse_args()
     problems: list[str] = []
 
-    version = re.search(r'^version = "([^"]+)"', (ROOT / "pyproject.toml").read_text(), re.M).group(1)
-    init_v = re.search(r'^__version__ = "([^"]+)"', (ROOT / "eitri/__init__.py").read_text(), re.M).group(1)
-    fallback = re.search(r'EITRI_FALLBACK_TAG:-v([^}]+)\}', (ROOT / "scripts/install-remote.sh").read_text()).group(1)
+    version = re.search(r'^version = "([^"]+)"', (ROOT / "pyproject.toml").read_text(encoding="utf-8"), re.M).group(1)
+    init_v = re.search(r'^__version__ = "([^"]+)"', (ROOT / "eitri/__init__.py").read_text(encoding="utf-8"), re.M).group(1)
+    fallback = re.search(r'EITRI_FALLBACK_TAG:-v([^}]+)\}', (ROOT / "scripts/install-remote.sh").read_text(encoding="utf-8")).group(1)
     for what, v in (("eitri/__init__.py __version__", init_v), ("scripts/install-remote.sh EITRI_FALLBACK_TAG", fallback)):
         if v != version:
             problems.append(f"{what} is {v}, pyproject.toml says {version}")
@@ -53,6 +53,8 @@ def main() -> int:
         for p in (wheel, sdist):
             if f"-{version}" not in p.name:
                 problems.append(f"{p.name} is not version {version}")
+            if not p.name.startswith(f"eitri_hardware-{version}"):
+                problems.append(f"{p.name} is not named eitri_hardware-{version}-... (the PyPI package is eitri-hardware)")
         in_wheel = set(zipfile.ZipFile(wheel).namelist())
         with tarfile.open(sdist) as t:
             in_sdist = {n.split("/", 1)[1] for n in t.getnames() if "/" in n}
@@ -76,7 +78,7 @@ def main() -> int:
     if problems:
         print("\n".join("FAIL " + p for p in problems))
         return 1
-    print(f"ok: eitri-cad {version}; every tracked package file is in the wheel and the sdist")
+    print(f"ok: eitri-hardware {version}; every tracked package file is in the wheel and the sdist")
     return 0
 
 

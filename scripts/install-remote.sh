@@ -4,7 +4,7 @@
 #     curl -fsSL https://eitri.io/install | sh
 #
 # What it does: installs uv if it is missing (https://docs.astral.sh/uv/, Astral's official installer),
-# installs eitri as a command-line tool in its own environment with `uv tool install --python 3.12 eitri-cad`
+# installs eitri as a command-line tool in its own environment with `uv tool install --python 3.12 eitri-hardware`
 # (Python 3.12, the CAD kernel, the Claude Code binary from Anthropic's claude-agent-sdk package), checks that
 # it works (`eitri doctor`) and prints what to run next. Nothing needs sudo; everything goes under your home folder.
 #
@@ -15,7 +15,8 @@
 #   EITRI_INSTALL_SOURCE=…  install from this instead: a checkout folder, a wheel, or any uv requirement
 #                           (./install.sh in a checkout sets it to the checkout)
 #
-# Until eitri-cad is on PyPI, it installs the release archive of the tag below from GitHub instead.
+# If PyPI is unreachable, it installs the release archive of the tag below from GitHub instead. An eitri installed
+# under its old package name (eitri-cad, up to 0.5.6) is uninstalled first; projects, key and settings are kept.
 # Measured on macOS arm64, Python 3.12, empty caches (2026-11-04): ~390 MB downloaded (Python ~20 MB + 93 wheels
 # 372 MB, the largest being claude-agent-sdk 138 MB, threejs-materials 90 MB, the OCP kernel 63 MB), ~1.0 GB on disk.
 #
@@ -24,7 +25,8 @@ set -eu
 
 EITRI_FALLBACK_TAG="${EITRI_FALLBACK_TAG:-v0.6.0}"
 EITRI_REPO="https://github.com/SiddhuYen/eitri"
-PYPI_PACKAGE="eitri-cad"
+PYPI_PACKAGE="eitri-hardware"
+OLD_PACKAGE="eitri-cad"          # the name up to 0.5.6 (installed from GitHub); both provide the `eitri` command
 
 say() { printf '%s\n' "$*"; }
 err() { printf 'eitri install: %s\n' "$*" >&2; }
@@ -111,7 +113,12 @@ eitri_install() {
     if [ -n "${EITRI_VERSION:-}" ]; then tag="v${EITRI_VERSION#v}"; fi
     # a release archive, not a git URL: works on a Mac without git (no Xcode command line tools needed)
     spec="$PYPI_PACKAGE @ $EITRI_REPO/archive/refs/tags/$tag.tar.gz"
-    from="GitHub release $tag ($PYPI_PACKAGE is not on PyPI yet)"
+    from="GitHub release $tag (PyPI did not answer)"
+  fi
+
+  if [ -d "$(uv tool dir 2>/dev/null)/$OLD_PACKAGE" ]; then
+    say "==> removing the eitri installed under its old package name ($OLD_PACKAGE); projects, key and settings stay"
+    uv tool uninstall "$OLD_PACKAGE"
   fi
 
   say "==> installing eitri from $from"

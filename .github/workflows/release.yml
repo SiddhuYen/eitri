@@ -1,4 +1,4 @@
-# On a version tag (v0.5.6 ...): build, check and install-test eitri-cad (install.yml), then publish that exact
+# On a version tag (v0.5.6 ...): build, check and install-test eitri-hardware (install.yml), then publish that exact
 # sdist and wheel to PyPI with trusted publishing (OIDC). No token is stored anywhere: PyPI trusts this workflow
 # file in this repository, in the `pypi` environment (configured once on pypi.org; see the release notes in README).
 name: release
@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/project/eitri-cad/
+      url: https://pypi.org/project/eitri-hardware/
     permissions:
       id-token: write                       # the OIDC token PyPI's trusted publishing exchanges for an upload token
     steps:

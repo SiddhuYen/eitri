@@ -46,8 +46,8 @@ def test_is_newer(latest, current, newer):
 def test_versions_agree():
     """pyproject, eitri.__version__ and the install script's fallback tag must name the same release
     (scripts/check_dist.py checks the same thing in CI, plus the git tag)."""
-    py = re.search(r'^version = "([^"]+)"', (ROOT / "pyproject.toml").read_text(), re.M).group(1)
-    tag = re.search(r'^EITRI_FALLBACK_TAG="\$\{EITRI_FALLBACK_TAG:-v([^}]+)\}"', (ROOT / "scripts/install-remote.sh").read_text(), re.M).group(1)
+    py = re.search(r'^version = "([^"]+)"', (ROOT / "pyproject.toml").read_text(encoding="utf-8"), re.M).group(1)
+    tag = re.search(r'^EITRI_FALLBACK_TAG="\$\{EITRI_FALLBACK_TAG:-v([^}]+)\}"', (ROOT / "scripts/install-remote.sh").read_text(encoding="utf-8"), re.M).group(1)
     assert py == eitri.__version__ == tag
 
 
@@ -113,11 +113,11 @@ def test_doctor_offline_reads_only_the_cache(monkeypatch):
 # ----------------------------------------------------------------------------- how eitri was installed
 
 RECEIPTS = {
-    "pypi": '[tool]\nrequirements = [{ name = "eitri-cad" }]\npython = "3.12"\n',
-    "git": '[tool]\nrequirements = [{ name = "eitri-cad", git = "https://github.com/SiddhuYen/eitri" }]\n',
-    "url": '[tool]\nrequirements = [{ name = "eitri-cad", url = "https://github.com/SiddhuYen/eitri/archive/refs/tags/v0.5.5.tar.gz" }]\n',
-    "path": '[tool]\nrequirements = [{ name = "eitri-cad", path = "/tmp/eitri_cad-0.5.5-py3-none-any.whl" }]\n',
-    "directory": '[tool]\nrequirements = [{ name = "eitri-cad", directory = "/Users/x/eitri" }]\n',
+    "pypi": '[tool]\nrequirements = [{ name = "eitri-hardware" }]\npython = "3.12"\n',
+    "git": '[tool]\nrequirements = [{ name = "eitri-hardware", git = "https://github.com/SiddhuYen/eitri" }]\n',
+    "url": '[tool]\nrequirements = [{ name = "eitri-hardware", url = "https://github.com/SiddhuYen/eitri/archive/refs/tags/v0.5.5.tar.gz" }]\n',
+    "path": '[tool]\nrequirements = [{ name = "eitri-hardware", path = "/tmp/eitri_hardware-0.5.5-py3-none-any.whl" }]\n',
+    "directory": '[tool]\nrequirements = [{ name = "eitri-hardware", directory = "/Users/x/eitri" }]\n',
 }
 
 
@@ -125,6 +125,17 @@ RECEIPTS = {
 def test_install_source_from_receipt(tmp_path, kind):
     (tmp_path / "uv-receipt.toml").write_text(RECEIPTS[kind])
     assert U.install_source(str(tmp_path))["kind"] == kind
+
+
+def test_install_source_renamed(tmp_path, monkeypatch):
+    """A uv tool still named eitri-cad (the package name up to 0.5.6): print the switch, run nothing."""
+    receipt = '[tool]\nrequirements = [{ name = "eitri-cad", url = "https://github.com/SiddhuYen/eitri/archive/refs/tags/v0.5.6.tar.gz" }]\n'
+    (tmp_path / "uv-receipt.toml").write_text(receipt)
+    assert U.install_source(str(tmp_path)) == {"kind": "renamed", "detail": "eitri-cad"}
+    monkeypatch.setitem(sys.modules, "tomllib", None)
+    assert U.install_source(str(tmp_path))["kind"] == "renamed"
+    cmd, msg = U.plan_upgrade({"kind": "renamed", "detail": "eitri-cad"}, "/bin/uv")
+    assert cmd is None and "uv tool uninstall eitri-cad && uv tool install --python 3.12 eitri-hardware" in msg
 
 
 def test_install_source_without_receipt(tmp_path):
@@ -135,19 +146,19 @@ def test_receipt_fallback_parser(monkeypatch):
     """Python 3.10 has no tomllib: the inline table is read by hand."""
     monkeypatch.setitem(sys.modules, "tomllib", None)
     assert U._receipt_requirement(RECEIPTS["git"])["git"] == "https://github.com/SiddhuYen/eitri"
-    assert U._receipt_requirement(RECEIPTS["pypi"]) == {"name": "eitri-cad"}
+    assert U._receipt_requirement(RECEIPTS["pypi"]) == {"name": "eitri-hardware"}
 
 
 def test_plan_upgrade():
     cmd, _ = U.plan_upgrade({"kind": "pypi", "detail": ""}, "/bin/uv")
-    assert cmd == ["/bin/uv", "tool", "upgrade", "eitri-cad"]
+    assert cmd == ["/bin/uv", "tool", "upgrade", "eitri-hardware"]
     for kind in ("git", "url", "path"):
         cmd, msg = U.plan_upgrade({"kind": kind, "detail": "x"}, "/bin/uv")
-        assert cmd == ["/bin/uv", "tool", "install", "--force", "--python", "3.12", "eitri-cad"] and "PyPI" in msg
+        assert cmd == ["/bin/uv", "tool", "install", "--force", "--python", "3.12", "eitri-hardware"] and "PyPI" in msg
     cmd, msg = U.plan_upgrade({"kind": "directory", "detail": "/src/eitri"}, "/bin/uv")
     assert cmd is None and "git -C /src/eitri pull" in msg
     cmd, msg = U.plan_upgrade({"kind": "other", "detail": "/venv"}, "/bin/uv")
-    assert cmd is None and "pip install -U eitri-cad" in msg
+    assert cmd is None and "pip install -U eitri-hardware" in msg
     cmd, msg = U.plan_upgrade({"kind": "pypi", "detail": ""}, None)
     assert cmd is None and "eitri.io/install" in msg
 
@@ -163,8 +174,8 @@ def test_run_update(monkeypatch, capsys):
     monkeypatch.setattr(U, "fetch_latest", lambda timeout=5.0: ("0.6.0", None))
     assert U.run_update(check_only=True) == 0 and not ran
     assert U.run_update(dry_run=True) == 0 and not ran
-    assert U.run_update() == 0 and ran == [["/bin/uv", "tool", "upgrade", "eitri-cad"]]
-    monkeypatch.setattr(U, "fetch_latest", lambda timeout=5.0: (None, "eitri-cad is not on PyPI yet"))
+    assert U.run_update() == 0 and ran == [["/bin/uv", "tool", "upgrade", "eitri-hardware"]]
+    monkeypatch.setattr(U, "fetch_latest", lambda timeout=5.0: (None, "eitri-hardware is not on PyPI yet"))
     assert U.run_update() == 1
     assert "not on PyPI yet" in capsys.readouterr().out
 
