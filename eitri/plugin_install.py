@@ -41,9 +41,15 @@ BLOCK_END = "# <<< eitri plugin <<<"
 TOKEN_RE = re.compile(r"^[A-Za-z0-9_.~+/=-]{16,512}$")
 # Printed to the person by `eitri plugin login` once a token is stored (consent itself is given on eitri.io/account when
 # the token is made; this says it again where the person is, not through their agent). One place to change the wording.
-SIGNED_IN_NOTICE = ("Signed in to eitri.io. In the combined workspace, the model files your agent writes are sent to eitri.io, "
-                    "kept as projects in your account, and used to train eitri's models unless you turn that off at "
-                    "https://eitri.io/account. Single-domain work stays on this machine.")
+PRIVACY_NOTICE = ("In the combined workspace, the model files your agent writes are sent to eitri.io, kept as projects in "
+                  "your account, and used to train eitri's models unless you turn that off at https://eitri.io/account. "
+                  "Single-domain work stays on this machine.")
+SIGNED_IN_NOTICE = "Signed in to eitri.io. " + PRIVACY_NOTICE            # the token was checked with eitri.io
+
+
+def unverified_notice(reason: str) -> str:
+    """The notice for a token stored without eitri.io confirming it (--no-check, or eitri.io unreachable)."""
+    return f"Token saved (not checked yet: {reason}). " + PRIVACY_NOTICE
 SKILLS = ("design", "combined", "cad", "wires", "motion", "pneumatics", "firmware", "electronics")
 
 
@@ -479,17 +485,18 @@ def run_login(token: str | None = None, from_stdin: bool = False, check: bool = 
     if not TOKEN_RE.match(token):
         print("not saved: that does not look like an eitri.io token (copy the whole token from eitri.io/account)")
         return 1
+    unverified = "--no-check was given" if not check else None
     if check:
         state, detail = check_token(token, url)
         if state == "rejected":
             print(f"not saved: eitri.io rejected this token ({detail}). Make a new one on {account_url(url)}.")
             return 1
         if state == "unreachable":
-            print(f"could not reach {url} to check the token ({detail}); saving it anyway")
+            unverified = f"could not reach {url} ({detail})"
     path = save_token(token)
     print(f"saved {mask(token)} to {path} (readable only by you)")
     print("")
-    print(SIGNED_IN_NOTICE)
+    print(SIGNED_IN_NOTICE if unverified is None else unverified_notice(unverified))
     print("", flush=True)
     if (cursor_home() / "mcp.json").is_file() and "eitri" in (_read_json(cursor_home() / "mcp.json").get("mcpServers") or {}):
         install_cursor(bundle_copy() if bundle_copy().is_dir() else bundle_source(), token=token)

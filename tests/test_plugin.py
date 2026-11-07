@@ -374,7 +374,8 @@ def test_login_without_a_terminal_prints_the_instruction_first(home, tmp_path):
     out = p.stdout
     assert p.returncode == 0, out
     assert out.index("Make a personal token") < out.index("eitri.io token (hidden") < out.index("saved eitri")
-    assert out.index("saved eitri") < out.index(PI.SIGNED_IN_NOTICE)          # printed to the person's terminal
+    notice = PI.unverified_notice("--no-check was given")                    # this run passes --no-check
+    assert out.index("saved eitri") < out.index(notice)                       # printed to the person's terminal
     assert "GetPassWarning" not in out and PI.load_token() == "eitri_pat_piped0123456789"
 
 
@@ -410,6 +411,26 @@ def test_signed_in_notice_wording():
     sh = (ROOT / "scripts" / "install-remote.sh").read_text(encoding="utf-8")
     line = next(l for l in sh.splitlines() if '"$eitri" plugin login' in l)
     assert line.strip() == '"$eitri" plugin login </dev/tty || true'
+
+
+def test_unverified_token_is_not_called_signed_in(home, monkeypatch, capsys):
+    """--no-check, or eitri.io unreachable: "Token saved (not checked yet: <reason>)." and the same privacy sentence."""
+    assert PI.SIGNED_IN_NOTICE == "Signed in to eitri.io. " + PI.PRIVACY_NOTICE
+    capsys.readouterr()
+    assert PI.run_login(token="eitri_pat_nocheck0123456789", check=False) == 0
+    out = capsys.readouterr().out
+    assert "Signed in to eitri.io" not in out
+    assert "Token saved (not checked yet: --no-check was given). " + PI.PRIVACY_NOTICE in out
+    assert PI.load_token() == "eitri_pat_nocheck0123456789"
+
+    monkeypatch.setenv("EITRI_MCP_URL", "http://127.0.0.1:9/mcp")           # nothing listens there
+    assert PI.run_login(token="eitri_pat_offline0123456789") == 0
+    out = capsys.readouterr().out
+    assert "Signed in to eitri.io" not in out
+    assert "Token saved (not checked yet: could not reach http://127.0.0.1:9/mcp (" in out
+    assert ("). " + PI.PRIVACY_NOTICE) in out
+    assert out.index("saved eitri") < out.index("Token saved (not checked yet")
+    assert PI.load_token() == "eitri_pat_offline0123456789"
 
 
 def test_login_from_stdin(home, monkeypatch):
