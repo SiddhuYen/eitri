@@ -377,6 +377,14 @@ def test_remote_without_token_says_how_to_sign_in():
     try:
         state, detail = PI.check_token(None, stub.url)
         assert state == "rejected" and "eitri plugin login" in detail and detail == NO_TOKEN
-        assert PI.check_token(stub.token, stub.url)[0] == "ok"
+        assert PI.check_token("eitri_pat_revoked000000000", stub.url)[0] == "rejected"
+        assert PI.check_token(stub.token, stub.url) == ("ok", "signed in")
+        # signed out, the tools still list (so the agent sees them) and a call says how to sign in
+        async def steps(s):
+            tools = {t.name for t in (await s.list_tools()).tools}
+            res = await s.call_tool("combined_list_projects", {})
+            return tools, res
+        tools, res = _remote(stub.url, {}, steps)
+        assert tools == set(TOOLS) and res.is_error and "eitri plugin login" in res.content[0].text
     finally:
         stub.close()

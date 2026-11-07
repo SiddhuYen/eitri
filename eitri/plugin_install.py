@@ -101,29 +101,72 @@ def mask(token: str | None) -> str:
     return token[:6] + "…" + token[-4:] if len(token) > 12 else "…"
 
 
-def check_token(token: str | None, url: str | None = None, timeout: float = 15.0) -> tuple[str, str]:
-    """("ok" | "rejected" | "unreachable", detail): one MCP initialize request to eitri.io/mcp with the token."""
+def check_token(token: str | None, url: str | None = None, timeout: float = 20.0) -> tuple[str, str]:
+    """("ok" | "rejected" | "unreachable", detail): eitri.io/mcp answers initialize without a token and refuses a tool
+    call without a valid one (an isError result with how to sign in, not an HTTP 401), so this initializes and makes one
+    harmless call, combined_list_projects, with the token."""
     import urllib.error
     import urllib.request
     from . import __version__
-    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
-        "protocolVersion": "2025-06-18", "capabilities": {},
-        "clientInfo": {"name": "eitri-plugin-login", "version": __version__}}}).encode()
-    headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
+    url = url or remote_url()
+    headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream",
+               "MCP-Protocol-Version": "2025-06-18"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    req = urllib.request.Request(url or remote_url(), data=body, headers=headers, method="POST")
-    try:
+
+    def post(msg: dict, extra: dict | None = None) -> tuple[dict | None, dict]:
+        req = urllib.request.Request(url, data=json.dumps(msg).encode(), headers={**headers, **(extra or {})}, method="POST")
         with urllib.request.urlopen(req, timeout=timeout) as r:
-            r.read(65536)
-            return "ok", f"HTTP {r.status}"
+            body = r.read(1 << 20).decode("utf-8", "replace")
+            return _jsonrpc_reply(body, r.headers.get("Content-Type") or ""), dict(r.headers)
+
+    try:
+        init, h = post({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+            "protocolVersion": "2025-06-18", "capabilities": {},
+            "clientInfo": {"name": "eitri-plugin-login", "version": __version__}}})
+        sid = {k: v for k, v in h.items() if k.lower() == "mcp-session-id"}
+        extra = {"Mcp-Session-Id": next(iter(sid.values()))} if sid else {}
+        try:
+            post({"jsonrpc": "2.0", "method": "notifications/initialized"}, extra)
+        except urllib.error.HTTPError:
+            pass
+        res, _ = post({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                       "params": {"name": "combined_list_projects", "arguments": {}}}, extra)
     except urllib.error.HTTPError as exc:
         text = exc.read(4096).decode("utf-8", "replace")
         if exc.code in (401, 403):
             return "rejected", _error_text(text) or f"HTTP {exc.code}"
         return "unreachable", f"HTTP {exc.code}: {_error_text(text)[:200]}"
-    except (urllib.error.URLError, OSError, TimeoutError) as exc:
+    except (urllib.error.URLError, OSError, TimeoutError, ValueError) as exc:
         return "unreachable", str(getattr(exc, "reason", exc))
+    if not res:
+        return "unreachable", "no answer from the server"
+    if "error" in res:
+        return "unreachable", str((res.get("error") or {}).get("message", res["error"]))[:300]
+    result = res.get("result") or {}
+    text = " ".join(c.get("text", "") for c in result.get("content") or [] if isinstance(c, dict))
+    if result.get("isError"):
+        if re.search(r"token|sign(ed)? in|log ?in", text, re.I):
+            return "rejected", text.strip()[:300]
+        return "unreachable", text.strip()[:300]
+    return "ok", "signed in"
+
+
+def _jsonrpc_reply(body: str, ctype: str) -> dict | None:
+    """The JSON-RPC response in a body that is JSON or a server-sent event stream (the last message with an id)."""
+    if "text/event-stream" in ctype:
+        found = None
+        for line in body.splitlines():
+            if line.startswith("data:"):
+                try:
+                    msg = json.loads(line[5:].strip())
+                except ValueError:
+                    continue
+                if isinstance(msg, dict) and "id" in msg:
+                    found = msg
+        return found
+    body = body.strip()
+    return json.loads(body) if body else None
 
 
 def _error_text(text: str) -> str:
@@ -409,7 +452,7 @@ def run_login(token: str | None = None, from_stdin: bool = False, check: bool = 
         token = sys.stdin.read().strip()
     if not token:
         acct = account_url(url)
-        print(f"Make a personal token on {acct} (sign in with GitHub, then 'New token'); paste it below.")
+        print(f"Make a personal token on {acct} (sign in with GitHub; \"Tokens for your agent\"), then paste it below.")
         if open_browser:
             try:
                 webbrowser.open(acct)

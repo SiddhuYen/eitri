@@ -1,5 +1,6 @@
 """A stub of eitri.io's combined-workspace MCP server (briefs/2026-11-06-plugin-combined-remote-mcp.md), for the
-plugin's tests: streamable HTTP (JSON responses), bearer-token auth, the eight combined_* tools over an in-memory
+plugin's tests: streamable HTTP (JSON responses), bearer-token auth as eitri.io does it (initialize and tools/list
+answer signed out; a tool call without a valid token is an isError result with the sign-in instruction, never a 401), the eight combined_* tools over an in-memory
 project store, and a toy build whose checks fail until the files fix them. It follows the shared tool contract
 only; nothing in it is how eitri.io builds or checks a design.
 """
@@ -24,7 +25,9 @@ TOOLS = {
 REQUIRED = {"combined_new_project": ["name", "goal"], "combined_read_files": ["project_id"],
             "combined_put_files": ["project_id", "files"], "combined_build": ["project_id"],
             "combined_results": ["project_id"], "combined_export": ["project_id", "formats"]}
-NO_TOKEN = "No valid eitri.io token. Make one at eitri.io/account, then run `eitri plugin login`."
+NO_TOKEN = ("Not signed in to eitri.io. Make a token at https://eitri.io/account (\"Tokens for your agent\"), then run "
+            "`eitri plugin login`.")
+BAD_TOKEN = "This eitri.io token is not valid: it was revoked, or mistyped. Make a new one, then run `eitri plugin login`."
 
 
 class StubRemote:
@@ -123,9 +126,6 @@ class StubRemote:
             def do_POST(self):
                 n = int(self.headers.get("Content-Length") or 0)
                 msg = json.loads(self.rfile.read(n) or b"{}")
-                if self.headers.get("Authorization") != f"Bearer {stub.token}":
-                    self._send(401, {"jsonrpc": "2.0", "id": msg.get("id"), "error": {"code": -32001, "message": NO_TOKEN}})
-                    return
                 if "id" not in msg:                              # a notification
                     self._send(202)
                     return
@@ -143,6 +143,12 @@ class StubRemote:
                     self._send(200, {"jsonrpc": "2.0", "id": msg["id"], "result": {"tools": tools}})
                     return
                 if m == "tools/call":
+                    auth = self.headers.get("Authorization") or ""
+                    if auth != f"Bearer {stub.token}":
+                        text = NO_TOKEN if not auth.startswith("Bearer ") else BAD_TOKEN
+                        self._send(200, {"jsonrpc": "2.0", "id": msg["id"],
+                                         "result": {"content": [{"type": "text", "text": text}], "isError": True}})
+                        return
                     text, err = stub.call(params.get("name", ""), params.get("arguments") or {})
                     self._send(200, {"jsonrpc": "2.0", "id": msg["id"],
                                      "result": {"content": [{"type": "text", "text": text}], "isError": err}})
