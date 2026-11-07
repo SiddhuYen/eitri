@@ -51,6 +51,8 @@ eitri = [
   "web/*.html", "web/*.css", "web/*.js", "web/assets/**/*",
   "agent/*.md", "lib/*.md",
   "demos/*/demo.json", "demos/*/project.tar.xz", "demos/*/*.py",
+  "plugin_bundle/.mcp.json", "plugin_bundle/.claude-plugin/*.json", "plugin_bundle/bin/*",
+  "plugin_bundle/skills/*/SKILL.md", "plugin_bundle/cursor/*.mdc",
 ]
 
 [tool.pytest.ini_options]
