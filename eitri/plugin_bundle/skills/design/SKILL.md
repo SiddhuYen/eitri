@@ -40,8 +40,9 @@ isn't signed in to eitri.io yet. Tell them:
 > Run `eitri plugin login` in a terminal. It opens eitri.io/account, where you make a personal token with any GitHub
 > sign-in, and saves it. Then restart this agent (in Claude Code, `/mcp` → eitri-combined → Reconnect also works).
 
-Offer to start with the local single-domain tools in the meantime (for example the CAD parts, or the circuit on its own).
-Say that the cross-domain checks only run in the combined workspace.
+Then stop and ask: offer to start with the local single-domain tools in the meantime (for example the CAD parts, or the
+circuit on its own), and say that the cross-domain checks only run in the combined workspace. Don't start the local
+route on your own: wait for the user's answer, unless they already said to go ahead without signing in.
 
 If the local `eitri` tools are missing, eitri isn't installed: `curl -fsSL https://eitri.io/install | sh -s -- --plugin`
 (or `uv tool install eitri-hardware && eitri plugin install`), then restart the agent.
