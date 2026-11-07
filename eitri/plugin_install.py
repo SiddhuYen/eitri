@@ -59,6 +59,12 @@ def remote_url() -> str:
     return os.environ.get("EITRI_MCP_URL") or DEFAULT_URL
 
 
+def remote_label() -> str:
+    """The combined server's URL and where it comes from, for `status` and `install`."""
+    url = remote_url()
+    return f"{url} (from EITRI_MCP_URL)" if os.environ.get("EITRI_MCP_URL") else f"{url} (the default)"
+
+
 def account_url(url: str | None = None) -> str:
     from urllib.parse import urlparse
     u = urlparse(url or remote_url())
@@ -439,8 +445,8 @@ def run_install(agents: list[str] | None = None, cursor_rules: str | None = None
     if not quiet:
         token = load_token()
         print("")
-        print("Combined workspace (eitri.io): " + (f"signed in ({mask(token)})" if token else
-              "not signed in yet: run  eitri plugin login  (it opens eitri.io/account for a personal token)"))
+        print(f"Combined workspace ({remote_label()}): " + (f"signed in ({mask(token)})" if token else
+              f"not signed in yet: run  eitri plugin login  (it opens {account_url()} for a personal token)"))
         print("Restart your agent, then ask it for a design, for example: \"design a 2-DOF pan-tilt camera mount with SG90 "
               "servos, powered from USB\". The plugin's design skill picks the combined workspace or one local domain.")
     return 0 if ok_all else 1
@@ -452,17 +458,15 @@ def run_login(token: str | None = None, from_stdin: bool = False, check: bool = 
         token = sys.stdin.read().strip()
     if not token:
         acct = account_url(url)
-        print(f"Make a personal token on {acct} (sign in with GitHub; \"Tokens for your agent\"), then paste it below.")
+        # flushed: the prompt goes to the terminal or stderr, and a piped stdout would otherwise print this after it
+        print(f"Make a personal token on {acct} (sign in with GitHub; \"Tokens for your agent\"), then paste it below.",
+              flush=True)
         if open_browser:
             try:
                 webbrowser.open(acct)
             except Exception:                                 # noqa: BLE001 - the link is printed anyway
                 pass
-        try:
-            import getpass
-            token = getpass.getpass("eitri.io token (hidden; Enter to skip): ").strip()
-        except (EOFError, KeyboardInterrupt):
-            token = ""
+        token = _ask_token("eitri.io token (hidden; Enter to skip): ")
     if not token:
         print("No token given: the local single-domain tools work without one; run `eitri plugin login` any time.")
         return 1
@@ -484,6 +488,20 @@ def run_login(token: str | None = None, from_stdin: bool = False, check: bool = 
         print("updated Cursor's eitri-combined server with the token")
     print("Restart your agent (in Claude Code, /mcp -> eitri-combined -> Reconnect also works) to use the combined workspace.")
     return 0
+
+
+def _ask_token(prompt: str) -> str:
+    """The token, typed hidden in a terminal; without one (stdin piped), one line from stdin with the prompt on stderr
+    (getpass would warn that it cannot hide the input, or prompt on a /dev/tty the caller does not see)."""
+    try:
+        if sys.stdin.isatty():
+            import getpass
+            return getpass.getpass(prompt).strip()
+        sys.stderr.write(prompt)
+        sys.stderr.flush()
+        return (sys.stdin.readline() or "").strip()
+    except (EOFError, KeyboardInterrupt, OSError):
+        return ""
 
 
 def run_logout() -> int:
@@ -526,10 +544,11 @@ def run_status(online: bool = False) -> int:
     if "cursor" in found:
         print(f"  Cursor: {'installed' if 'eitri' in (_read_json(cursor_home() / 'mcp.json').get('mcpServers') or {}) else 'not installed'}")
     token = load_token()
+    print(f"  combined server: {remote_label()}")
     print(f"  eitri.io token: {mask(token)}" + ("" if token else "  (run: eitri plugin login)"))
     if online and token:
         state, detail = check_token(token)
-        print(f"  token check: {state} ({detail})")
+        print(f"  token check against {remote_url()}: {state} ({detail})")
     return 0
 
 

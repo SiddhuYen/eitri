@@ -70,6 +70,10 @@ eitri's tools, so it needs no API key and costs eitri nothing.
 curl -fsSL https://eitri.io/install | sh -s -- --plugin      # install eitri, register the plugin, sign in to eitri.io
 ```
 
+**The plugin needs eitri 0.7.0 or newer** (the release that adds `eitri mcp` and `eitri plugin`; check with
+`eitri --version`). On 0.6.0 or older, run `eitri update` first: older versions have no plugin server, and the plugin's
+launcher says so instead of starting.
+
 Or, with eitri already installed: `eitri plugin install` (it registers the plugin in every agent app it finds) and
 `eitri plugin login`. In Claude Code you can also add it by hand: `/plugin marketplace add SiddhuYen/eitri`, then
 `/plugin install eitri@eitri` (the local tools still need eitri installed: `uv tool install eitri-hardware`).

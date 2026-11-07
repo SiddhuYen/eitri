@@ -133,7 +133,10 @@ replays a real Claude session in the editor) and a box to describe a part when a
 ## As a plugin in the person's own agent (instead of steps 3-4)
 
 If the person wants eitri inside the agent they already use (Claude Code, Codex or Cursor), on that agent's own
-subscription with no Anthropic API key, run after step 2:
+subscription with no Anthropic API key, run after step 2. **This needs eitri 0.7.0 or newer** (`eitri --version`; the
+release that adds `eitri plugin` and `eitri mcp`). On an older eitri, run `eitri update` first; if it reports an older
+version as the newest, the plugin is not released yet, so stop and tell the person. Do not run `eitri plugin ...` on an
+older eitri: it reads `plugin` as a project folder.
 
 ```sh
 eitri plugin install          # registers the plugin in every agent app found

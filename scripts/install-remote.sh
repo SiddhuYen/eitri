@@ -17,7 +17,7 @@
 #   EITRI_PLUGIN=1          same as --plugin
 #
 # Flags (after `sh -s --` when piped):
-#   --plugin                also register eitri as a plugin in every agent app found (Claude Code, Codex, Cursor:
+#   --plugin                (eitri 0.7.0 or newer) also register eitri as a plugin in every agent app found (Claude Code, Codex, Cursor:
 #                           `eitri plugin install`) and sign in to eitri.io for the combined workspace
 #                           (`eitri plugin login`; press Enter to skip):  curl -fsSL https://eitri.io/install | sh -s -- --plugin
 #
@@ -173,6 +173,12 @@ eitri_install() {
   fi
 
   if [ "$want_plugin" = "1" ]; then
+    if ! "$eitri" --help 2>/dev/null | grep -Eq '^[[:space:]]+plugin[[:space:]]'; then
+      # `eitri plugin` and `eitri mcp` arrived in 0.7.0; an older eitri would read `plugin` as a project folder
+      err "the eitri plugin needs eitri 0.7.0 or newer; this installed $("$eitri" --version 2>/dev/null | head -n1)."
+      err "eitri itself is installed and works (run: eitri). Get the plugin once 0.7.0 is out: eitri update && eitri plugin install"
+      exit 1
+    fi
     say ""
     say "==> registering the eitri plugin in your agent apps (eitri plugin install)"
     if ! "$eitri" plugin install; then

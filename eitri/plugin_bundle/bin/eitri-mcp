@@ -11,7 +11,10 @@ try() {
   c="$1"; shift
   [ -n "$c" ] && [ -x "$c" ] || return 1
   if ! "$c" --help 2>/dev/null | grep -Eq '^[[:space:]]+mcp[[:space:]]'; then
-    echo "the eitri at $c has no plugin server (eitri $need or newer has): run  eitri update  then restart your agent." >&2
+    have="$("$c" --version 2>/dev/null | head -n1)"
+    echo "The eitri plugin needs eitri $need or newer (it adds the plugin server, \`eitri mcp\`); $c is ${have:-an older eitri}." >&2
+    echo "Run  eitri update  (or: uv tool upgrade eitri-hardware), then restart your agent." >&2
+    echo "If eitri update says ${have:-your version} is the newest, eitri $need is not released yet: the plugin cannot run until it is." >&2
     exit 1
   fi
   exec "$c" mcp "$@"
@@ -21,7 +24,10 @@ try "$(command -v eitri 2>/dev/null || true)" "$@"
 try "$HOME/.local/bin/eitri" "$@"
 if command -v uv >/dev/null 2>&1; then try "$(uv tool dir --bin 2>/dev/null)/eitri" "$@"; fi
 for u in "$(command -v uvx 2>/dev/null || true)" "$HOME/.local/bin/uvx"; do
-  if [ -n "$u" ] && [ -x "$u" ]; then exec "$u" --python 3.12 --from "eitri-hardware>=$need" eitri mcp "$@"; fi
+  if [ -n "$u" ] && [ -x "$u" ]; then
+    echo "eitri is not installed; running eitri-hardware>=$need through uvx (the plugin needs eitri $need or newer)." >&2
+    exec "$u" --python 3.12 --from "eitri-hardware>=$need" eitri mcp "$@"
+  fi
 done
 echo "eitri is not installed. Install it with:  curl -fsSL https://eitri.io/install | sh -s -- --plugin   (or: uv tool install eitri-hardware && eitri plugin install), then restart your agent." >&2
 exit 1

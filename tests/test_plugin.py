@@ -123,7 +123,8 @@ def test_launcher_script(tmp_path):
     script = BUNDLE / "bin" / "eitri-mcp"
     good, old = tmp_path / "good", tmp_path / "old"
     good.write_text('#!/bin/sh\nif [ "$1" = --help ]; then printf "  {chat,mcp}\\n    mcp       the plugin server\\n"; exit 0; fi\necho "ran $*"\n')
-    old.write_text('#!/bin/sh\nif [ "$1" = --help ]; then printf "    chat   the REPL\\n"; exit 0; fi\necho "ran $*"\n')
+    old.write_text('#!/bin/sh\nif [ "$1" = --help ]; then printf "    chat   the REPL\\n"; exit 0; fi\n'
+                   'if [ "$1" = --version ]; then echo "eitri 0.6.0"; exit 0; fi\necho "ran $*"\n')
     good.chmod(0o755)
     old.chmod(0o755)
     base = {"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)}
@@ -131,8 +132,37 @@ def test_launcher_script(tmp_path):
     assert p.stdout.strip() == "ran mcp x"
     p = subprocess.run(["sh", str(script)], env={**base, "EITRI_BIN": str(old)}, capture_output=True, text=True, encoding="utf-8")
     assert p.returncode == 1 and "eitri update" in p.stderr
+    assert "needs eitri 0.7.0 or newer" in p.stderr and "eitri 0.6.0" in p.stderr and "not released yet" in p.stderr
     p = subprocess.run(["sh", str(script)], env=base, capture_output=True, text=True, encoding="utf-8")
     assert p.returncode == 1 and "eitri.io/install" in p.stderr
+
+
+@pytest.mark.parametrize("version,ok", [("0.6.0", False), ("0.7.0", True)])
+def test_installer_plugin_flag_needs_0_7(tmp_path, version, ok):
+    """`install-remote.sh --plugin` over an eitri without `eitri plugin` stops with the 0.7.0 message (0.6.0 would read
+    `plugin` as a project folder and open the chat); a new one goes on to `eitri plugin install`. uv is a stub."""
+    tools, home = tmp_path / "tools", tmp_path / "home"
+    tools.mkdir()
+    home.mkdir()
+    sub = "    plugin    use eitri inside your own agent\\n" if ok else ""
+    (tools / "eitri").write_text(
+        '#!/bin/sh\ncase "$1" in\n'
+        f'  --help) printf "    chat   the REPL\\n{sub}";;\n'
+        f'  --version) echo "eitri {version}";;\n'
+        '  plugin) echo "PLUGIN $*"; if [ "$2" = status ]; then echo "  eitri.io token: eitri_…abcd"; fi;;\n'
+        '  *) exit 0;;\nesac\n', encoding="utf-8")
+    (tools / "uv").write_text(f'#!/bin/sh\ncase "$*" in "tool dir --bin") echo "{tools}";; "tool dir") echo "{tmp_path}/none";; esac\nexit 0\n',
+                              encoding="utf-8")
+    for f in ("eitri", "uv"):
+        (tools / f).chmod(0o755)
+    env = {"PATH": f"{tools}:/usr/bin:/bin", "HOME": str(home), "EITRI_INSTALL_SOURCE": "stub", "EITRI_NO_PATH_EDIT": "1"}
+    p = subprocess.run(["sh", str(ROOT / "scripts" / "install-remote.sh"), "--plugin"], env=env, capture_output=True,
+                       text=True, encoding="utf-8", timeout=60)
+    if ok:
+        assert p.returncode == 0 and "PLUGIN plugin install" in p.stdout, p.stdout + p.stderr
+    else:
+        assert p.returncode == 1 and "PLUGIN" not in p.stdout
+        assert "needs eitri 0.7.0 or newer" in p.stderr and "eitri 0.6.0" in p.stderr
 
 
 # ------------------------------------------------------------------------------------------------ the local server
@@ -314,6 +344,53 @@ def test_login_against_the_stub(home, monkeypatch, capsys):
     # eitri.io unreachable: saved anyway, with a note
     monkeypatch.setenv("EITRI_MCP_URL", "http://127.0.0.1:9/mcp")
     assert PI.run_login(token="eitri_pat_offline0123456789") == 0 and "could not reach" in capsys.readouterr().out
+
+
+def test_status_names_the_remote_url(home, monkeypatch, capsys):
+    PI.run_status()
+    assert "combined server: https://eitri.io/mcp (the default)" in capsys.readouterr().out
+    monkeypatch.setenv("EITRI_MCP_URL", "http://127.0.0.1:8078/mcp")
+    PI.run_status()
+    out = capsys.readouterr().out
+    assert "combined server: http://127.0.0.1:8078/mcp (from EITRI_MCP_URL)" in out
+    assert "eitri.io token: (none)" in out                  # the line install-remote.sh greps for
+    PI.run_install(["cursor"])
+    assert "Combined workspace (http://127.0.0.1:8078/mcp (from EITRI_MCP_URL))" in capsys.readouterr().out
+
+
+def test_login_without_a_terminal_prints_the_instruction_first(home, tmp_path):
+    """Piped (no terminal): the "Make a personal token" line comes before the prompt, and the token is read from stdin."""
+    env = {**os.environ, "PYTHONPATH": str(ROOT), "EITRI_LAZY_IMPORT": "1"}
+    p = subprocess.run([sys.executable, "-m", "eitri", "plugin", "login", "--no-check", "--no-browser"],
+                       input="eitri_pat_piped0123456789\n", stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                       text=True, encoding="utf-8", env=env, cwd=str(tmp_path), start_new_session=True, timeout=120)
+    out = p.stdout
+    assert p.returncode == 0, out
+    assert out.index("Make a personal token") < out.index("eitri.io token (hidden") < out.index("saved eitri")
+    assert "GetPassWarning" not in out and PI.load_token() == "eitri_pat_piped0123456789"
+
+
+def test_login_flushes_the_instruction_before_the_terminal_prompt(home, monkeypatch):
+    """The reported case: stdout piped (block-buffered) while getpass prompts on the terminal. By the time the prompt
+    shows, the instruction must already have left stdout's buffer."""
+    import getpass
+    import io
+    raw = io.BytesIO()
+    out = io.TextIOWrapper(raw, encoding="utf-8", line_buffering=False, write_through=False)
+    seen = {}
+
+    class TTY(io.StringIO):
+        def isatty(self):
+            return True
+
+    def fake_getpass(prompt):
+        seen["before_prompt"] = raw.getvalue().decode("utf-8")
+        return "eitri_pat_terminal012345678"
+    monkeypatch.setattr(sys, "stdout", out)
+    monkeypatch.setattr(sys, "stdin", TTY())
+    monkeypatch.setattr(getpass, "getpass", fake_getpass)
+    assert PI.run_login(check=False, open_browser=False) == 0
+    assert "Make a personal token" in seen["before_prompt"]
 
 
 def test_login_from_stdin(home, monkeypatch):
