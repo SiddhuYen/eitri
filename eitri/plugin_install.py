@@ -39,6 +39,11 @@ PLUGIN_ID = "eitri@eitri"
 BLOCK_START = "# >>> eitri plugin (written by `eitri plugin install`; `eitri plugin uninstall` removes it) >>>"
 BLOCK_END = "# <<< eitri plugin <<<"
 TOKEN_RE = re.compile(r"^[A-Za-z0-9_.~+/=-]{16,512}$")
+# Printed to the person by `eitri plugin login` once a token is stored (consent itself is given on eitri.io/account when
+# the token is made; this says it again where the person is, not through their agent). One place to change the wording.
+SIGNED_IN_NOTICE = ("Signed in to eitri.io. In the combined workspace, the model files your agent writes are sent to eitri.io, "
+                    "kept as projects in your account, and used to train eitri's models unless you turn that off at "
+                    "https://eitri.io/account. Single-domain work stays on this machine.")
 SKILLS = ("design", "combined", "cad", "wires", "motion", "pneumatics", "firmware", "electronics")
 
 
@@ -483,6 +488,9 @@ def run_login(token: str | None = None, from_stdin: bool = False, check: bool = 
             print(f"could not reach {url} to check the token ({detail}); saving it anyway")
     path = save_token(token)
     print(f"saved {mask(token)} to {path} (readable only by you)")
+    print("")
+    print(SIGNED_IN_NOTICE)
+    print("", flush=True)
     if (cursor_home() / "mcp.json").is_file() and "eitri" in (_read_json(cursor_home() / "mcp.json").get("mcpServers") or {}):
         install_cursor(bundle_copy() if bundle_copy().is_dir() else bundle_source(), token=token)
         print("updated Cursor's eitri-combined server with the token")

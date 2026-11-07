@@ -190,6 +190,7 @@ eitri_install() {
     elif [ -r /dev/tty ] && [ -t 1 ]; then
       say ""
       say "==> signing in to eitri.io for the combined workspace (eitri plugin login; Enter skips)"
+      # stdout stays this terminal: login prints what happens to the model files once the token is stored
       "$eitri" plugin login </dev/tty || true
     else
       say "Sign in to eitri.io for the combined workspace later:  eitri plugin login"

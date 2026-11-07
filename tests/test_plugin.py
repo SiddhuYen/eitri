@@ -325,10 +325,17 @@ def test_login_against_the_stub(home, monkeypatch, capsys):
         monkeypatch.setenv("EITRI_MCP_URL", stub.url)
         assert PI.account_url() == stub.url.rsplit("/", 1)[0] + "/account"
         PI.run_install(["cursor"])
+        capsys.readouterr()
         assert PI.run_login(token="eitri_pat_wrongtoken000000") == 1           # eitri.io rejects it: not saved
-        assert "rejected" in capsys.readouterr().out and PI.load_token() is None
+        out = capsys.readouterr().out
+        assert "rejected" in out and PI.load_token() is None and PI.SIGNED_IN_NOTICE not in out
         assert PI.run_login(token="not a token") == 1
+        assert PI.SIGNED_IN_NOTICE not in capsys.readouterr().out
+        n_calls = len(stub.calls)
         assert PI.run_login(token="Bearer " + stub.token) == 0
+        out = capsys.readouterr().out
+        assert len(stub.calls) == n_calls + 1                                   # checked with eitri.io first ...
+        assert out.index("saved eitri") < out.index(PI.SIGNED_IN_NOTICE)       # ... then stored, then the notice
         assert PI.load_token() == stub.token
         assert stat.S_IMODE(os.stat(PI.token_path()).st_mode) == 0o600
         cursor = json.loads((home / ".cursor" / "mcp.json").read_text(encoding="utf-8"))["mcpServers"]
@@ -367,6 +374,7 @@ def test_login_without_a_terminal_prints_the_instruction_first(home, tmp_path):
     out = p.stdout
     assert p.returncode == 0, out
     assert out.index("Make a personal token") < out.index("eitri.io token (hidden") < out.index("saved eitri")
+    assert out.index("saved eitri") < out.index(PI.SIGNED_IN_NOTICE)          # printed to the person's terminal
     assert "GetPassWarning" not in out and PI.load_token() == "eitri_pat_piped0123456789"
 
 
@@ -391,6 +399,17 @@ def test_login_flushes_the_instruction_before_the_terminal_prompt(home, monkeypa
     monkeypatch.setattr(getpass, "getpass", fake_getpass)
     assert PI.run_login(check=False, open_browser=False) == 0
     assert "Make a personal token" in seen["before_prompt"]
+
+
+def test_signed_in_notice_wording():
+    assert PI.SIGNED_IN_NOTICE == (
+        "Signed in to eitri.io. In the combined workspace, the model files your agent writes are sent to eitri.io, kept as "
+        "projects in your account, and used to train eitri's models unless you turn that off at https://eitri.io/account. "
+        "Single-domain work stays on this machine.")
+    # the installer's --plugin path runs login with the terminal as its stdout (no redirect that would hide the notice)
+    sh = (ROOT / "scripts" / "install-remote.sh").read_text(encoding="utf-8")
+    line = next(l for l in sh.splitlines() if '"$eitri" plugin login' in l)
+    assert line.strip() == '"$eitri" plugin login </dev/tty || true'
 
 
 def test_login_from_stdin(home, monkeypatch):
