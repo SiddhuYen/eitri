@@ -1,0 +1,25 @@
+{
+  "name": "eitri",
+  "displayName": "eitri",
+  "version": "0.6.0",
+  "description": "Hardware design with checks that run on every build: the combined multi-domain workspace on eitri.io (a whole machine: structure, wiring, motion, air, firmware and electronics checked together) and six local single domains (CAD, wire harnesses, mechanisms, pneumatics, firmware, electronics). Every check's number cites its source. No telemetry.",
+  "author": {
+    "name": "eitri",
+    "url": "https://eitri.io"
+  },
+  "homepage": "https://eitri.io",
+  "privacyPolicyUrl": "https://eitri.io/privacy",
+  "repository": "https://github.com/SiddhuYen/eitri",
+  "license": "FSL-1.1-MIT",
+  "keywords": [
+    "cad",
+    "hardware",
+    "build123d",
+    "wire-harness",
+    "mechanism",
+    "pneumatics",
+    "firmware",
+    "electronics",
+    "robotics"
+  ]
+}

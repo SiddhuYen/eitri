@@ -1,0 +1,8 @@
+{
+  "name": "eitri",
+  "owner": { "name": "eitri", "url": "https://eitri.io" },
+  "description": "The eitri plugin for Claude Code: hardware design with sourced checks on every build.",
+  "plugins": [
+    { "name": "eitri", "source": "./eitri/plugin_bundle", "description": "Hardware design with sourced checks on every build: combined multi-domain workspace (eitri.io) and six local domains.", "category": "development" }
+  ]
+}

@@ -38,6 +38,7 @@ from pathlib import Path
 from ..project import Project
 
 _HERE = Path(__file__).parent
+PLUGIN_AGENT: str | None = None     # set by `eitri mcp` (plugin mode): the user's own agent drives this project
 
 
 def _state(project: Project, hub=None, home: str | None = None) -> dict:
@@ -122,7 +123,8 @@ def _state(project: Project, hub=None, home: str | None = None) -> dict:
         "title": _title(project),
         "busy": bool(hub.busy) if hub is not None else False,
         "demo": _demo_info(project),
-        "needs_key": _needs_key(),
+        "needs_key": _needs_key() and PLUGIN_AGENT is None,
+        "plugin": PLUGIN_AGENT,
         "engine": _engine(),
         "replaying": bool(hub is not None and getattr(hub, "_guest", None) is not None),
         "last_event": hub.last_event_id if hub is not None else 0,

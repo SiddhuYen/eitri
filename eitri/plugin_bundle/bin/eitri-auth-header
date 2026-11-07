@@ -1,0 +1,11 @@
+#!/bin/sh
+# Print the Authorization header for eitri.io's combined-workspace MCP server, as JSON on stdout (Claude Code's
+# headersHelper, Codex's http_headers_helper). The token is the one `eitri plugin login` saved in eitri's config
+# folder; with none it prints {} and eitri.io answers with how to get one.
+if [ -n "${EITRI_CONFIG_DIR:-}" ]; then d="$EITRI_CONFIG_DIR"
+elif [ "$(uname -s 2>/dev/null)" = "Darwin" ]; then d="$HOME/Library/Application Support/eitri"
+else d="${XDG_CONFIG_HOME:-$HOME/.config}/eitri"; fi
+t=""
+if [ -r "$d/plugin-token" ]; then t="$(tr -cd 'A-Za-z0-9_.~+/=-' < "$d/plugin-token")"; fi
+if [ -z "$t" ]; then t="$(printf '%s' "${EITRI_TOKEN:-}" | tr -cd 'A-Za-z0-9_.~+/=-')"; fi
+if [ -n "$t" ]; then printf '{"Authorization": "Bearer %s"}\n' "$t"; else printf '{}\n'; fi

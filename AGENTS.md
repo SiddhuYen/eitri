@@ -130,6 +130,25 @@ and give the person the URL: `eitri web --no-open` prints the URL without openin
 Tell the person: the home page shows **Try it without a key** (three recorded demos; "Watch replay"
 replays a real Claude session in the editor) and a box to describe a part when a key is set.
 
+## As a plugin in the person's own agent (instead of steps 3-4)
+
+If the person wants eitri inside the agent they already use (Claude Code, Codex or Cursor), on that agent's own
+subscription with no Anthropic API key, run after step 2:
+
+```sh
+eitri plugin install          # registers the plugin in every agent app found
+eitri plugin login            # opens eitri.io/account; the person makes a token and pastes it (hidden prompt)
+```
+
+(or `curl -fsSL https://eitri.io/install | sh -s -- --plugin` does install + plugin + login in one go).
+**Success:** one `ok` line per agent app found, then `saved eitri…xxxx to <config folder>/plugin-token`. A token
+eitri.io rejects prints `not saved: eitri.io rejected this token` and exits 1. Do not invent or echo the token;
+`printf '%s' "$TOKEN" | eitri plugin login --token-stdin` works when the person gives it to you. Without a token the
+local single-domain tools still work; only the combined workspace (eitri.io) needs one. Tell the person: in combined
+mode the model files go to eitri.io, are kept as projects, and are used to train eitri's models unless they turn that
+off on eitri.io/account. Then they restart their agent and ask it for a design. `eitri plugin status` shows the state;
+`eitri plugin uninstall` removes it.
+
 ## Other useful commands (no browser, no API key)
 
 ```sh

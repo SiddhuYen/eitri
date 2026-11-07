@@ -1,0 +1,27 @@
+#!/bin/sh
+# Start eitri's local MCP server in plugin mode (`eitri mcp`) for the agent that runs the eitri plugin.
+# It finds the eitri command ($EITRI_BIN, PATH, the uv tool folder) and checks it is new enough; with no eitri
+# installed it runs the published package once through uvx. Nothing here starts Claude or reads a login.
+set -u
+# the CAD kernel loads on first use, not at start: agents give a server ~30 s to answer
+EITRI_LAZY_IMPORT=1
+export EITRI_LAZY_IMPORT
+need="0.7.0"                     # the first release with `eitri mcp`
+try() {
+  c="$1"; shift
+  [ -n "$c" ] && [ -x "$c" ] || return 1
+  if ! "$c" --help 2>/dev/null | grep -Eq '^[[:space:]]+mcp[[:space:]]'; then
+    echo "the eitri at $c has no plugin server (eitri $need or newer has): run  eitri update  then restart your agent." >&2
+    exit 1
+  fi
+  exec "$c" mcp "$@"
+}
+try "${EITRI_BIN:-}" "$@"
+try "$(command -v eitri 2>/dev/null || true)" "$@"
+try "$HOME/.local/bin/eitri" "$@"
+if command -v uv >/dev/null 2>&1; then try "$(uv tool dir --bin 2>/dev/null)/eitri" "$@"; fi
+for u in "$(command -v uvx 2>/dev/null || true)" "$HOME/.local/bin/uvx"; do
+  if [ -n "$u" ] && [ -x "$u" ]; then exec "$u" --python 3.12 --from "eitri-hardware>=$need" eitri mcp "$@"; fi
+done
+echo "eitri is not installed. Install it with:  curl -fsSL https://eitri.io/install | sh -s -- --plugin   (or: uv tool install eitri-hardware && eitri plugin install), then restart your agent." >&2
+exit 1

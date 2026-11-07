@@ -644,9 +644,14 @@ def main(argv: list[str] | None = None) -> int:
     st.add_argument("--dry-run", action="store_true", help="print what would be installed; change nothing")
     st.add_argument("-y", "--yes", action="store_true", help="install arduino-cli without asking, if it is missing")
 
+    mc = sub.add_parser("mcp", help="the plugin's local MCP server on stdio, for your own agent (the eitri plugin starts it; no API key)")
+    mc.add_argument("--plugin", action="store_true", help=argparse.SUPPRESS)
+    from .plugin_install import add_parser as _add_plugin_parser
+    _add_plugin_parser(sub)
+
     argv = list(sys.argv[1:] if argv is None else argv)
     commands = ("chat", "build", "bom", "view", "drawing", "serve", "web", "cam", "cut", "print-prep", "print", "doctor", "key",
-                "update", "setup", "-h", "--help", "-V", "--version")
+                "update", "setup", "mcp", "plugin", "-h", "--help", "-V", "--version")
     if not argv:
         argv = ["web"]                   # plain `eitri`: the website, in the browser
     elif argv[0] not in commands:
@@ -655,6 +660,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "print":
         return print_main(args)
+    if args.cmd == "mcp":
+        from .agent.mcp_server import serve_plugin
+        serve_plugin()
+        return 0
+    if args.cmd == "plugin":
+        from .plugin_install import main as plugin_main
+        return plugin_main(args)
     if args.cmd == "doctor":
         from .doctor import run_doctor
         return run_doctor(online=args.online, as_json=args.json)

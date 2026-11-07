@@ -281,4 +281,21 @@ def run_update(check_only: bool = False, auto: str | None = None, dry_run: bool 
         print(f"the update failed (exit {rc}); eitri {current} is still installed", file=sys.stderr)
         return rc
     print(f"updated to eitri {latest}. Check it: eitri doctor")
+    _refresh_plugin()
     return 0
+
+
+def _refresh_plugin() -> None:
+    """When the eitri plugin is installed in an agent app, register the new release's copy of it (run by the newly
+    installed eitri: this process still has the old code loaded)."""
+    from .plugin_install import data_dir
+    marker = data_dir() / "plugin-installed.json"
+    if not marker.is_file():
+        return
+    try:
+        agents = ",".join(json.loads(marker.read_text(encoding="utf-8")).get("agents") or [])
+    except (OSError, ValueError):
+        agents = ""
+    exe = shutil.which("eitri") or "eitri"
+    print("==> updating the eitri plugin in your agent apps", flush=True)
+    subprocess.call([exe, "plugin", "install"] + (["--agent", agents] if agents else []))

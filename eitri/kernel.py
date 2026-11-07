@@ -12,9 +12,10 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Mapping
+from typing import TYPE_CHECKING, Mapping
 
-from .report import Report
+if TYPE_CHECKING:                       # only an annotation here: importing report loads the CAD kernel
+    from .report import Report
 
 
 @dataclass
@@ -206,7 +207,7 @@ def stop_worker() -> None:
 
 def _report_from_dict(d: dict) -> Report:
     from .model import CheckResult
-    from .report import HoleInfo, PairInfo, PartReport
+    from .report import HoleInfo, PairInfo, PartReport, Report
 
     parts = []
     for p in d.get("parts", []):

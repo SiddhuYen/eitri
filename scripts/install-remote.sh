@@ -14,6 +14,12 @@
 #   EITRI_VERSION=0.6.0     install this version instead of the newest
 #   EITRI_INSTALL_SOURCE=…  install from this instead: a checkout folder, a wheel, or any uv requirement
 #                           (./install.sh in a checkout sets it to the checkout)
+#   EITRI_PLUGIN=1          same as --plugin
+#
+# Flags (after `sh -s --` when piped):
+#   --plugin                also register eitri as a plugin in every agent app found (Claude Code, Codex, Cursor:
+#                           `eitri plugin install`) and sign in to eitri.io for the combined workspace
+#                           (`eitri plugin login`; press Enter to skip):  curl -fsSL https://eitri.io/install | sh -s -- --plugin
 #
 # If PyPI is unreachable, it installs the release archive of the tag below from GitHub instead. An eitri installed
 # under its old package name (eitri-cad, up to 0.5.6) is uninstalled first; projects, key and settings are kept.
@@ -57,6 +63,14 @@ libgl_hint() {
 }
 
 eitri_install() {
+  want_plugin="${EITRI_PLUGIN:-0}"
+  for arg in "$@"; do
+    case "$arg" in
+      --plugin) want_plugin=1 ;;
+      *) err "unknown option: $arg (known: --plugin)"; exit 2 ;;
+    esac
+  done
+
   case "$(uname -s)" in
     Darwin|Linux) ;;
     *) err "eitri runs on macOS and Linux; this is $(uname -s). On Windows, use WSL."; exit 1 ;;
@@ -156,6 +170,29 @@ eitri_install() {
       uv tool update-shell >/dev/null 2>&1 || true
       say "Note: $bin_dir was added to your shell's PATH; open a new terminal (or run: export PATH=\"$bin_dir:\$PATH\")."
     fi
+  fi
+
+  if [ "$want_plugin" = "1" ]; then
+    say ""
+    say "==> registering the eitri plugin in your agent apps (eitri plugin install)"
+    if ! "$eitri" plugin install; then
+      err "the plugin could not be registered everywhere (the FAIL lines above); fix that and run: $eitri plugin install"
+      exit 1
+    fi
+    if ! "$eitri" plugin status 2>/dev/null | grep -q 'eitri.io token: (none)'; then
+      :                                   # already signed in
+    elif [ -r /dev/tty ] && [ -t 1 ]; then
+      say ""
+      say "==> signing in to eitri.io for the combined workspace (eitri plugin login; Enter skips)"
+      "$eitri" plugin login </dev/tty || true
+    else
+      say "Sign in to eitri.io for the combined workspace later:  eitri plugin login"
+    fi
+    say ""
+    say "Done. Restart your agent (Claude Code, Codex or Cursor) and ask it for a design, for example:"
+    say "      \"design a pan-tilt camera mount with two SG90 servos, powered from USB\""
+    say "      The local tools need no account; the combined workspace needs  eitri plugin login  once."
+    return 0
   fi
 
   say ""

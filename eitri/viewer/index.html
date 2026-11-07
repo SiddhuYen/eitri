@@ -3517,6 +3517,9 @@ async function pollEvents() {
       $('send').disabled = busy; $('stop').style.display = busy ? 'block' : 'none'; if (!busy) $('stop').disabled = false;
       renderUsage(r.usage, r.cost || 0);
       renderStages(r);
+    } else if (state.plugin) {                        // plugin mode: the user's own agent builds; this page follows it
+      $('chatstatus').textContent = `eitri is running as a plugin in ${state.plugin}: ask it there. This page follows every build.`;
+      $('newchat').style.display = 'none'; $('composer').style.display = 'none';
     } else if (state.has_agent === false) { $('chatstatus').textContent = 'no agent attached (viewer only): start eitri with `eitri web` to chat with eitri'; $('newchat').style.display = 'none'; }
   } catch (e) { /* server restarting */ }
   evFetching = false;
@@ -4030,7 +4033,7 @@ $('demoreset').onclick = async () => {
 function renderKeyNote() {
   const n = $('keynote');
   if (state.hosted) return;
-  if (!state.needs_key) { n.classList.remove('on'); return; }
+  if (!state.needs_key || state.plugin) { n.classList.remove('on'); return; }
   n.classList.add('on');
   n.innerHTML = state.demo
     ? `${icon('key-round', 'sm')} This is a recorded demo: press <b>Watch eitri build it</b> above. To change it with eitri, add your Anthropic API key on the <a href="${state.home || '/'}">home page</a>.`

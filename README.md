@@ -60,6 +60,52 @@ for every step.
 > from red to green) with no API calls. Orbit them, edit them, export them: everything but chatting with
 > Claude works without a key.
 
+## In your own agent: the eitri plugin
+
+eitri also runs as **one plugin inside the agent you already use** (Claude Code first; Codex and Cursor too), on that
+agent's own subscription. In this mode eitri never calls Claude: your agent writes the model files and calls
+eitri's tools, so it needs no API key and costs eitri nothing.
+
+```sh
+curl -fsSL https://eitri.io/install | sh -s -- --plugin      # install eitri, register the plugin, sign in to eitri.io
+```
+
+Or, with eitri already installed: `eitri plugin install` (it registers the plugin in every agent app it finds) and
+`eitri plugin login`. In Claude Code you can also add it by hand: `/plugin marketplace add SiddhuYen/eitri`, then
+`/plugin install eitri@eitri` (the local tools still need eitri installed: `uv tool install eitri-hardware`).
+
+The plugin brings two MCP servers and a set of skills:
+
+- **Combined workspace (the default):** `eitri-combined`, eitri.io's remote server (`https://eitri.io/mcp`). It holds
+  a whole machine in one project: structure, wiring, motion, air, firmware and electronics, built together, with the
+  cross-domain checks (servo torque against the arm, supply current against the servos, wire gauge against that
+  current...). It needs a personal token: `eitri plugin login` opens eitri.io/account, where any GitHub sign-in can
+  make one, and saves it in eitri's config folder (no shell file is edited). **In combined mode your model files go
+  to eitri.io, are kept there as your projects, and are used to train eitri's models unless you turn that off on
+  eitri.io/account.**
+- **Six local single domains:** `eitri` (`eitri mcp`, on your computer): CAD, wire harnesses, mechanisms,
+  pneumatics, firmware and electronics, with the same checks as the app. Projects go in `~/eitri-projects` unless
+  you name another folder. The viewer opens in your browser at the first build and follows every rebuild.
+- **Skills:** `design` picks the workspace: combined by default, one local domain when the task clearly fits one
+  (a bracket, an enclosure, one harness, one sketch...). It says which one it picked. `combined` runs the loop
+  (reference → write files → build → fix until every check passes), plus one skill per local domain.
+
+What it does compared with the app:
+
+| | eitri app (`eitri`) | eitri plugin |
+|---|---|---|
+| Who drives | eitri's own agent, on your Anthropic API key | Your agent (Claude Code, Codex, Cursor), on its subscription |
+| Domains | the six single domains | the six single domains locally, plus the combined workspace on eitri.io |
+| Editor | the full browser editor with chat, direct edits, demos and replays | the same viewer and editor, following your agent's builds; you chat in your agent |
+| Reminders while checks fail | the agent loop's nudges | every tool result ends with a PROJECT STATUS: what fails, what is unbuilt, what to do next |
+| Network | Anthropic's API only | the local server: nothing; the combined server: eitri.io |
+
+`eitri plugin status` shows what is installed, `eitri plugin logout` forgets the token, and `eitri plugin uninstall`
+removes the plugin from every agent app (your projects stay). The plugin sends no telemetry.
+Per agent: Claude Code gets a real plugin (`eitri@eitri`: skills `/eitri:design`, `/eitri:combined`, `/eitri:cad`
+...); Codex gets both servers in `~/.codex/config.toml` and the skills in `~/.agents/skills/eitri-*`; Cursor gets
+both servers in `~/.cursor/mcp.json` (`--cursor-rules <project>` also adds a project rule).
+
 ## Your API key, costs, privacy
 
 eitri uses **your own Anthropic API key**; requests are billed to it by Anthropic. Paste it on the home page
@@ -69,7 +115,8 @@ readable only by you, never in a project). `ANTHROPIC_API_KEY` in the environmen
 - **Cost, measured:** about **$0.24 per request** on average across the 22-task benchmark (range $0.07 to
   $1.10 per task). Long design sessions cost more: the recorded V8 engine session in the demos cost $3.21.
 - **API key only:** eitri drives Claude Code with `--bare` and your key, so a Claude.ai subscription
-  logged in on the same machine is never used.
+  logged in on the same machine is never used. (The plugin is the other way round: there your own agent runs on
+  its own subscription and eitri never calls Claude.)
 - **Local only, no telemetry.** The editor, the CAD kernel and your projects stay on this computer; the
   server answers only this machine. The only network calls eitri makes on its own are to Anthropic's API,
   with your key (Claude Code runs with its telemetry, error reporting and update checks turned off).
@@ -767,8 +814,8 @@ falls short, and what eitri does instead:
 
 | | text-to-cad | eitri |
 |---|---|---|
-| Shape | A skill pack + 68k-line Python runtime (`cadgen`) for other agents (Claude Code, Codex, Cursor...) | A standalone CAD agent with its own REPL and viewer; also usable as a library |
-| Install | uv + per-host plugin marketplaces, pinned Python 3.13, telemetry on by default, update nags | One line (`curl -fsSL https://eitri.io/install \| sh`, or `uv tool install eitri-hardware`); no plugins, no telemetry, no update checks unless you ask |
+| Shape | A skill pack + 68k-line Python runtime (`cadgen`) for other agents (Claude Code, Codex, Cursor...) | A standalone CAD agent with its own REPL and viewer, and one plugin for other agents (Claude Code, Codex, Cursor) with the same checks; also usable as a library |
+| Install | uv + per-host plugin marketplaces, pinned Python 3.13, telemetry on by default, update nags | One line (`curl -fsSL https://eitri.io/install \| sh`, add `-s -- --plugin` to register the plugin in every agent app found); no telemetry, no update checks unless you ask |
 | Model contract | `@step/@stl/@glb` decorators, parameterless models, a content-addressed store with a build daemon, freshness gates, sidecar JSON, link-vs-component rules | `PARAMS` + `build(p)` + `verify()`; builds are fast enough that nothing needs caching |
 | Verification | Up to the agent: write ad-hoc scripts in `tmp/`, remember to snapshot | Automatic on every build: validity, holes, thinnest wall, interferences, plus the model's own checks; failures are flagged to the agent |
 | Visual review | Playwright + headless Chromium snapshots | A numpy software renderer: 4-view contact sheet in ~1 s, no browser |

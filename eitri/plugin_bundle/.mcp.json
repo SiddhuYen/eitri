@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "eitri": {
+      "type": "stdio",
+      "command": "sh",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/bin/eitri-mcp"],
+      "env": { "EITRI_HOST_AGENT": "Claude Code", "EITRI_IMAGE_MODE": "path" }
+    },
+    "eitri-combined": {
+      "type": "http",
+      "url": "${EITRI_MCP_URL:-https://eitri.io/mcp}",
+      "headersHelper": "sh \"${CLAUDE_PLUGIN_ROOT}/bin/eitri-auth-header\""
+    }
+  }
+}
