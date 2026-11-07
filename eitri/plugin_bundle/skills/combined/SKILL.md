@@ -22,8 +22,10 @@ skill (`eitri plugin login`). Don't work around it.
 2. **Plan.** In 3 to 8 lines, state the machine: its domains, the key numbers (payload, reach, supply voltage, pressures,
    the board) and your assumptions. Ask the user only for a fact that would change the design and that you can't
    reasonably assume.
-3. **Project.** `combined_new_project(name, goal)`, where `goal` is the request in a sentence. Give the user the view link
-   it returns, which shows the assembly live. To continue earlier work, use `combined_list_projects()` and
+3. **Project.** `combined_new_project(name, goal)`, where `goal` is the request in a sentence. Before writing any file,
+   send the user one short message: the workspace you picked and why, the plan from step 2, the view link the project
+   returns (it shows the assembly live), and, the first time in a conversation, the privacy line from the **design**
+   skill (the files are kept on eitri.io and used for training unless turned off on eitri.io/account). To continue earlier work, use `combined_list_projects()` and
    `combined_read_files(project_id)` instead.
 4. **Write.** `combined_put_files(project_id, {path: content, ...})` sends whole files (with `delete=[path]` to remove
    one). Keep every number the user may change in each file's `PARAMS`. Put the request's own requirements in
@@ -49,4 +51,4 @@ skill (`eitri plugin login`). Don't work around it.
 - Work in visible stages on a big machine: get the structure and motion right first, then wiring and power, then
   firmware. Build after each stage and say in one line what you are adding.
 - The model files are kept on eitri.io as the user's project. Tell the user once about training use and the opt-out on
-  eitri.io/account (see the **design** skill).
+  eitri.io/account (see the **design** skill), before the first `combined_put_files`, not at the end.

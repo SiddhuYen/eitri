@@ -49,9 +49,10 @@ If the local `eitri` tools are missing, eitri isn't installed: `curl -fsSL https
 
 ## Privacy
 
-The first time you use the combined workspace in a conversation, tell the user once: the model files go to eitri.io, are
-kept there as projects (they show in their eitri.io project list), and are used to train eitri's models unless they turn
-that off on eitri.io/account. The local tools keep everything on this computer. The plugin sends no telemetry.
+The first time you use the combined workspace in a conversation, tell the user once, before the first
+`combined_put_files` (your files haven't left this computer until then): the model files go to eitri.io, are kept there
+as projects (they show in their eitri.io project list), and are used to train eitri's models unless they turn that off
+on eitri.io/account. Put it in the same short message as the line saying which workspace you picked. The local tools keep everything on this computer. The plugin sends no telemetry.
 
 ## Then
 
