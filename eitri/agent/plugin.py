@@ -167,8 +167,7 @@ class PluginSession:
             url = self._viewers.get(key)
             if url is None:
                 from ..viewer import server as viewer_server
-                viewer_server.PLUGIN_AGENT = host_agent()
-                url = viewer_server.start_viewer(project, port=_viewer_port(), background=True)
+                url = viewer_server.start_viewer(project, port=_viewer_port(), background=True, plugin=host_agent())
                 self._viewers[key] = url
         return url
 

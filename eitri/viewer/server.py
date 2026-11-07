@@ -38,10 +38,10 @@ from pathlib import Path
 from ..project import Project
 
 _HERE = Path(__file__).parent
-PLUGIN_AGENT: str | None = None     # set by `eitri mcp` (plugin mode): the user's own agent drives this project
 
 
-def _state(project: Project, hub=None, home: str | None = None) -> dict:
+def _state(project: Project, hub=None, home: str | None = None, plugin: str | None = None) -> dict:
+    """`plugin`: the agent driving this project in plugin mode (`eitri mcp`), shown instead of the chat box."""
     revision, history = project.snapshot()
     mine = project.revisions_of(history=history)            # the current model file's builds (a project may hold several files)
     ok_hist = [h for h in mine if h.ok]
@@ -123,8 +123,8 @@ def _state(project: Project, hub=None, home: str | None = None) -> dict:
         "title": _title(project),
         "busy": bool(hub.busy) if hub is not None else False,
         "demo": _demo_info(project),
-        "needs_key": _needs_key() and PLUGIN_AGENT is None,
-        "plugin": PLUGIN_AGENT,
+        "needs_key": _needs_key() and plugin is None,
+        "plugin": plugin,
         "engine": _engine(),
         "replaying": bool(hub is not None and getattr(hub, "_guest", None) is not None),
         "last_event": hub.last_event_id if hub is not None else 0,
@@ -215,7 +215,8 @@ def _materials() -> list[str]:
     return [m for m in DENSITY if m != "aluminum"]
 
 
-def make_handler(project: Project, lock: threading.Lock, hub=None, home: str | None = None, agent=None, policy=None):
+def make_handler(project: Project, lock: threading.Lock, hub=None, home: str | None = None, agent=None, policy=None,
+                 plugin: str | None = None):
     """The editor's request handler for one project. `policy` (a hosted deployment) replaces the local-only
     host check (policy.host_ok(handler, post)), refuses routes (policy.blocked(method, path) -> a message
     or None) and adds to the state (policy.state(st))."""
@@ -224,7 +225,7 @@ def make_handler(project: Project, lock: threading.Lock, hub=None, home: str | N
     redo_stack: list[int] = []                 # revisions undone, newest last
 
     def _st() -> dict:
-        st = _state(project, hub, home)
+        st = _state(project, hub, home, plugin)
         if agent is not None:                  # the website knows whether Claude can run (a key, a binary)
             st["needs_key"] = bool(agent().get("needs_key"))
         if policy is None:                     # running locally: the status bar shows where the project lives (never sent by a hosted policy)
@@ -1025,11 +1026,12 @@ def _free_port(preferred: int = 8765) -> int:
     return 0
 
 
-def start_viewer(project: Project, port: int = 0, background: bool = True, hub=None) -> str:
-    """Start the viewer server; returns its URL. background=False blocks."""
+def start_viewer(project: Project, port: int = 0, background: bool = True, hub=None, plugin: str | None = None) -> str:
+    """Start the viewer server; returns its URL. background=False blocks. `plugin`: the agent that drives the project
+    (plugin mode)."""
     port = port or _free_port()
     lock = threading.Lock()
-    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(project, lock, hub))
+    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(project, lock, hub, plugin=plugin))
     url = f"http://127.0.0.1:{server.server_address[1]}/"
     if background:
         t = threading.Thread(target=server.serve_forever, daemon=True)

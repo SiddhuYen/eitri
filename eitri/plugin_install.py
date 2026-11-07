@@ -237,7 +237,7 @@ def copy_bundle() -> Path:
 
 def _run(cmd: list[str], timeout: float = 180) -> tuple[int, str]:
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
     except (OSError, subprocess.TimeoutExpired) as exc:
         return 1, str(exc)
     return p.returncode, (p.stdout + p.stderr).strip()

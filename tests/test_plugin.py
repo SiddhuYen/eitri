@@ -68,22 +68,22 @@ def home(tmp_path, monkeypatch):
 # ------------------------------------------------------------------------------------------------ the bundle
 def test_generated_files_are_current():
     assert plugin_files.stale() == [], "run: python scripts/gen_plugin.py"
-    assert json.loads((BUNDLE / ".claude-plugin" / "plugin.json").read_text())["version"] == __version__
+    assert json.loads((BUNDLE / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))["version"] == __version__
 
 
 def test_mcp_config_has_both_servers():
-    cfg = json.loads((BUNDLE / ".mcp.json").read_text())["mcpServers"]
+    cfg = json.loads((BUNDLE / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]
     assert set(cfg) == {"eitri", "eitri-combined"}
     assert cfg["eitri"]["type"] == "stdio" and cfg["eitri"]["args"] == ["${CLAUDE_PLUGIN_ROOT}/bin/eitri-mcp"]
     remote = cfg["eitri-combined"]
     assert remote["type"] == "http" and remote["url"] == "${EITRI_MCP_URL:-https://eitri.io/mcp}"
     assert "eitri-auth-header" in remote["headersHelper"] and "headers" not in remote     # no token in the file
-    market = json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text())
+    market = json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8"))
     assert market["name"] == "eitri" and market["plugins"][0]["source"] == "./eitri/plugin_bundle"
 
 
 def test_skills():
-    skills = {d.name: (d / "SKILL.md").read_text() for d in (BUNDLE / "skills").iterdir()}
+    skills = {d.name: (d / "SKILL.md").read_text(encoding="utf-8") for d in (BUNDLE / "skills").iterdir()}
     assert set(skills) == set(PI.SKILLS)
     for name, text in skills.items():
         head = text.split("---")[1]
@@ -103,14 +103,14 @@ def test_skills():
 @pytest.mark.skipif(not shutil.which("claude"), reason="Claude Code is not installed")
 def test_claude_validates_plugin_and_marketplace():
     for target in (BUNDLE, ROOT):
-        p = subprocess.run(["claude", "plugin", "validate", str(target), "--strict"], capture_output=True, text=True, timeout=120)
+        p = subprocess.run(["claude", "plugin", "validate", str(target), "--strict"], capture_output=True, text=True, encoding="utf-8", timeout=120)
         assert p.returncode == 0, p.stdout + p.stderr
 
 
 def test_auth_header_script(tmp_path):
     script = BUNDLE / "bin" / "eitri-auth-header"
     env = {"PATH": os.environ["PATH"], "HOME": str(tmp_path), "EITRI_CONFIG_DIR": str(tmp_path / "cfg")}
-    run = lambda e: json.loads(subprocess.run(["sh", str(script)], env=e, capture_output=True, text=True).stdout)  # noqa: E731
+    run = lambda e: json.loads(subprocess.run(["sh", str(script)], env=e, capture_output=True, text=True, encoding="utf-8").stdout)  # noqa: E731
     assert run(env) == {}
     (tmp_path / "cfg").mkdir()
     (tmp_path / "cfg" / "plugin-token").write_text('eitri_pat_abc123"; rm -rf /\n')
@@ -127,11 +127,11 @@ def test_launcher_script(tmp_path):
     good.chmod(0o755)
     old.chmod(0o755)
     base = {"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)}
-    p = subprocess.run(["sh", str(script), "x"], env={**base, "EITRI_BIN": str(good)}, capture_output=True, text=True)
+    p = subprocess.run(["sh", str(script), "x"], env={**base, "EITRI_BIN": str(good)}, capture_output=True, text=True, encoding="utf-8")
     assert p.stdout.strip() == "ran mcp x"
-    p = subprocess.run(["sh", str(script)], env={**base, "EITRI_BIN": str(old)}, capture_output=True, text=True)
+    p = subprocess.run(["sh", str(script)], env={**base, "EITRI_BIN": str(old)}, capture_output=True, text=True, encoding="utf-8")
     assert p.returncode == 1 and "eitri update" in p.stderr
-    p = subprocess.run(["sh", str(script)], env=base, capture_output=True, text=True)
+    p = subprocess.run(["sh", str(script)], env=base, capture_output=True, text=True, encoding="utf-8")
     assert p.returncode == 1 and "eitri.io/install" in p.stderr
 
 
@@ -140,7 +140,6 @@ def test_local_tools_without_an_agent(tmp_path, monkeypatch):
     monkeypatch.setenv("EITRI_NO_WARM", "1")
     from eitri.agent.mcp_server import make_plugin_server
     from eitri.agent.plugin import PluginSession
-    from eitri.viewer import server as viewer_server
     session = PluginSession(root=tmp_path / "projects", open_browser=False)
     server = make_plugin_server(session)
     names = {t.name for t in asyncio.run(server.list_tools())}
@@ -158,7 +157,7 @@ def test_local_tools_without_an_agent(tmp_path, monkeypatch):
     text, err = _call(server, "new_project", {"name": "Lever test", "goal": "a servo lever"})
     assert not err and "lever-test" in text
     folder = tmp_path / "projects" / "lever-test"
-    assert "Goal: a servo lever" in (folder / "DESIGN.md").read_text()
+    assert "Goal: a servo lever" in (folder / "DESIGN.md").read_text(encoding="utf-8")
 
     text, err = _call(server, "build_model", {"code": MECH_OK})
     assert not err, text
@@ -183,7 +182,6 @@ def test_local_tools_without_an_agent(tmp_path, monkeypatch):
     assert url.startswith("http://127.0.0.1:")
     st = json.loads(urllib.request.urlopen(url + "state.json", timeout=10).read())
     assert st["plugin"] and st["needs_key"] is False and st["revision"] == 3 and st["has_agent"] is False
-    viewer_server.PLUGIN_AGENT = None
 
     text, _ = _call(server, "list_projects")
     assert "lever-test" in text and "revision 3 built" in text
@@ -198,7 +196,7 @@ def test_lazy_import_gives_the_same_namespace():
     code = ("import sys; import eitri; heavy = 'build123d' in sys.modules; ns = {}; exec('from eitri import *', ns);"
             "import types; names = [k for k, v in ns.items() if not k.startswith('_') and not isinstance(v, types.ModuleType)];"
             "print(heavy, len(names), 'Box' in ns, 'cut_holes' in ns, 'bd' in ns)")
-    run = lambda lazy: subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=str(ROOT),  # noqa: E731
+    run = lambda lazy: subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, encoding="utf-8", cwd=str(ROOT),  # noqa: E731
                                       env={**os.environ, "EITRI_LAZY_IMPORT": "1" if lazy else "0"}).stdout.split()
     lazy, eager = run(True), run(False)
     assert lazy[0] == "False" and eager[0] == "True"
@@ -213,7 +211,7 @@ def test_plugin_mode_never_starts_claude(monkeypatch, tmp_path):
             f"make_plugin_server(PluginSession(root={str(tmp_path)!r}, open_browser=False));"
             "bad=[m for m in sys.modules if m in ('eitri.agent.claude_cli','eitri.agent.api_backend','eitri.agent.hub','claude_agent_sdk','anthropic')];"
             "print(bad); sys.exit(1 if bad else 0)")
-    p = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=str(ROOT))
+    p = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, encoding="utf-8", cwd=str(ROOT))
     assert p.returncode == 0, p.stdout + p.stderr
 
 
@@ -245,41 +243,41 @@ def test_install_everywhere_and_uninstall(home):
     copy = home / ".local" / "share" / "eitri" / "plugin"
     assert (copy / ".claude-plugin" / "plugin.json").is_file()
     assert os.stat(copy / "bin" / "eitri-auth-header").st_mode & stat.S_IXUSR
-    calls = (home.parent / 'claude.log').read_text()
+    calls = (home.parent / 'claude.log').read_text(encoding='utf-8')
     assert f"plugin marketplace add {copy}" in calls and "plugin install eitri@eitri --scope user" in calls
 
-    cfg = (home / ".codex" / "config.toml").read_text()
+    cfg = (home / ".codex" / "config.toml").read_text(encoding="utf-8")
     import tomllib
     servers = tomllib.loads(cfg)["mcp_servers"]
     assert servers["eitri"]["args"] == ["mcp"] and servers["eitri"]["tool_timeout_sec"] >= 600
     assert servers["eitri-combined"]["url"] == "https://eitri.io/mcp"
     assert servers["eitri-combined"]["http_headers_helper"] == str(copy / "bin" / "eitri-auth-header")
-    skill = (home / ".agents" / "skills" / "eitri-design" / "SKILL.md").read_text()
+    skill = (home / ".agents" / "skills" / "eitri-design" / "SKILL.md").read_text(encoding="utf-8")
     assert "name: eitri-design" in skill and "**eitri-combined**" in skill
 
-    cursor = json.loads((home / ".cursor" / "mcp.json").read_text())["mcpServers"]
+    cursor = json.loads((home / ".cursor" / "mcp.json").read_text(encoding="utf-8"))["mcpServers"]
     assert cursor["eitri"]["args"] == ["mcp"] and "eitri-combined" not in cursor      # no token yet
-    assert (home / "proj" / ".cursor" / "rules" / "eitri.mdc").read_text().startswith("---\ndescription:")
+    assert (home / "proj" / ".cursor" / "rules" / "eitri.mdc").read_text(encoding="utf-8").startswith("---\ndescription:")
 
     # idempotent, and the user's own Codex settings survive
     (home / ".codex" / "config.toml").write_text('model = "gpt-6"\n\n[mcp_servers.other]\ncommand = "x"\n\n' + cfg)
     assert PI.run_install(["codex"]) == 0
-    cfg2 = (home / ".codex" / "config.toml").read_text()
+    cfg2 = (home / ".codex" / "config.toml").read_text(encoding="utf-8")
     assert cfg2.count(PI.BLOCK_START) == 1 and 'model = "gpt-6"' in cfg2 and "[mcp_servers.other]" in cfg2
 
     assert PI.run_uninstall() == 0
-    cfg3 = (home / ".codex" / "config.toml").read_text()
+    cfg3 = (home / ".codex" / "config.toml").read_text(encoding="utf-8")
     assert PI.BLOCK_START not in cfg3 and "[mcp_servers.other]" in cfg3
     assert not (home / ".agents" / "skills" / "eitri-design").exists()
-    assert "eitri" not in json.loads((home / ".cursor" / "mcp.json").read_text())["mcpServers"]
-    assert "plugin uninstall eitri@eitri" in (home.parent / 'claude.log').read_text() and not copy.exists()
+    assert "eitri" not in json.loads((home / ".cursor" / "mcp.json").read_text(encoding="utf-8"))["mcpServers"]
+    assert "plugin uninstall eitri@eitri" in (home.parent / 'claude.log').read_text(encoding='utf-8') and not copy.exists()
 
 
 def test_codex_refuses_a_hand_written_eitri_server(home):
     (home / ".codex" / "config.toml").write_text('[mcp_servers.eitri]\ncommand = "mine"\n')
     ok, msg = PI.install_codex(PI.copy_bundle())
     assert not ok and "outside eitri's block" in msg
-    assert (home / ".codex" / "config.toml").read_text() == '[mcp_servers.eitri]\ncommand = "mine"\n'
+    assert (home / ".codex" / "config.toml").read_text(encoding="utf-8") == '[mcp_servers.eitri]\ncommand = "mine"\n'
 
 
 def test_no_agent_found(home, monkeypatch, capsys):
@@ -303,14 +301,14 @@ def test_login_against_the_stub(home, monkeypatch, capsys):
         assert PI.run_login(token="Bearer " + stub.token) == 0
         assert PI.load_token() == stub.token
         assert stat.S_IMODE(os.stat(PI.token_path()).st_mode) == 0o600
-        cursor = json.loads((home / ".cursor" / "mcp.json").read_text())["mcpServers"]
+        cursor = json.loads((home / ".cursor" / "mcp.json").read_text(encoding="utf-8"))["mcpServers"]
         assert cursor["eitri-combined"] == {"url": stub.url, "headers": {"Authorization": f"Bearer {stub.token}"}}
         # the bundle's helper now sends that token
-        out = subprocess.run(["sh", str(BUNDLE / "bin" / "eitri-auth-header")], capture_output=True, text=True,
+        out = subprocess.run(["sh", str(BUNDLE / "bin" / "eitri-auth-header")], capture_output=True, text=True, encoding="utf-8",
                              env={"PATH": os.environ["PATH"], "HOME": str(home), "EITRI_CONFIG_DIR": os.environ["EITRI_CONFIG_DIR"]}).stdout
         assert json.loads(out) == {"Authorization": f"Bearer {stub.token}"}
         assert PI.run_logout() == 0 and PI.load_token() is None
-        assert "eitri-combined" not in json.loads((home / ".cursor" / "mcp.json").read_text())["mcpServers"]
+        assert "eitri-combined" not in json.loads((home / ".cursor" / "mcp.json").read_text(encoding="utf-8"))["mcpServers"]
     finally:
         stub.close()
     # eitri.io unreachable: saved anyway, with a note
@@ -345,7 +343,7 @@ def test_combined_loop_against_the_stub(tmp_path):
         cfg = tmp_path / "cfg"
         cfg.mkdir()
         (cfg / "plugin-token").write_text(stub.token)
-        headers = json.loads(subprocess.run(["sh", str(BUNDLE / "bin" / "eitri-auth-header")], capture_output=True, text=True,
+        headers = json.loads(subprocess.run(["sh", str(BUNDLE / "bin" / "eitri-auth-header")], capture_output=True, text=True, encoding="utf-8",
                                             env={"PATH": os.environ["PATH"], "HOME": str(tmp_path), "EITRI_CONFIG_DIR": str(cfg)}).stdout)
 
         async def steps(s):
