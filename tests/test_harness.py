@@ -758,16 +758,41 @@ def test_micro_fit_part_numbers_follow_the_gender():
 
 
 def test_micro_fit_is_rated_by_the_terminal_its_wire_needs():
-    # 18 AWG takes the 43030-0039 terminal (8.5 A); 20-24 AWG the 43030-0001 (listed at 5 A at the lowest)
+    # Molex PS-43045 Rev P s4.2, wire-to-wire: 18 AWG 7 A at 2 circuits, 20 AWG 6.5 A; the BOM names the terminal per wire size
     def graded(awg, amps):
         h = lead(gauge=awg, current=amps, voltage=12)
         for c in h.connectors.values():
             c.type = "MOLEX-MICROFIT-3.0"
         return check(analyze(h), "connector rating J1"), outputs.bom(h)
-    c18, rows = graded(18, 6)
-    assert c18.severity == "pass" and "of 8.5 A with 18 AWG" in c18.measured
+    c18, rows = graded(18, 5)
+    assert c18.severity == "pass" and "of 7 A with 18 AWG" in c18.measured and "2 powered circuits (rated as 2" in c18.measured
     assert any(r["part_number"] == "43030-0039" and r["qty"] == 4 for r in rows)
-    c20, rows = graded(20, 6)
-    assert c20.severity == "fail" and "of 5 A with 20 AWG" in c20.measured
+    c18, _ = graded(18, 8.5)                      # the distributor listing's 8.5 A is wire-to-board only: over the W-W rating
+    assert c18.severity == "fail"
+    c20, rows = graded(20, 7)
+    assert c20.severity == "fail" and "of 6.5 A with 20 AWG" in c20.measured
     assert any(r["part_number"] == "43030-0001" for r in rows)
-    assert "5-8.5 A by wire size" in catalog_table()
+    assert "1-7 A by wire size and powered circuits" in catalog_table()
+
+
+def test_micro_fit_derates_with_the_powered_circuits():
+    # PS-43045 s4.2 (all circuits powered, 30 C rise): 22 AWG W-W 5.5 A at 2 circuits, 4 at 6, 3.5 at 12
+    from eitri.harness.catalog import Gauge, wire_rating
+    mf = spec_for("MOLEX-MICROFIT-3.0")
+    g22 = Gauge.parse(22)
+    assert [wire_rating(mf, g22, n) for n in (1, 2, 3, 6, 7, 12, 24, 30)] == [5.5, 5.5, 4.0, 4.0, 3.5, 3.5, 3.0, 3.0]
+    assert wire_rating(mf, Gauge.parse(26), 12) == 2.5 and wire_rating(mf, Gauge.parse(18), 12) == 5.5
+
+    def harness(powered):
+        h = Harness("mf12")
+        a = h.add(Connector("A", "MOLEX-MICROFIT-3.0", pins=12))
+        b = h.add(Connector("B", "MOLEX-MICROFIT-3.0", pins=12))
+        for i in range(12):
+            on = i < powered
+            h.net(f"N{i}", current_A=4.6 if on else 0.0, voltage_V=12)
+            h.connect(a[str(i + 1)], b[str(i + 1)], Wire(22, "RD", 200), net=f"N{i}")
+        return check(analyze(h), "connector rating A")
+    two = harness(2)
+    assert two.severity == "warn" and "of 5.5 A" in two.measured          # 4.6 / 5.5 = 84 %: within 20 % of the limit
+    twelve = harness(12)
+    assert twelve.severity == "fail" and "of 3.5 A" in twelve.measured and "12 powered circuits" in twelve.measured

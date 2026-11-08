@@ -4,15 +4,17 @@
     connectivity  required pins connected, no dangling nets, every current solved (series strings in closed form, branched
                   networks by nodal analysis)
     power         no shorted rails, every supply pin within its part's range, the rail budget of every source (a board's 5V / 3V3
-                  pins, a supply, a regulator), the regulators' headroom and junction temperature, a board's VIN range, one common
-                  ground for everything that exchanges signals
+                  pins, a supply, a regulator), the regulators' headroom and junction temperature, a board's VIN range (at a battery's
+                  full charge too: an unregulated source straight on VIN or on the 5V pin), one common ground for everything that
+                  exchanges signals
     current       per GPIO pin and per microcontroller against its datasheet limits, LED current, resistor power, nothing
                   without a current limit
     logic         driver high level against receiver VIH, no input above its absolute maximum, no floating input
     i2c           pull-ups present, within UM10204's Rp(min) / Rp(max), no two devices at one address; an AVR board's Wire
                   internal pull-ups (to 5 V) against the devices' absolute maximum
     inductive     a flyback diode, the right way round and rated for the coil current, on every coil a transistor or pin switches
-    switching     MOSFET gate drive against the VGS its RDS(on) is specified at, its dissipation; a BJT's saturation and IC rating
+    switching     MOSFET gate drive against the VGS its RDS(on) is specified at, its dissipation, a gate pull-down when a board pin
+                  drives it (the pin floats through reset); a BJT's saturation and IC rating
     parts         standard (E24) resistor values, LED data from the part's own datasheet, capacitor voltage ratings
 
 Every check is a Check (eitri.checks): pass, warn or fail, with `refs` naming the parts and nets it is about. A bad design is a
@@ -20,7 +22,7 @@ failed check, never an exception.
 """
 from __future__ import annotations
 
-from ..checks import Check, check
+from ..checks import Check, check, switched_off
 from .. import power
 from .analysis import INF, Analysis, analyze, net_high, open_drain, pullups_on, pulldowns_on, resistors_to_fixed
 from .catalog import E24, nearest_e
@@ -57,8 +59,8 @@ def _a(x: float) -> str:
 def run_checks(c: Circuit) -> tuple[list[Check], Analysis]:
     an = analyze(c)
     checks: list[Check] = []
-    for fn in (_connectivity, _shorts, _supply_ranges, _budgets, _regulators, _ground, _unlimited, _gpio_current, _leds,
-               _resistors, _logic, _floating, _i2c, _avr_wire_pullups, _inductive, _contacts, _mosfets, _bjts, _parts):
+    for fn in (_connectivity, _shorts, _supply_ranges, _unregulated_inputs, _budgets, _regulators, _ground, _unlimited, _gpio_current, _leds,
+               _resistors, _logic, _floating, _i2c, _avr_wire_pullups, _inductive, _contacts, _mosfets, _gate_pulldowns, _bjts, _parts):
         checks += fn(c, an)
     return checks, an
 
@@ -138,6 +140,9 @@ def _supply_ranges(c: Circuit, an: Analysis) -> list[Check]:
                 continue
             v = info.volts
             if ps.v_range is None:
+                if p.kind == "load":                          # the model's own v_min / v_max feed this check: unset, it does not run
+                    out.append(switched_off(_c("power", name, "warn", f"{v:g} V on {net}; {p.name} declares no supply range, so it is not graded",
+                                               "v_min= and v_max= from the load's datasheet", [p.name, net]), f"{p.name}.v_min", f"{p.name}.v_max"))
                 continue
             lo, hi = ps.v_range
             src = f" [source: {cite(ps.src)}]" if ps.src else ""
@@ -159,6 +164,68 @@ def _supply_ranges(c: Circuit, an: Analysis) -> list[Check]:
             out.append(_c("power", name, "fail", f"{v:g} V on VIN; {b.title} recommends {lo:g}-{hi:g} V{_src(b, 'vin_range')}", f"{lo:g}-{hi:g} V", [b.name]))
         elif lo is not None:
             out.append(_c("power", name, "pass", f"{v:g} V, within {lo:g}-{hi:g} V{_src(b, 'vin_range')}", f"{lo:g}-{hi:g} V", [b.name]))
+    return out
+
+
+BATTERY_WORDS = ("batt", "lipo", "li-ion", "liion", "li-po", "18650", "21700", "lead-acid", "lead acid", " sla", "vrla", "nimh", "alkaline",
+                 "accumulator", " car ", "vehicle")      # a supply named or noted like a battery, for the "model its full charge" warning
+
+
+def _looks_like_battery(p) -> bool:
+    text = f" {p.name} {p.part_number} {p.notes} ".lower()
+    return any(w in text for w in BATTERY_WORDS)
+
+
+def _supplies_on(c: Circuit, an: Analysis, net: str | None) -> list:
+    """The supply parts whose "+" is on this net (a source straight on it, with no regulator between)."""
+    if not net:
+        return []
+    return [c.parts[r.part] for r in c.nets[net].pins if c.parts[r.part].kind == "supply" and r.pin == "+"]
+
+
+def _unregulated_inputs(c: Circuit, an: Analysis) -> list[Check]:
+    """A battery or other unregulated source wired straight to a board: its VIN graded at the source's highest voltage (a
+    battery's full charge, a vehicle's charging system), not only its nominal one; a battery on the 5V pin, which bypasses the
+    board's regulator, against the most the 5 V rail may see."""
+    out = []
+    for b in c.parts.values():
+        if b.kind != "board":
+            continue
+        if b.spec.get("powered") == "vin" and b.spec.get("vin_range"):
+            lo, hi = b.spec["vin_range"]
+            for sp in _supplies_on(c, an, c._net_of.get(PinRef(b.name, "VIN"))):
+                name = f"VIN {b.name} at {sp.name}'s highest voltage"
+                vmax = sp.spec.get("v_max")
+                if vmax is not None:
+                    src = _src(sp, "v_max")
+                    if vmax > hi + 1e-9:
+                        out.append(_c("power", name, "fail",
+                                      f"{sp.name} reaches {vmax:g} V ({'a battery at full charge' if sp.spec.get('battery') else 'its highest voltage'}{src}), "
+                                      f"straight on VIN; {b.title} recommends {lo:g}-{hi:g} V{_src(b, 'vin_range')}. Fix: a regulator or buck "
+                                      f"converter between {sp.name} and VIN (its output within {lo:g}-{hi:g} V), or a lower-voltage source",
+                                      f"<= {hi:g} V at the source's highest", [b.name, sp.name]))
+                    else:
+                        out.append(_c("power", name, "pass", f"{sp.name} reaches {vmax:g} V{src}, within {lo:g}-{hi:g} V{_src(b, 'vin_range')}",
+                                      f"<= {hi:g} V", [b.name, sp.name]))
+                elif sp.spec.get("battery") or _looks_like_battery(sp):
+                    out.append(switched_off(_c("power", name, "warn",
+                                  f"{sp.name} looks like a battery straight on VIN, modelled at {sp.spec['volts']:g} V only; a battery runs above its "
+                                  f"nominal voltage at full charge or on charge (a 12 V lead-acid reaches 14.5 V [source: {cite('yuasa-np7-12')}]), "
+                                  f"over {b.title}'s {lo:g}-{hi:g} V{_src(b, 'vin_range')} if it is near the top. Fix: c.battery(name, chemistry, "
+                                  "cells), or v_max= on the supply, so its full-charge voltage is graded",
+                                  "the source's highest voltage", [b.name, sp.name]), f"{sp.name}.v_max"))
+        v5 = b.spec.get("v5_max")
+        if v5 is not None and "5V" in b.pins:
+            for sp in _supplies_on(c, an, c._net_of.get(PinRef(b.name, "5V"))):
+                if not (sp.spec.get("battery") or sp.spec.get("v_max") is not None or _looks_like_battery(sp)):
+                    continue
+                vmax = sp.spec.get("v_max") or sp.spec["volts"]
+                sev = "fail" if vmax > v5 + 1e-9 else "warn"
+                out.append(_c("power", f"5V pin {b.name} fed by {sp.name}", sev,
+                              f"{sp.name} ({vmax:g} V at its highest) is wired to {b.name}'s 5V pin, which bypasses the board's regulator; the 5 V "
+                              f"rail takes at most {v5:g} V{_src(b, 'v5_max')}, and a battery's voltage falls as it discharges. Fix: feed "
+                              f"VIN (c.board(..., powered=\"vin\")) or put a 5 V regulator between {sp.name} and the 5V pin",
+                              f"a regulated 5 V, at most {v5:g} V", [b.name, sp.name]))
     return out
 
 
@@ -243,8 +310,9 @@ def _budgets(c: Circuit, an: Analysis) -> list[Check]:
         if not items and not extra:
             continue
         if lim is None:
-            out.append(_c("power", name, "warn", f"{amps_text(draw)} drawn ({what}{extra}); not graded: {basis}" + (f" [source: {source}]" if source else ""),
-                          "the source's rating", refs))
+            chk = _c("power", name, "warn", f"{amps_text(draw)} drawn ({what}{extra}); not graded: {basis}" + (f" [source: {source}]" if source else ""),
+                     "the source's rating", refs)
+            out.append(switched_off(chk, f"{p.name}.current_A") if p.kind == "supply" else chk)
             continue
         sev = _lvl(draw, lim)
         fix = (f". Fix: {power.advice(src.pin)}" if p.kind == "board" else ". Fix: a supply rated for the load, or move loads to another rail") if sev == "fail" else ""
@@ -873,6 +941,40 @@ def _mosfets(c: Circuit, an: Analysis) -> list[Check]:
         out.append(_c("switching", f"MOSFET dissipation {q.name}", sev,
                       f"{amps_text(i)} drain current (rated {s['id_max']:g} A): {pd * 1000:.3g} mW, junction {tj:.0f} C ({s['theta_ja']:g} C/W, no heatsink), limit {s['tj_max']:g} C{_src(q, 'theta_ja')}",
                       f"<= {s['tj_max']:g} C", [q.name, d]))
+    return out
+
+
+def _gate_pulldowns(c: Circuit, an: Analysis) -> list[Check]:
+    """A MOSFET gate a board's GPIO drives needs a pull-down: an AVR's pins are tri-stated (inputs) while it resets and its
+    bootloader runs, so a gate with nothing to ground floats and the MOSFET can turn on partly. Graded where the board's pin
+    behaviour at reset is sourced (the ATmega328P boards); a warning, as the datasheet gives the pin state, not a failure rate."""
+    out = []
+    for q in c.parts.values():
+        if q.kind != "mosfet":
+            continue
+        g = c._net_of.get(PinRef(q.name, "G"))
+        if not g:
+            continue
+        sides = [(g, None)] + [(other, rname) for rname, other in resistors_to_fixed(c, an, g)]
+        pins = [(d, rname, n) for n, rname in sides for d in an.nets[n].drivers if c.parts[d.part].kind == "board"]
+        pins = [(d, rname, n) for d, rname, n in pins if (c.pin_spec(d).logic and c.pin_spec(d).logic.src == "atmega328p")]
+        if not pins:
+            continue
+        name = f"gate pull-down {q.name} ({q.catalog})"
+        downs = [(r, ohm, n) for n, _ in sides for r, ohm in pulldowns_on(c, an, n)]
+        d, rname, _n = pins[0]
+        via = f" through {rname}" if rname else ""
+        src = f" [source: {cite('atmega328p')}]"
+        if downs:
+            r, ohm, n = downs[0]
+            out.append(_c("switching", name, "pass", f"{r} ({ohms(ohm)}) pulls {q.name}'s gate to ground while {d}{via} is not driving it "
+                          f"(the pin is tri-stated through reset{src})", "a resistor from the gate to GND", [q.name, r]))
+        else:
+            out.append(_c("switching", name, "warn",
+                          f"{q.name}'s gate is driven by {d}{via} and nothing pulls it to ground: the pin is an input (high impedance) while "
+                          f"the board resets and its bootloader runs{src}, so the gate floats and {q.name} can switch its load on partly. "
+                          f"Fix: a resistor from {q.name}.G to GND (a pull-down, typically 10-100 kΩ)",
+                          "a resistor from the gate to GND", [q.name, g]))
     return out
 
 

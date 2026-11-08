@@ -182,7 +182,7 @@ power, logic-level, I2C, flyback and gate checks, each against a datasheet figur
 eitri build eitri/demos/pan-tilt/pan_tilt.py         # 12 pass, 0 warn, 0 FAIL
 eitri build eitri/demos/air-clamp/air_clamp.py       # 23 pass, 1 warn, 0 FAIL (the warning is intended: estimated flow data)
 eitri build eitri/demos/servo-sweep/servo_sweep.py   # 12 pass, 0 warn, 0 FAIL once arduino-cli is installed (below)
-eitri build eitri/demos/uno-arm-circuit/uno_arm_circuit.py   # 31 pass, 0 warn, 0 FAIL
+eitri build eitri/demos/uno-arm-circuit/uno_arm_circuit.py   # 32 pass, 0 warn, 0 FAIL
 ```
 
 Mechanism, pneumatics and electronics need nothing extra (electronics is breadboard level: no PCB layout). **Firmware needs arduino-cli** (a system program, not a Python package). Install it

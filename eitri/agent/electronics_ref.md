@@ -19,8 +19,10 @@ c = Circuit("name", description="", ambient_C=25)
 c.board(name, "uno" | "nano" | "esp32", powered="usb" | "vin", vin_V=None)
     pins: 5V, 3V3 (supplies), VIN, GND, and every GPIO (D0-D13, A0-A5 on the Uno; GPIO0-39 on the ESP32 DevKitC, without 6-11)
 c.gpio(board["D2"], "in" | "out" | "io", pullup=False)   how the firmware uses a pin (default io: either level, the worst case)
-c.supply(name, volts, current_A=None)            an external supply (adapter, bench supply, BEC, battery): pins "+" and "-";
-                                                 current_A its rating, the budget of everything on its rail
+c.supply(name, volts, current_A=None, v_max=None, battery=False)   an external supply (adapter, bench supply, BEC): pins "+" and "-";
+                                                 current_A its rating, the budget of everything on its rail; v_max its highest voltage
+c.battery(name, "li-ion" | "lipo" | "lead-acid", cells, current_A=None)   a battery: nominal volts, and its full-charge voltage as
+                                                 v_max (4.2 V per Li-ion cell; a 12 V lead-acid reaches 14.5 V on charge)
 c.regulator(name, "AMS1117-3.3" | "AMS1117-5.0" | "L7805")      pins IN, OUT, GND
 c.module(name, "PCA9685" | "BME280" | "SSD1306" | "HC-SR04", address=None)   a breakout from the catalog (its pins below)
 c.servo(name, "SG90" | "MG996R", current_A=None)  pins V+, GND, SIG; draws its stall current (catalog) unless current_A says otherwise
@@ -61,8 +63,9 @@ BME280: VCC, GND, SCL, SDA. SSD1306: VIN, GND, SCL, SDA. HC-SR04: VCC, TRIG, ECH
 - **power**: no rail tied to ground or driven by two supplies; every part's supply pin within its range (a BME280 on 5 V fails); the
   rail budget of every source (a board's 5V pin: 500 mA on USB, the Uno's regulator on VIN; 3V3: 50 mA; a supply: its current_A; a
   regulator: its rating), counting modules, servos at stall, resistor strings, regulators' outputs and a board's own I/O current;
-  regulator headroom (dropout) and junction temperature (PD x theta-JA); a VIN-powered board's VIN in 7-12 V; one common ground
-  for every part that exchanges a signal.
+  regulator headroom (dropout) and junction temperature (PD x theta-JA); a VIN-powered board's VIN in 7-12 V, at a battery's full
+  charge too (a car battery straight on VIN fails: put a regulator or buck converter in front); a battery on a board's 5V pin fails
+  (it bypasses the regulator; the Uno's 5 V rail takes 5.5 V at most); one common ground for every part that exchanges a signal.
 - **current**: per GPIO (Uno / Nano 20 mA, ESP32 28 mA) and per chip (ATmega328P 200 mA, ESP32 1.2 A); module outputs (PCA9685
   25 mA); every LED against its DC maximum (LEDs that share a resistor: each is graded as taking the whole shared current, its Vf
   at typical and the others' at maximum; one that stays dark at typical Vf because another clamps the node is a WARN, current
@@ -79,7 +82,8 @@ BME280: VCC, GND, SCL, SDA. SSD1306: VIN, GND, SCL, SDA. HC-SR04: VCC, TRIG, ECH
 - **inductive**: a coil (relay, solenoid, motor) switched by a transistor or a pin has a diode across it, cathode to the supply side,
   rated for the coil current.
 - **switching**: a MOSFET's gate voltage at or above the lowest VGS its RDS(on) is specified at (an IRF540N from 5 V fails), its
-  I²·RDS(on) heat against Tj max; a BJT's base current at least IC/10 (the datasheet's saturation condition) and IC under its rating.
+  I²·RDS(on) heat against Tj max; a gate an Uno or Nano pin drives has a pull-down resistor to GND (WARN without: the pin floats
+  through reset); a BJT's base current at least IC/10 (the datasheet's saturation condition) and IC under its rating.
 - **parts**: resistor values from E24 (a WARN otherwise, with the nearest); an LED given only a colour is graded on a typical part's
   figures, a WARN (use `part=` for a catalog LED, or give vf / if_max from your LED's datasheet); a capacitor's voltage against its rating.
 - your own `verify(c, p, chk)`: `chk.equal`, `chk.true`, `chk.at_most`, ... Helpers: `analyze_dc(c)` (`.strings`, `.nets`,

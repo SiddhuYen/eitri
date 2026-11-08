@@ -3,6 +3,18 @@
 All dimensions in mm. Sources: ISO 273 (clearance holes), ISO 4762 (socket head
 cap screws), ISO 10642 (countersunk), ISO 4032 (hex nuts), ISO 7089 (washers),
 common brass heat-set insert catalogues (hole sizes for FDM prints).
+
+Sourced figures (re-checked 2026-11-07):
+- cs_d is the ISO 10642 head diameter dk max (= nominal, sharp edge), so a 90 deg countersink of that top diameter
+  takes the head flush: DIN EN ISO 10642:2020-02, dimensions table, columns "dk max=nom" (fasten.it norm sheet,
+  https://www.fasten.it/en/norms/norm/din_en_iso_10642). M2 4.7, M2.5 5.88, M3 6.72, M4 8.96, M5 11.20, M6 13.44,
+  M8 17.92, M10 22.4, M12 26.88. M1.6 is not in ISO 10642; its 3.3 is kept from the earlier table (unsourced).
+- insert_d is ruthex's hole diameter: column D3 of the ruthex insert tables (3DJake listings of ruthex data,
+  e.g. https://www.3djake.com/ruthex/threaded-insert-m25-70-pieces: "M2.5 | 4.6 | 3.9 | 4,0 | 5.7 | 1.6";
+  .../threaded-inserts-m8-20-pieces: "M8 | 10.1 | 9.5 | 9.6 | 12.7 | 4.5"). D3 equals ruthex's own drill set
+  for M2-M6 (ruthex.de: "M2, M2.5, M3, M4, M5, M6 ... 3.2 + 4 + 5.6 + 6.4 + 8mm"); for M8 the same column
+  meaning is assumed (ruthex publishes no M8 drill). insert_depth is the insert length L; ruthex gives no
+  hole-depth figure (a deeper hole is usual for melt overflow).
 """
 from __future__ import annotations
 
@@ -14,15 +26,15 @@ __all__ = ["METRIC", "screw_clearance", "tap_drill", "counterbore_dims", "counte
 #       hex nut across-flats / height, washer od / thickness, heat-set insert hole dia / depth
 METRIC: dict[str, dict[str, float]] = {
     "M1.6": dict(close=1.7, normal=1.8, loose=2.0, tap=1.25, pitch=0.35, head_d=3.0, head_h=1.6, cb_d=3.5, cs_d=3.3, nut_af=3.2, nut_h=1.3, washer_od=4.0, washer_t=0.3, insert_d=2.0, insert_depth=3.0),
-    "M2": dict(close=2.2, normal=2.4, loose=2.6, tap=1.6, pitch=0.4, head_d=3.8, head_h=2.0, cb_d=4.4, cs_d=4.4, nut_af=4.0, nut_h=1.6, washer_od=5.0, washer_t=0.3, insert_d=3.2, insert_depth=4.0),
-    "M2.5": dict(close=2.7, normal=2.9, loose=3.1, tap=2.05, pitch=0.45, head_d=4.5, head_h=2.5, cb_d=5.0, cs_d=5.5, nut_af=5.0, nut_h=2.0, washer_od=6.0, washer_t=0.5, insert_d=3.6, insert_depth=5.7),
-    "M3": dict(close=3.2, normal=3.4, loose=3.6, tap=2.5, pitch=0.5, head_d=5.5, head_h=3.0, cb_d=6.5, cs_d=6.3, nut_af=5.5, nut_h=2.4, washer_od=7.0, washer_t=0.5, insert_d=4.0, insert_depth=5.7),
-    "M4": dict(close=4.3, normal=4.5, loose=4.8, tap=3.3, pitch=0.7, head_d=7.0, head_h=4.0, cb_d=8.0, cs_d=9.4, nut_af=7.0, nut_h=3.2, washer_od=9.0, washer_t=0.8, insert_d=5.6, insert_depth=8.1),
-    "M5": dict(close=5.3, normal=5.5, loose=5.8, tap=4.2, pitch=0.8, head_d=8.5, head_h=5.0, cb_d=10.0, cs_d=10.4, nut_af=8.0, nut_h=4.7, washer_od=10.0, washer_t=1.0, insert_d=6.4, insert_depth=9.5),
-    "M6": dict(close=6.4, normal=6.6, loose=7.0, tap=5.0, pitch=1.0, head_d=10.0, head_h=6.0, cb_d=11.0, cs_d=12.6, nut_af=10.0, nut_h=5.2, washer_od=12.0, washer_t=1.6, insert_d=8.0, insert_depth=12.7),
-    "M8": dict(close=8.4, normal=9.0, loose=10.0, tap=6.8, pitch=1.25, head_d=13.0, head_h=8.0, cb_d=15.0, cs_d=17.3, nut_af=13.0, nut_h=6.8, washer_od=16.0, washer_t=1.6, insert_d=10.0, insert_depth=12.7),
-    "M10": dict(close=10.5, normal=11.0, loose=12.0, tap=8.5, pitch=1.5, head_d=16.0, head_h=10.0, cb_d=18.0, cs_d=20.0, nut_af=16.0, nut_h=8.4, washer_od=20.0, washer_t=2.0, insert_d=12.0, insert_depth=15.0),
-    "M12": dict(close=13.0, normal=13.5, loose=14.5, tap=10.2, pitch=1.75, head_d=18.0, head_h=12.0, cb_d=20.0, cs_d=24.4, nut_af=18.0, nut_h=10.8, washer_od=24.0, washer_t=2.5, insert_d=14.0, insert_depth=18.0),
+    "M2": dict(close=2.2, normal=2.4, loose=2.6, tap=1.6, pitch=0.4, head_d=3.8, head_h=2.0, cb_d=4.4, cs_d=4.7, nut_af=4.0, nut_h=1.6, washer_od=5.0, washer_t=0.3, insert_d=3.2, insert_depth=4.0),
+    "M2.5": dict(close=2.7, normal=2.9, loose=3.1, tap=2.05, pitch=0.45, head_d=4.5, head_h=2.5, cb_d=5.0, cs_d=5.88, nut_af=5.0, nut_h=2.0, washer_od=6.0, washer_t=0.5, insert_d=4.0, insert_depth=5.7),
+    "M3": dict(close=3.2, normal=3.4, loose=3.6, tap=2.5, pitch=0.5, head_d=5.5, head_h=3.0, cb_d=6.5, cs_d=6.72, nut_af=5.5, nut_h=2.4, washer_od=7.0, washer_t=0.5, insert_d=4.0, insert_depth=5.7),
+    "M4": dict(close=4.3, normal=4.5, loose=4.8, tap=3.3, pitch=0.7, head_d=7.0, head_h=4.0, cb_d=8.0, cs_d=8.96, nut_af=7.0, nut_h=3.2, washer_od=9.0, washer_t=0.8, insert_d=5.6, insert_depth=8.1),
+    "M5": dict(close=5.3, normal=5.5, loose=5.8, tap=4.2, pitch=0.8, head_d=8.5, head_h=5.0, cb_d=10.0, cs_d=11.2, nut_af=8.0, nut_h=4.7, washer_od=10.0, washer_t=1.0, insert_d=6.4, insert_depth=9.5),
+    "M6": dict(close=6.4, normal=6.6, loose=7.0, tap=5.0, pitch=1.0, head_d=10.0, head_h=6.0, cb_d=11.0, cs_d=13.44, nut_af=10.0, nut_h=5.2, washer_od=12.0, washer_t=1.6, insert_d=8.0, insert_depth=12.7),
+    "M8": dict(close=8.4, normal=9.0, loose=10.0, tap=6.8, pitch=1.25, head_d=13.0, head_h=8.0, cb_d=15.0, cs_d=17.92, nut_af=13.0, nut_h=6.8, washer_od=16.0, washer_t=1.6, insert_d=9.6, insert_depth=12.7),
+    "M10": dict(close=10.5, normal=11.0, loose=12.0, tap=8.5, pitch=1.5, head_d=16.0, head_h=10.0, cb_d=18.0, cs_d=22.4, nut_af=16.0, nut_h=8.4, washer_od=20.0, washer_t=2.0, insert_d=12.0, insert_depth=15.0),
+    "M12": dict(close=13.0, normal=13.5, loose=14.5, tap=10.2, pitch=1.75, head_d=18.0, head_h=12.0, cb_d=20.0, cs_d=26.88, nut_af=18.0, nut_h=10.8, washer_od=24.0, washer_t=2.5, insert_d=14.0, insert_depth=18.0),
 }
 
 

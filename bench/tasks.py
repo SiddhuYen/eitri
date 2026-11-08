@@ -354,8 +354,8 @@ def t_rpi_case(parts: Parts) -> list[Check]:
     bb = parts.bbox
     c = bb.center()
     out.append(("open top, hollow inside", not point_inside(parts.compound, (c.X, c.Y, bb.max.Z - 2)), ""))
-    ins = holes(parts.compound, diameter=3.6, tol=0.25)
-    out.append(("four M2.5 insert holes (3.35-3.85)", len(ins) == 4, f"{len(ins)}: {[round(h.diameter, 2) for h in ins]}"))
+    ins = holes(parts.compound, diameter=3.8, tol=0.45)          # M2.5 insert holes: common catalogues 3.6, ruthex (eitri's table) 4.0
+    out.append(("four M2.5 insert holes (3.35-4.25)", len(ins) == 4, f"{len(ins)}: {[round(h.diameter, 2) for h in ins]}"))
     if len(ins) == 4:
         pts = [(h.center.X, h.center.Y) for h in ins]
         out.append(("insert holes on the Pi pattern (58 x 49)", _pairwise_match(pts, [(0, 0), (58, 0), (0, 49), (58, 49)], 0.3), f"{[(round(x, 1), round(y, 1)) for x, y in pts]}"))

@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 
 from .. import power as _power
 from ..power import amps
-from ..checks import Check, check as _check
+from ..checks import Check, check as _check, switched_off
 from .boards import Board, PinCap
 from .compile import CompileResult
 from .model import ROLE_DIRECTION, Firmware, PinDecl
@@ -323,8 +323,9 @@ def _power_budget(fw: Firmware) -> list[Check]:
         name = f"supply {pin} pin ({fw.board_key}, on {how})"
         unknown = [p.name for p in pers if p.params.get("current_A") is None]
         if unknown:
-            out.append(_check("power", name, "warn", f"{', '.join(unknown)} on the {pin} pin with no current_A: not graded",
-                              "current_A: the worst-case draw from the datasheet (a servo's stall current)", names))
+            out.append(switched_off(_check("power", name, "warn", f"{', '.join(unknown)} on the {pin} pin with no current_A: not graded",
+                                           "current_A: the worst-case draw from the datasheet (a servo's stall current)", names),
+                                    *[f"{n}.current_A" for n in unknown]))
             continue
         draw = sum(p.params["current_A"] for p in pers)
         lim = _power.supply_limit(fw.board_key, pin, fw.powered, fw.vin_V)

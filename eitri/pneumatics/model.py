@@ -39,10 +39,20 @@ VALVE_CLASSES = {
 }
 EXHAUST_PORTS = ("R", "S")
 
+# The largest load ratio (load / theoretical force) per kind of duty: SMC Best Pneumatics technical data, "Air Cylinders Model
+# Selection", Step 1 "Determine the load factor in accordance with the purpose" (and Data 1: Bore Size Selection, catalogue
+# p.1570; https://ca01.smcworld.com/catalog/BEST-technical-data-en/pdf/6-2-1-m21-43-tech_en.pdf, re-read 2026-11-07): static
+# operation (clamping, low-speed vise crimping) 0.7 or less; dynamic operation, vertical and horizontal movement of the load,
+# 0.5 or less; horizontal movement of load on guide, 1 or less; "If it is particularly necessary to operate at high speeds,
+# the load rate must be reduced further". Festo's DSBC catalogue (2023/08, p.18) likewise sizes for 50 % of theoretical force.
+# A cylinder's duty defaults to "moving", the strictest that applies to most designs.
+LOAD_RATIOS = {"moving": 0.5, "static": 0.7, "guided": 1.0}
+
 # Maximum working pressure by kind, when a component gives no max_bar of its own (fetched 2026-10-26; vendor datasheets as listed
 # by distributors). The supply is not rated: it is the source.
 PRESSURE_RATINGS = {
-    "regulator": (16.0, "Festo LR-D-MINI regulator: operating (inlet) pressure 1-16 bar"),
+    "regulator": (10.0, "SMC AR20-AR60 regulators: maximum operating pressure 1.0 MPa (SMC AR_EU.pdf, standard specifications; "
+                  "Festo LR-D-MINI takes 16 bar: the lower is used)"),
     "frl": (10.0, "Festo MS4-LFR filter regulators: variants listed at 0.8-14, 1-10 and 2-12 bar; the lowest maximum is used"),
     "valve": (7.0, "SMC SY3000 5-port solenoid valve: 0.1-0.7 MPa (internal pilot)"),
     "flow_control": (10.0, "SMC AS speed controllers: maximum operating pressure 1 MPa"),
@@ -201,12 +211,17 @@ class Cylinder(Component):
     cycles_per_min: float = 0.0
     spring_N: float | None = None        # single-acting: the return spring's force at full extension
     friction_fraction: float = 0.10      # ESTIMATE: seal friction and losses as a fraction of the theoretical force (10 % is the usual sizing allowance)
+    duty: str = "moving"                 # what the load does, for the load-ratio limit (LOAD_RATIOS): moving | static | guided
 
     def __post_init__(self) -> None:
         self.kind, self.ports = "cylinder", (["CAP", "ROD"] if self.acting == "double" else ["CAP"])
         super().__post_init__()
         if self.acting not in ("double", "single"):
             raise PneumaticsError(f"cylinder {self.name}: acting must be double or single")
+        self.duty = str(self.duty).strip().lower()
+        if self.duty not in LOAD_RATIOS:
+            raise PneumaticsError(f"cylinder {self.name}: duty must be one of {', '.join(LOAD_RATIOS)} (moving: the cylinder moves the "
+                                  "load vertically or horizontally; static: clamping, low-speed pressing; guided: horizontal on a guide)")
         self.bore_mm, self.rod_mm, self.stroke_mm = _pos(self.bore_mm, "bore_mm"), _pos(self.rod_mm, "rod_mm"), _pos(self.stroke_mm, "stroke_mm")
         if self.rod_mm >= self.bore_mm:
             raise PneumaticsError(f"cylinder {self.name}: rod_mm must be smaller than bore_mm")

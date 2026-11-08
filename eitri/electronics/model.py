@@ -165,7 +165,8 @@ class Part:
         if self.kind == "led":
             return f"{s.get('color', '')} LED".strip()
         if self.kind == "supply":
-            return f"{s['volts']:g} V" + (f" {s['current_A']:g} A" if s.get("current_A") is not None else "")
+            return (f"{s['volts']:g} V" + (f" (up to {s['v_max']:g} V)" if s.get("v_max") not in (None, s["volts"]) else "")
+                    + (f" {s['current_A']:g} A" if s.get("current_A") is not None else ""))
         if self.kind in ("motor", "solenoid", "load"):
             return (f"{s['volts']:g} V " if s.get("volts") else "") + (f"{amps_text(s['current_A'])}" if s.get("current_A") is not None else "")
         if self.kind == "switch":
@@ -282,14 +283,44 @@ class Circuit:
             part.pullups.discard(ref.pin)
         return ref
 
-    def supply(self, name: str, volts: float, current_A: float | None = None, part_number: str = "", notes: str = "") -> Part:
+    def supply(self, name: str, volts: float, current_A: float | None = None, part_number: str = "", notes: str = "",
+               v_max: float | None = None, battery: bool = False) -> Part:
         """An external supply (a bench supply, a wall adapter, a BEC, a battery): pins "+" and "-".
 
-        current_A: what it is rated to deliver (from its label or datasheet): the rail budget grades its loads against it."""
+        current_A: what it is rated to deliver (from its label or datasheet): the rail budget grades its loads against it.
+        v_max: the highest voltage it reaches (a battery at full charge, a vehicle's charging system); a board's VIN is graded
+        against it too. battery=True: an unregulated source (c.battery() sets both from the chemistry)."""
         v = _num(volts, f"{name}: volts")
         pins = {"+": PinSpec("+", "power_out", volts=v, src="model"), "-": PinSpec("-", "gnd", ref=True)}
         spec = {"volts": v, "current_A": None if current_A is None else _num(current_A, f"{name}: current_A", positive=True)}
-        return self.add(Part(name, "supply", pins, spec, {"volts": "model", "current_A": "model"}, title="supply", part_number=part_number, notes=notes))
+        srcs = {"volts": "model", "current_A": "model"}
+        if v_max is not None:
+            vm = _num(v_max, f"{name}: v_max", positive=True)
+            if vm < v:
+                raise CircuitError(f"{name}: v_max ({vm:g} V) is below its volts ({v:g} V)")
+            spec["v_max"], srcs["v_max"] = vm, "model"
+        if battery:
+            spec["battery"] = True
+        return self.add(Part(name, "supply", pins, spec, srcs, title="battery" if battery else "supply", part_number=part_number, notes=notes))
+
+    def battery(self, name: str, chemistry: str, cells: int, current_A: float | None = None, part_number: str = "", notes: str = "") -> Part:
+        """A battery of `cells` cells in series: modelled at its nominal voltage, with its full-charge voltage as v_max (both per
+        cell from a datasheet, see catalog.BATTERIES: "li-ion" / "lipo", "lead-acid"). Another chemistry: c.supply(name, volts,
+        v_max=<full charge>, battery=True)."""
+        from .catalog import BATTERIES
+        key = str(chemistry).strip().lower().replace(" ", "-").replace("_", "-")
+        key = {"liion": "li-ion", "li-po": "lipo", "lipo": "lipo", "sla": "lead-acid", "vrla": "lead-acid", "lead": "lead-acid"}.get(key, key)
+        if key not in BATTERIES:
+            raise CircuitError(f"{name}: unknown chemistry {chemistry!r}; known: {', '.join(BATTERIES)} (another: c.supply({name!r}, volts, "
+                               "v_max=<its full-charge voltage>, battery=True))")
+        if isinstance(cells, bool) or not isinstance(cells, int) or cells < 1:
+            raise CircuitError(f"{name}: cells must be a whole number of cells in series (1 or more)")
+        b = BATTERIES[key]
+        p = self.supply(name, round(b["nominal"] * cells, 3), current_A, part_number, notes, v_max=round(b["full"] * cells, 3), battery=True)
+        p.spec.update(chemistry=key, cells=cells)
+        p.srcs["volts"] = p.srcs["v_max"] = b["src"]
+        p.title = f"{key} battery, {cells} cell{'s' if cells != 1 else ''}"
+        return p
 
     def regulator(self, name: str, part: str = "AMS1117-3.3") -> Part:
         """A linear regulator from the catalog (AMS1117-3.3, AMS1117-5.0, L7805): pins IN, OUT, GND."""

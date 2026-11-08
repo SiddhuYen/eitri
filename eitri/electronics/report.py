@@ -5,7 +5,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from ..checks import Check, from_verify
+from ..checks import Check, from_verify, checks_not_run, not_run_line
 from ..model import Checker
 from .analysis import INF, Analysis
 from .checks import board_draw, i2c_buses, rail_limit, rail_loads, run_checks
@@ -37,7 +37,9 @@ class ElectronicsReport:
         return [c for c in self.checks if c.severity == "warn"]
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        d = asdict(self)
+        d["checks_not_run"] = checks_not_run(self.checks)     # checks switched off by an unset input
+        return d
 
 
 def rails_of(c: Circuit, an: Analysis) -> list[dict]:
@@ -84,6 +86,9 @@ def summarize(rep: ElectronicsReport) -> str:
     n_fail, n_warn = len(rep.failed), len(rep.warnings)
     lines = [f"Circuit {rep.name!r}: {rep.part_count} parts, {rep.net_count} nets, {len(rep.rails)} rail(s)",
              f"Checks: {len(rep.checks) - n_fail - n_warn} pass, {n_warn} warn, {n_fail} FAIL"]
+    _nr = not_run_line(rep.checks)
+    if _nr:
+        lines.append(_nr)
     if rep.rails:
         lines.append("Rails:")
         for r in rep.rails:

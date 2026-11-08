@@ -5,7 +5,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from ..checks import Check, from_verify
+from ..checks import Check, from_verify, checks_not_run, not_run_line
 from ..model import Checker
 from .checks import PinInfo, run_checks
 from .compile import CompileResult
@@ -37,7 +37,9 @@ class FirmwareReport:
         return [c for c in self.checks if c.severity == "warn"]
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        d = asdict(self)
+        d["checks_not_run"] = checks_not_run(self.checks)     # checks switched off by an unset input
+        return d
 
 
 def analyze(fw: Firmware, checker: Checker | None = None, compiled: CompileResult | None = None) -> FirmwareReport:
@@ -55,6 +57,9 @@ def summarize(rep: FirmwareReport) -> str:
     n_fail, n_warn = len(rep.failed), len(rep.warnings)
     lines = [f"Firmware {rep.name!r}: {rep.board} ({rep.fqbn or 'unknown board'}), {len(rep.pins)} pin(s), sources {', '.join(rep.sources) or 'none'}",
              f"Checks: {len(rep.checks) - n_fail - n_warn} pass, {n_warn} warn, {n_fail} FAIL"]
+    _nr = not_run_line(rep.checks)
+    if _nr:
+        lines.append(_nr)
     if rep.pins:
         lines.append("Pinout:")
         for p in rep.pins:

@@ -5,7 +5,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from ..checks import Check, from_verify
+from ..checks import Check, from_verify, checks_not_run, not_run_line
 from ..model import Checker
 from .checks import CylinderInfo, PathInfo, StrokeInfo, SupplyInfo, run_checks
 from .model import Circuit
@@ -36,6 +36,7 @@ class CircuitReport:
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
+        d["checks_not_run"] = checks_not_run(self.checks)
         for cy in d["cylinders"]:                                  # PathInfo holds Tube objects: keep names only
             for s in cy["strokes"]:
                 for k in ("fill", "exhaust"):
@@ -60,6 +61,9 @@ def summarize(rep: CircuitReport) -> str:
     n_fail, n_warn = len(rep.failed), len(rep.warnings)
     lines = [f"Pneumatic circuit {rep.name!r}: {rep.components} components, {rep.tubes} tubes, {len(rep.cylinders)} cylinder(s)",
              f"Checks: {len(rep.checks) - n_fail - n_warn} pass, {n_warn} warn, {n_fail} FAIL"]
+    _nr = not_run_line(rep.checks)
+    if _nr:
+        lines.append(_nr)
     for cy in rep.cylinders:
         bits = [f"Ø{cy.bore_mm:g}/{cy.rod_mm:g} x {cy.stroke_mm:g} mm {cy.acting}-acting" + (f" at {cy.pressure_bar:g} bar" if cy.pressure_bar is not None else ", NO SUPPLY")]
         for s in cy.strokes:

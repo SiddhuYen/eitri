@@ -37,10 +37,11 @@ import numpy as np
 G = 9.80665                    # m/s^2, standard gravity (ISO 80000-3)
 KGCM_PER_NM = 1.0 / 0.0980665  # 1 kgf.cm = 0.0980665 N.m (the kilogram-force is defined with standard gravity)
 # The share of stall torque (or force) taken as the continuous rating when neither the model nor the actuator catalog gives one.
-# It is an ASSUMPTION, not a spec, and the checks say so: hobby-servo makers publish stall only. 1/3 is the ratio of the one
-# hobby-class servo in the catalog that publishes a continuous rating (Feetech STS3215: 6.5 of 19.5 kg.cm at 6 V), and it keeps
-# below the "half of stall" rule of thumb on purpose; ROBOTIS asks for 1/5 of stall for steady loads on its XL320.
-ASSUMED_RATED_FRACTION = 1 / 3
+# It is an ASSUMPTION, not a spec, and the checks say so: hobby-servo makers publish stall only. The sourced ratios are Feetech's
+# STS3215 spec (edition A/0, 2020-04-10, s5: rated 4 of 16.5 kg.cm stall at 6 V = 0.24, 5 of 19.5 at 7.4 V = 0.26) and ROBOTIS's
+# e-Manual for the XL-320 / AX-12A ("1/5 of stall" for a steady load). By the conservative rule (the lower figure for a limit)
+# 1/5 is used. Up to 0.7.0 this was 1/3, from the STS3215 product page's 6.5 of 19.5 kg.cm, which its own spec sheet contradicts.
+ASSUMED_RATED_FRACTION = 1 / 5
 
 
 @dataclass(frozen=True)
@@ -53,10 +54,12 @@ class ActuatorSpec:
     source: str
 
 
-# Datasheet figures, fetched 2026-10-26. Matched by name: Actuator("MG996R", ...) or Actuator("Feetech STS3215", ...).
+# Datasheet figures, fetched 2026-10-26 (STS3215 re-read 2026-11-07). Matched by name: Actuator("MG996R", ...) or Actuator("Feetech STS3215", ...).
 ACTUATOR_CATALOG = {s.key: s for s in [
-    ActuatorSpec("STS3215", 19.5, 6.5, 6.0, "Feetech STS3215 datasheet as listed by Core Electronics and RobotShop: rated continuous "
-                 "torque 6.5 kg.cm, peak 19.5 kg.cm, both at 6 V"),
+    ActuatorSpec("STS3215", 16.5, 4.0, 6.0, "Feetech STS3215 product specification, edition A/0 (2020-04-10), p.3 s5 Electrical "
+                 "Specification: stall torque 16.5 kg.cm and rated torque 4 kg.cm at 6 V (19.5 / 5 at 7.4 V); Feetech's product page "
+                 "says 19.5 / 6.5 at 6 V, the lower spec-sheet figures are used (https://www.feetechrc.com/Data/feetechrc/upload/file/"
+                 "20260622/6391772523943436695270694.pdf)"),
     ActuatorSpec("MG996R", 9.4, None, 4.8, "TowerPro MG996R datasheet: stall 9.4 kgf.cm at 4.8 V, 11 kgf.cm at 6 V; no continuous rating"),
     ActuatorSpec("SG90", 1.8, None, 4.8, "TowerPro SG90 datasheet: stall 1.8 kgf.cm at 4.8 V; no continuous rating"),
 ]}
@@ -107,8 +110,9 @@ class Actuator:
     speed_mm_s: float | None = None      # no-load speed (prismatic), mm/s
     gear_ratio: float = 1.0
     efficiency: float = 1.0              # of the transmission (1.0 = direct drive)
-    travel_deg: float | None = None      # the actuator's own travel (a 180 deg servo); None = unlimited
+    travel_deg: float | None = None      # the actuator's own travel (a 180 deg servo); None = not given: the joint-travel check does not run
     travel_mm: float | None = None
+    continuous: bool = False             # it turns without end (a continuous-rotation servo, a motor with its own encoder): no travel to grade
     mass_g: float = 0.0                  # the motor body, carried by the parent link at the joint
     notes: str = ""
 

@@ -202,7 +202,7 @@ def test_conservative_figure_rule():
     assert catalog.SERVOS["MG996R"]["stall"] == 2.5                       # the higher draw (TowerPro 1.4 A, distributor 2.5 A at 6 V)
     assert catalog.SERVOS["MG996R"]["v"] == (4.8, 6.6)                     # the narrower limit
     assert "higher figure for a draw" in __import__("eitri.electronics.sources", fromlist=["x"]).__doc__
-    assert SOURCES["towerpro-sg90"].assumption and catalog.SERVOS["SG90"]["stall"] == 0.5
+    assert SOURCES["towerpro-sg90"].assumption and catalog.SERVOS["SG90"]["stall"] == 2.0              # the higher draw of "0.5A - 2A"
     assert catalog.PARTS["L7805"]["spec"]["iq"] == 0.008 and catalog.PARTS["L7805"]["srcs"]["iq"] == "st-l7805"
     # the other domains use the same MG996R draw where they quote one
     fw = (ROOT / "eitri" / "agent" / "firmware_ref.md").read_text()

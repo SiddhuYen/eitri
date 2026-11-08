@@ -132,7 +132,7 @@ def test_cylinder_force_and_consumption():
 
 
 def test_good_pusher_passes():
-    rep = analyze(pusher(load=250))
+    rep = analyze(pusher(load=200))
     assert rep.ok and not rep.warnings, summarize(rep)
     cy = rep.cylinders[0]
     assert cy.pressure_bar == 6.0 and cy.strokes[0].usable_N == pytest.approx(434.3, abs=0.2) and cy.strokes[0].status == "pass"
@@ -143,16 +143,32 @@ def test_good_pusher_passes():
 
 
 def test_force_levels():
-    assert one(analyze(pusher(load=250)), "force C1 extend").severity == "pass"            # ratio 0.52
+    assert one(analyze(pusher(load=200)), "force C1 extend").severity == "pass"            # ratio 0.41
+    c = one(analyze(pusher(load=250)), "force C1 extend")                                  # ratio 0.52: over SMC's 0.5 for a moving load
+    assert c.severity == "warn" and "load ratio <= 0.5 for a moving load" in c.expected
     c = one(analyze(pusher(load=350)), "force C1 extend")
     assert c.severity == "warn" and "load ratio 0.73" in c.measured
     c = one(analyze(pusher(load=450)), "force C1 extend")
     assert c.severity == "fail" and "434 N usable" in c.measured and c.refs == ["C1"]
-    # fixed by a bigger bore: Ø40 at 6 bar = 754 N theoretical
-    assert one(analyze(pusher(load=450, bore=40)), "force C1 extend").severity == "pass"
+    # fixed by a bigger bore: Ø50 at 6 bar = 1178 N theoretical (Ø40, 754 N, is a 0.6 ratio: over 0.5 for a moving load)
+    assert one(analyze(pusher(load=450, bore=50)), "force C1 extend").severity == "pass"
+    assert one(analyze(pusher(load=450, bore=40)), "force C1 extend").severity == "warn"
     # the regulator sets the pressure, not the supply: 4 bar on a 7 bar supply
-    c = one(analyze(pusher(load=250, p_bar=4.0)), "force C1 extend")
+    c = one(analyze(pusher(load=200, p_bar=4.0)), "force C1 extend")
     assert "4 bar x 804 mm²" in c.measured and c.severity == "warn"
+
+
+def test_load_ratio_follows_the_duty():
+    # SMC bore-size selection: static (clamping) 0.7, a moving load 0.5, horizontal on a guide 1.0
+    def ratio_sev(load, duty):
+        c = pusher(load=load)
+        c.get("C1").duty = duty
+        return one(analyze(c), "force C1 extend")
+    assert [ratio_sev(300, d).severity for d in ("moving", "static", "guided")] == ["warn", "pass", "pass"]      # 0.62
+    assert [ratio_sev(400, d).severity for d in ("moving", "static", "guided")] == ["warn", "warn", "pass"]      # 0.83
+    assert ratio_sev(450, "guided").severity == "fail"                                                          # over the usable force
+    with pytest.raises(PneumaticsError, match="duty must be one of moving, static, guided"):
+        Circuit().cylinder("C9", 32, 12, 100, duty="fast")
 
 
 def test_single_acting_retract():
@@ -173,7 +189,7 @@ def test_single_acting_retract():
 
 
 def test_speed_sizing_and_levels():
-    c = pusher(load=250, speed=200)
+    c = pusher(load=200, speed=200)
     rep = analyze(c)
     s = one(rep, "speed C1 extend")
     assert s.severity == "pass" and "200 mm/s needs" in s.measured and "achievable" in s.measured
@@ -182,37 +198,37 @@ def test_speed_sizing_and_levels():
     assert ext.flow_required_l_s == pytest.approx(a_bore * 200 / 1e6 * (6 + P_ATM) / P_ATM, rel=1e-9)
     # the fill flow: series C of T1, FRL, T2, V1, T3 from 7.013 bar abs to the pressure the load needs
     C, b = series([(3.0, 0.5), (2.5, 0.35), (2.0, 0.5), (1.2, 0.3), (1.8, 0.5)])
-    p_load = 250 / (a_bore * 0.1 * 0.9) + P_ATM
+    p_load = 200 / (a_bore * 0.1 * 0.9) + P_ATM
     assert ext.flow_fill_l_s == pytest.approx(flow_l_s(C, b, 6 + P_ATM, p_load), rel=1e-9)
-    assert one(analyze(pusher(load=250, speed=900)), "speed C1 extend").severity == "fail"
-    warn = analyze(pusher(load=250, speed=600))
+    assert one(analyze(pusher(load=200, speed=900)), "speed C1 extend").severity == "fail"
+    warn = analyze(pusher(load=200, speed=600))
     assert one(warn, "speed C1 extend").severity in ("warn", "fail")
     # a speed requirement with no supply path is a failure, not a crash
-    c2 = pusher(load=250)
+    c2 = pusher(load=200)
     c2.tubes = [t for t in c2.tubes if t.name != "T2"]
     assert one(analyze(c2), "speed C1 extend").severity == "fail" and one(analyze(c2), "C1.CAP fed from supply").severity == "fail"
 
 
 def test_meter_out_limits_the_exhaust_path():
-    with_fc, without = analyze(pusher(load=250)), analyze(pusher(load=250, with_fc=False))
+    with_fc, without = analyze(pusher(load=200)), analyze(pusher(load=200, with_fc=False))
     ext_fc, ext_free = with_fc.cylinders[0].strokes[0], without.cylinders[0].strokes[0]
     assert ext_fc.flow_exhaust_l_s < ext_free.flow_exhaust_l_s and ext_fc.exhaust.C_eff < ext_free.exhaust.C_eff
     assert "FC1" in ext_fc.exhaust.names and "FC1" not in ext_free.exhaust.names
 
 
 def test_air_and_supply_capacity():
-    rep = analyze(pusher(load=250, cycles=20))
+    rep = analyze(pusher(load=200, cycles=20))
     cy = rep.cylinders[0]
     assert cy.air_per_cycle_l == pytest.approx(cy.dead_volume_l + 1.035, abs=0.003) and cy.dead_volume_l > 0 and cy.air_per_minute_l == pytest.approx(cy.air_per_cycle_l * 20)
     assert one(rep, "supply AIR capacity").severity == "pass" and rep.supplies[0].demand_l_min == pytest.approx(cy.air_per_minute_l, abs=0.01)
-    assert one(analyze(pusher(load=250, cycles=20, supply_flow=35)), "supply AIR capacity").severity == "warn"
-    assert one(analyze(pusher(load=250, cycles=20, supply_flow=20)), "supply AIR capacity").severity == "fail"
-    c = pusher(load=250, supply_flow=None)
+    assert one(analyze(pusher(load=200, cycles=20, supply_flow=35)), "supply AIR capacity").severity == "warn"
+    assert one(analyze(pusher(load=200, cycles=20, supply_flow=20)), "supply AIR capacity").severity == "fail"
+    c = pusher(load=200, supply_flow=None)
     assert one(analyze(c), "supply AIR capacity").severity == "warn"
 
 
 def test_pressure_drop_per_tube():
-    c = pusher(load=250, speed=200)
+    c = pusher(load=200, speed=200)
     rep = analyze(c)
     drops = [x for x in rep.checks if x.name.startswith("pressure drop") and "extend" in x.name]
     assert [x.refs[0] for x in drops] == ["T1", "T2", "T3"] and all(x.severity == "pass" for x in drops)
@@ -225,20 +241,20 @@ def test_pressure_drop_per_tube():
 
 
 def test_circuit_validity():
-    c = pusher(load=250)
+    c = pusher(load=200)
     c.tubes = [t for t in c.tubes if t.name != "T3"]                       # the cap side is not fed, and V1's A is open
     rep = analyze(c)
     assert one(rep, "C1.CAP fed from supply").severity == "fail" and one(rep, "C1.CAP can exhaust").severity == "fail"
     assert one(rep, "valve V1 ports").severity == "fail" and "work port A is unconnected" in one(rep, "valve V1 ports").measured
     # a tee with one tube is dead-headed; a regulator connected on one side only too
-    c2 = pusher(load=250)
+    c2 = pusher(load=200)
     n = c2.node("N1")
     c2.tube("T9", n, c2.get("FRL")["OUT"]) if False else None
     c2.regulator("R2", set_bar=4.0)
     c2.tube("T8", c2.get("R2")["IN"], n)
     d = one(analyze(c2), "no dead-headed lines")
     assert d.severity == "fail" and "node N1 has 1 connection" in d.measured and "R2 is connected only at IN" in d.measured
-    assert one(analyze(pusher(load=250)), "no dead-headed lines").severity == "pass"
+    assert one(analyze(pusher(load=200)), "no dead-headed lines").severity == "pass"
     # a 2-position valve whose both positions feed P: the chamber can never vent
     c3 = Circuit()
     air = c3.supply("AIR", 7, 300)
@@ -253,24 +269,24 @@ def test_circuit_validity():
 
 
 def test_estimated_flow_data_is_one_warning():
-    c = pusher(load=250)
+    c = pusher(load=200)
     for t in c.tubes:
         t.C = None
     c.get("V1").C = None
     rep = analyze(c)
     w = one(rep, "flow data estimated")
     assert w.severity == "warn" and {"T1", "T2", "T3", "V1"} <= set(w.refs) and "V1 (" in w.measured
-    assert not [x for x in analyze(pusher(load=250)).checks if x.name == "flow data estimated"]
+    assert not [x for x in analyze(pusher(load=200)).checks if x.name == "flow data estimated"]
 
 
 def test_verify_and_summary():
-    c = pusher(load=250)
+    c = pusher(load=200)
     chk = Checker()
-    chk.at_least("margin", 434 / 250, 1.5)
+    chk.at_least("margin", 434 / 200, 1.5)
     rep = analyze(c, chk)
     assert one(rep, "margin").category == "verify" and rep.ok
     text = summarize(rep)
-    assert text.startswith("Pneumatic circuit 'pusher': 7 components, 5 tubes, 1 cylinder(s)") and "C1: Ø32/12 x 100 mm double-acting at 6 bar; extend 434 N usable vs 250 N" in text
+    assert text.startswith("Pneumatic circuit 'pusher': 7 components, 5 tubes, 1 cylinder(s)") and "C1: Ø32/12 x 100 mm double-acting at 6 bar; extend 434 N usable vs 200 N" in text
     data = circuit_data(c, rep)
     cyl = next(x for x in data["components"] if x["name"] == "C1")
     assert cyl["strokes"][0]["usable_N"] == pytest.approx(434.3, abs=0.2) and data["tubes"][0]["a"] == "AIR.OUT" and data["attached"]["V1.R"] == "S_V1_R.IN"
@@ -280,7 +296,7 @@ def test_verify_and_summary():
 
 
 def test_bom_and_tables():
-    c = pusher(load=250)
+    c = pusher(load=200)
     rows = outputs.bom(c)
     by = {r["description"]: r for r in rows}
     assert any(r["category"] == "cylinder" and r["qty"] == 1 for r in rows) and any(r["category"] == "valve" and "5/2" in r["description"] for r in rows)
@@ -321,7 +337,7 @@ def test_schematic_svg_and_png(tmp_path):
 
 
 def test_edits():
-    c = pusher(load=250)
+    c = pusher(load=200)
     notes = E.apply_edits(c, [
         {"op": "set_component", "component": "C1", "bore_mm": 40, "load_N": 500},
         {"op": "set_component", "component": "V1", "cls": "4/2", "C": 1.5},

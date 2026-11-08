@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from ..checks import Check, check as _check, level
+from ..checks import switched_off, Check, check as _check, level
 from .model import G, KGCM_PER_NM, Joint, Mechanism, MechanismError
 
 WARN_FRACTION = 0.8
@@ -237,8 +237,8 @@ def run_checks(m: Mechanism) -> tuple[list[Check], list[JointInfo], list[TargetI
         kind = "torque" if j.type == "revolute" else "force"
         what = f"{kind} joint {j.name}"
         if j.actuator is None:
-            checks.append(_check(kind, what, "warn", f"{load:.2f} {info.load_unit} required at the worst pose ({_fmt_pose(pose, m)}); no actuator declared, so it is not graded",
-                                 "actuator=Actuator(stall_kgcm=..., speed_deg_s=...)", [j.name]))
+            checks.append(switched_off(_check(kind, what, "warn", f"{load:.2f} {info.load_unit} required at the worst pose ({_fmt_pose(pose, m)}); no actuator declared, so it is not graded",
+                                              "actuator=Actuator(stall_kgcm=..., speed_deg_s=...)", [j.name]), "actuator"))
             infos.append(info)
             continue
         a = j.actuator
@@ -279,7 +279,8 @@ def run_checks(m: Mechanism) -> tuple[list[Check], list[JointInfo], list[TargetI
             checks.append(_check("speed", f"speed joint {j.name}", "pass", f"{avail:.0f} {unit} at the joint; {rng / avail:.2f} s across its {rng:g} {j.unit} range (no requirement declared)", "", [j.name]))
             continue
         if avail is None:
-            checks.append(_check("speed", f"speed joint {j.name}", "warn", f"{req:g} {unit} required; the actuator declares no speed, so it is not graded", "speed_deg_s= / speed_mm_s= on the actuator", [j.name]))
+            checks.append(switched_off(_check("speed", f"speed joint {j.name}", "warn", f"{req:g} {unit} required; the actuator declares no speed, so it is not graded",
+                                              "speed_deg_s= / speed_mm_s= on the actuator", [j.name]), "speed_deg_s" if j.type == "revolute" else "speed_mm_s"))
             continue
         sev = level(req, avail, WARN_FRACTION)
         checks.append(_check("speed", f"speed joint {j.name}", sev, f"{req:g} {unit} required vs {avail:.0f} {unit} available ({info.actuator}{' through the gearing' if j.actuator and j.actuator.gear_ratio != 1 else ''}), {avail / req:.2f}x",
@@ -289,9 +290,21 @@ def run_checks(m: Mechanism) -> tuple[list[Check], list[JointInfo], list[TargetI
     for j, info in zip(moving, infos):
         lo, hi = j.limit
         rng = hi - lo
+        field_name = "travel_deg" if j.type == "revolute" else "travel_mm"
         if info.travel is not None and rng > info.travel + 1e-9:
             checks.append(_check("limits", f"joint limits {j.name}", "fail", f"declared range {lo:g}..{hi:g} {j.unit} ({rng:g}) exceeds the actuator's travel of {info.travel:g} {j.unit}",
                                  f"range <= {info.travel:g} {j.unit}", [j.name]))
+        elif info.travel is None and j.actuator is not None and j.actuator.continuous:
+            checks.append(switched_off(_check("limits", f"joint limits {j.name}", "pass",
+                                              f"{lo:g}..{hi:g} {j.unit} (range {rng:g}), home {j.home:g}; {j.actuator.name} is declared continuous "
+                                              f"(continuous=True): no travel to grade the range against, so position feedback must come from elsewhere",
+                                              "", [j.name]), f"{field_name} (declared continuous)"))
+        elif info.travel is None and j.actuator is not None:
+            checks.append(switched_off(_check("limits", f"joint limits {j.name}", "warn",
+                                              f"joint travel: {j.actuator.name} declares no {field_name}, so the {lo:g}..{hi:g} {j.unit} "
+                                              f"range (range {rng:g}) is not graded against what the actuator can turn",
+                                              f"{field_name}= from the actuator's datasheet (a hobby servo: 180), or continuous=True for one that turns without end",
+                                              [j.name]), field_name))
         else:
             checks.append(_check("limits", f"joint limits {j.name}", "pass", f"{lo:g}..{hi:g} {j.unit} (range {rng:g}), home {j.home:g}" + (f", within the actuator's {info.travel:g} {j.unit} travel" if info.travel is not None else ""), "", [j.name]))
 

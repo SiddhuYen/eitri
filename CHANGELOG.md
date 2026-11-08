@@ -3,6 +3,37 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
+## Unreleased: sourced figure fixes, two new electronics checks, checks switched off are reported
+
+Every changed figure cites its document, revision and page in the code. Where sources disagree the conservative figure
+is used (the lower for a limit, the higher for a draw).
+
+### Changed
+
+- **Fasteners**: countersinks take the ISO 10642:2020 head diameter (M3 6.72, M5 11.2, M6 13.44, M8 17.92, M10 22.4,
+  M12 26.88 mm; M4 8.96). Heat-set insert holes follow ruthex: M2.5 4.0 mm, M8 9.6 mm.
+- **Bearings**: a bare miniature bearing name is the open bearing (683 is 2 mm wide); `683ZZ` / `-2RS` give the
+  shielded width (3 mm). Eleven sizes changed (NSK E126i).
+- **Harness**: Micro-Fit 3.0 is rated by wire size and by the number of powered circuits (Molex PS-43045 Rev P,
+  wire-to-wire: 18 AWG 7 A at 2 circuits down to 5 A at 24). 40 AWG chassis rating 0.09 A. FASTON cites Rev C and
+  adds 10 AWG 24 A.
+- **Pneumatics**: the load-ratio limit follows the cylinder's new `duty=`: `"moving"` 0.5 (the default),
+  `"static"` 0.7 (clamping), `"guided"` 1.0 (SMC). A regulator with no rating defaults to 10 bar (SMC AR). Default
+  flow estimates: silencer C 1.0 (SMC AN05), flow control C 0.3 (SMC AS M5); a speed controller's free-flow
+  direction passes no more than its throttle.
+- **Servos**: SG90 draws 2 A at stall (the higher of TowerPro's "0.5A - 2A"). STS3215 16.5 kg·cm stall, 4 rated at
+  6 V (Feetech spec sheet). An actuator with no published continuous rating is assumed at 1/5 of stall (was 1/3).
+
+### Added
+
+- **Electronics**: `c.battery(name, chemistry, cells)` and `v_max=` on a supply. A battery straight on VIN is
+  graded at its full charge (a 12 V lead-acid on charge, 14.5 V, fails an Uno's 7-12 V); a battery on a board's 5V
+  pin fails. A MOSFET gate driven from an Uno or Nano pin with no pull-down is a warning (the pin floats through reset).
+- **Checks switched off by an unset input are reported**: an actuator with no `travel_deg`, a supply with no rating,
+  a load with no voltage range and the like. The check is a warning whose text starts "not run:", the summary has a
+  "Not run" line, and the build's `result.json` report lists them under `checks_not_run`.
+  `Actuator(continuous=True)` declares an actuator that turns without end.
+
 ## 0.7.0: eitri as a plugin in your own agent
 
 eitri now also runs inside the agent you already use (Claude Code, Codex, Cursor), on that agent's own subscription. In

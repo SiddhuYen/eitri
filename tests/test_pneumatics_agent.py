@@ -12,7 +12,7 @@ from eitri.project import Project
 
 MODEL = '''from eitri.pneumatics import *
 
-PARAMS = dict(p_bar=6.0, bore_mm=32, load_N=250)
+PARAMS = dict(p_bar=6.0, bore_mm=32, load_N=200)        # load ratio 0.41: under SMC's 0.5 for a moving load
 
 
 def build(p):
@@ -106,7 +106,7 @@ def test_prompt_and_selection(tmp_path):
     pr.build(note="first", render=False)
     from eitri.agent.hub import AgentHub
     text = AgentHub(pr, lambda h: None).compose("bigger", ["component:C1", "tube:T3", "component:V1", "tube:nope"])
-    assert "- C1: cylinder Ø32/12 x 100 mm, double-acting, load 250 N, speed 200 mm/s, 20 cycles/min; 6 bar at the cylinder; extend 434 N usable vs 250 N" in text
+    assert "- C1: cylinder Ø32/12 x 100 mm, double-acting, load 200 N, speed 200 mm/s, 20 cycles/min; 6 bar at the cylinder; extend 434 N usable vs 200 N" in text
     assert "- tube T3: V1.A -> C1.CAP, 6 mm bore, 1.5 m, 2 fittings, C 1.8" in text and "- V1: 5/2 valve, solenoid / spring return, C 1.2 b 0.3" in text and "- tube:nope (no longer exists)" in text
 
 

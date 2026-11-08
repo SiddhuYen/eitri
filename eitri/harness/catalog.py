@@ -37,15 +37,15 @@ CATALOG: dict[str, ConnectorSpec] = {s.key: s for s in [
     ConnectorSpec("JST-XH", "JST XH 2.50 mm wire-to-board housing", 2.5, 3.0, "crimp", "SXH-001T-P0.6", "XHP-{n}", 2.5, 2, awg=(22, 30)),
     ConnectorSpec("JST-PH", "JST PH 2.00 mm wire-to-board housing", 2.0, 2.0, "crimp", "SPH-002T-P0.5S", "PHR-{n}", 2.0, 2, awg=(24, 32)),
     ConnectorSpec("DUPONT-2.54", "Dupont 2.54 mm housing", 2.54, 3.0, "crimp", "Dupont 2.54 crimp contact", "", 2.5, 2, awg=(22, 32)),
-    ConnectorSpec("MOLEX-MICROFIT-3.0", "Molex Micro-Fit 3.0 housing", 3.0, 8.5, "crimp", "43030-0001", "43645-{n:02d}00", 3.5, 2,
+    ConnectorSpec("MOLEX-MICROFIT-3.0", "Molex Micro-Fit 3.0 housing", 3.0, 7.0, "crimp", "43030-0001", "43645-{n:02d}00", 3.5, 2,
                   by_wire=True, awg=(18, 30), pn_gender="female", male_terminal_pn="43031-0001", pn_max=12),
     ConnectorSpec("XT30", "Amass XT30 bullet connector", 5.0, 20.0, "solder", "", "", 6.0, 2),
     ConnectorSpec("XT60", "Amass XT60 bullet connector", 7.2, 30.0, "solder", "", "", 8.0, 2, burst_a=60.0),
     ConnectorSpec("XT90", "Amass XT90 bullet connector", 10.0, 45.0, "solder", "", "", 10.0, 2, burst_a=90.0),
     ConnectorSpec("RING", "ring terminal", None, None, "ring", "ring terminal (size to the stud)", "", 6.0),
-    ConnectorSpec("SPADE-2.8", "2.8 mm spade (Faston) terminal", None, 20.0, "spade", "2.8 mm spade terminal", "", 5.0, by_wire=True),
-    ConnectorSpec("SPADE-4.8", "4.8 mm spade (Faston) terminal", None, 20.0, "spade", "4.8 mm spade terminal", "", 5.5, by_wire=True),
-    ConnectorSpec("SPADE-6.3", "6.3 mm spade (Faston) terminal", None, 20.0, "spade", "6.3 mm spade terminal", "", 6.0, by_wire=True),
+    ConnectorSpec("SPADE-2.8", "2.8 mm spade (Faston) terminal", None, 24.0, "spade", "2.8 mm spade terminal", "", 5.0, by_wire=True),
+    ConnectorSpec("SPADE-4.8", "4.8 mm spade (Faston) terminal", None, 24.0, "spade", "4.8 mm spade terminal", "", 5.5, by_wire=True),
+    ConnectorSpec("SPADE-6.3", "6.3 mm spade (Faston) terminal", None, 24.0, "spade", "6.3 mm spade terminal", "", 6.0, by_wire=True),
     ConnectorSpec("BARE", "bare / tinned end (soldered or screwed by the user)", None, None, "bare", "", "", 6.0),
     ConnectorSpec("SOLDER", "soldered to a pad or pin", None, None, "bare", "", "", 3.0),
     # development boards: wires end in Dupont 2.54 male contacts pushed into the board's female headers. No per-pin rating here:
@@ -70,14 +70,16 @@ RATING_SOURCES = {
     "JST-PH": "JST PH series page (jst-mfg.com, series 199): current rating 2 A AC/DC (AWG #24)",
     "DUPONT-2.54": "Amphenol FCI Mini-PV crimp contacts, the Berg (Du Pont) line generic 'Dupont' contacts copy: 3 A "
                    "(48235-000LF, 22-26 AWG, as listed by Heilind / RS). Unbranded copies publish no rating of their own",
-    "MOLEX-MICROFIT-3.0": "Molex Micro-Fit 3.0 crimp terminals, by the wire crimped in: see MICROFIT_AMPS_BY_AWG",
+    "MOLEX-MICROFIT-3.0": "Molex PS-43045 Rev P (2017/10/27) s4.2: by the wire crimped in and the number of powered circuits, "
+                          "wire-to-wire, 30 C rise: see MICROFIT_AMPS_BY_AWG_CIRCUITS",
     "XT30": "Amass XT30U-M product page (china-amass.net): current rating 20 A (16 AWG, temperature rise <= 85 K); no short-time "
             "rating published",
-    "XT60": "Amass XT60 datasheet V1.2: rated current 30 A, instantaneous 60 A (the XT60H product page gives 35 A at 12 AWG; the "
-            "lower figure is used). Holybro's 'Connector & Wire Rating' gives the same 30 A / 60 A (< 1 minute)",
+    "XT60": "Amass XT60 datasheet V1.2: rated current 30 A, instantaneous 60 A (Amass's current XT60-M page, china-amass.net/"
+            "xt60-m-product, re-read 2026-11-07, gives 'Current rating 35A (12AWG)', 'Rated voltage 80V DC', 'Plug Life 20 times'; "
+            "the XT60H page also 35 A at 12 AWG; the lower figure, 30 A, is used). Holybro's 'Connector & Wire Rating' gives the same 30 A / 60 A (< 1 minute)",
     "XT90": "Amass XT90E-M product page (china-amass.net): current rating 45 A (10 AWG, temperature rise <= 85 K); burst 90 A "
             "(1 minute, temperature rise < 60 C) from Holybro's 'Genuine AMASS Connector Rating' table",
-    "SPADE-2.8": "TE product specification 108-106496 (110, 187 & 250 Series FASTON Terminals): 3-20 A by the wire crimped in, "
+    "SPADE-2.8": "TE product specification 108-106496 Rev C (27 Jun 2025, FASTON Terminals): 3-24 A by the wire crimped in, "
                  "see FASTON_AMPS_BY_AWG",
     "SPADE-4.8": "TE product specification 108-106496: as SPADE-2.8",
     "SPADE-6.3": "TE product specification 108-106496: as SPADE-2.8",
@@ -145,6 +147,9 @@ def _rating_text(s: ConnectorSpec) -> str:
         return "supply pins: power budget"
     if s.rating_a is None:
         return "wire-limited"
+    if s.key in AMPS_BY_AWG_CIRCUITS:
+        allv = [a for row in AMPS_BY_AWG_CIRCUITS[s.key].values() for a in row.values()]
+        return f"{min(allv):g}-{max(allv):g} A by wire size and powered circuits (2-24)"
     if s.by_wire:
         return f"{min(AMPS_BY_AWG[s.key].values()):g}-{max(AMPS_BY_AWG[s.key].values()):g} A by wire size"
     return f"{s.rating_a:g} A" + (f" ({s.burst_a:g} A < 1 min)" if s.burst_a else "")
@@ -162,11 +167,12 @@ def catalog_table() -> str:
 
 # Chassis-wiring ampacity (single conductor in free air, not in a bundle), amperes, even AWG sizes: the "maximum amps for
 # chassis wiring" column of the Handbook of Electronic Tables and Formulas for American Wire Gauge, as tabulated by
-# PowerStream (powerstream.com/Wire_Size.htm, fetched 2026-10-26; it calls the column conservative, for wiring in air).
+# PowerStream (powerstream.com/Wire_Size.htm, page dated April 18 2023, fetched 2026-10-26; it calls the column conservative,
+# for wiring in air). 40 AWG re-read 2026-11-07: "0.09" (was 0.081 here).
 # Odd sizes are the geometric mean of their neighbours.
 _CHASSIS_AMPS = {
     -3: 380, -2: 328, -1: 283, 0: 245, 1: 211, 2: 181, 3: 158, 4: 135, 6: 101, 8: 73, 10: 55, 12: 41, 14: 32,
-    16: 22, 18: 16, 20: 11, 22: 7, 24: 3.5, 26: 2.2, 28: 1.4, 30: 0.86, 32: 0.53, 34: 0.33, 36: 0.21, 38: 0.13, 40: 0.081,
+    16: 22, 18: 16, 20: 11, 22: 7, 24: 3.5, 26: 2.2, 28: 1.4, 30: 0.86, 32: 0.53, 34: 0.33, 36: 0.21, 38: 0.13, 40: 0.09,
 }
 AWG_MIN, AWG_MAX = -3, 40            # -3 is 4/0
 # ohm-circular-mil per foot, the voltage-drop constant for copper at a 75 C conductor temperature: NFPA 70 (NEC) Chapter 9
@@ -198,22 +204,40 @@ def awg_ampacity(n: int) -> float:
 
 
 # FASTON (spade) terminals are rated by the wire crimped into them, whatever the tab width: TE product specification
-# 108-106496 Rev A1 (110, 187 & 250 Series FASTON Terminals), ratings 3-20 A, and its temperature-rising test currents per
-# wire size at a 30 C rise (UL 310 / IEC 60512-5-1). Odd sizes take the next thinner size's figure; wires outside the table
+# 108-106496 Rev C (27 Jun 2025; 110, 125, 187, 205 & 250 Series FASTON Terminals), s3.2 "Current: 3 - 24 Amps", and its
+# temperature-rising test currents per wire size at a 30 C rise (UL 310 Para 6.5.2 / IEC 60512-5-1): 24 AWG 3, 22 AWG 3,
+# 20 AWG 5, 18 AWG 7, 16 AWG 10, 14 AWG 15, 12 AWG 20, 10 AWG 24 A (re-read 2026-11-07; Rev A1 stopped at 12 AWG 20 A). Odd sizes take the next thinner size's figure; wires outside the table
 # take its nearest end.
-FASTON_AMPS_BY_AWG = {24: 3.0, 22: 3.0, 20: 5.0, 18: 7.0, 16: 10.0, 14: 15.0, 12: 20.0}
+FASTON_AMPS_BY_AWG = {24: 3.0, 22: 3.0, 20: 5.0, 18: 7.0, 16: 10.0, 14: 15.0, 12: 20.0, 10: 24.0}
 
 
-# Micro-Fit 3.0 crimp terminals by wire size (distributor listings, fetched 2026-10-26): female 43030-0039 for 18 AWG, 8.5 A
-# (element14); 43030-0001 for 20-24 AWG, listed at 5 A (Farnell), 7 A (element14) and 8.5 A (RS): the lowest is used;
-# 43030-0004 for 26-30 AWG, 5 A. Male: 43031-0001 for 20-24 AWG (element14, Heilind).
-MICROFIT_AMPS_BY_AWG = {18: 8.5, 20: 5.0, 22: 5.0, 24: 5.0, 26: 5.0, 28: 5.0, 30: 5.0}
+# Micro-Fit 3.0 current per contact by wire size AND circuit count: Molex PS-43045 Product Specification (Micro-Fit dual row
+# connectors), Rev P, 2017/10/27, section 4.2 "Current derating reference information" (read 2026-11-07 from the copy at
+# https://cdn.eicom.ru/media/PDF/183992.pdf; molex.com times out). Notes: 30 C temperature rise, all circuits powered,
+# reference only. The table gives wire-to-wire (W-W) and wire-to-board (W-B) columns at 2, 6, 12 and 24 circuits; W-W is
+# lower or equal everywhere, so it is used (the conservative figure; a harness mates wire to wire). The circuits graded are
+# the connector's current-carrying pins, rounded up to the next tabulated count. These replace the distributor listings
+# used up to 0.7.0 (18 AWG 8.5 A, 20-30 AWG 5 A), which hold only for 2 circuits wire-to-board and 18-22 AWG.
+#                       2-ckt 6-ckt 12-ckt 24-ckt   (W-W, amperes)
+MICROFIT_AMPS_BY_AWG_CIRCUITS = {
+    18: {2: 7.0, 6: 6.0, 12: 5.5, 24: 5.0},
+    20: {2: 6.5, 6: 5.0, 12: 4.5, 24: 4.0},
+    22: {2: 5.5, 6: 4.0, 12: 3.5, 24: 3.0},
+    24: {2: 5.0, 6: 4.0, 12: 3.0, 24: 2.0},
+    26: {2: 4.0, 6: 3.0, 12: 2.5, 24: 1.5},
+    28: {2: 3.0, 6: 2.0, 12: 2.0, 24: 1.0},
+    30: {2: 3.0, 6: 2.0, 12: 2.0, 24: 1.0},
+}
+MICROFIT_AMPS_BY_AWG = {n: row[2] for n, row in MICROFIT_AMPS_BY_AWG_CIRCUITS.items()}     # the 2-circuit (highest) figures
+# Terminals: female 43030-0039 for 18 AWG, 43030-0001 for 20-24 AWG, 43030-0004 for 26-30 AWG; male 43031-0001 for 20-24 AWG
+# (element14, Heilind).
 MICROFIT_TERMINALS = {"female": {18: "43030-0039", **{n: "43030-0001" for n in (20, 21, 22, 23, 24)},
                                  **{n: "43030-0004" for n in (26, 27, 28, 29, 30)}},
                       "male": {n: "43031-0001" for n in (20, 21, 22, 23, 24)}}
 
 AMPS_BY_AWG = {"SPADE-2.8": FASTON_AMPS_BY_AWG, "SPADE-4.8": FASTON_AMPS_BY_AWG, "SPADE-6.3": FASTON_AMPS_BY_AWG,
                "MOLEX-MICROFIT-3.0": MICROFIT_AMPS_BY_AWG}
+AMPS_BY_AWG_CIRCUITS = {"MOLEX-MICROFIT-3.0": MICROFIT_AMPS_BY_AWG_CIRCUITS}
 TERMINALS_BY_AWG = {"MOLEX-MICROFIT-3.0": MICROFIT_TERMINALS}
 
 
@@ -221,15 +245,33 @@ def gauge_awg(gauge: "Gauge") -> int:
     return gauge.awg if gauge.awg is not None else nearest_awg(gauge.mm2)
 
 
-def wire_rating(spec: ConnectorSpec, gauge: "Gauge") -> float:
+def wire_rating(spec: ConnectorSpec, gauge: "Gauge", circuits: int | None = None) -> float:
     """A by-wire connector's per-pin rating for this wire: the table's figure, an odd size taking the next thinner size's,
-    a wire outside the table its nearest end."""
-    table = AMPS_BY_AWG[spec.key]
+    a wire outside the table its nearest end. A family rated by circuit count too (Micro-Fit) takes the column for
+    `circuits` current-carrying pins, rounded up to the next tabulated count (None: the fewest, the highest figure)."""
     n = gauge_awg(gauge)
+    by_ckt = AMPS_BY_AWG_CIRCUITS.get(spec.key)
+    table = AMPS_BY_AWG[spec.key]
     if n in table:
-        return table[n]
-    thinner = [k for k in sorted(table) if k > n]
-    return table[thinner[0]] if thinner else table[max(table)]
+        key = n
+    else:
+        thinner = [k for k in sorted(table) if k > n]
+        key = thinner[0] if thinner else max(table)
+    if by_ckt is None or circuits is None:
+        return table[key]
+    row = by_ckt[key]
+    cols = sorted(row)
+    col = next((k for k in cols if k >= circuits), cols[-1])
+    return row[col]
+
+
+def circuit_column(spec: ConnectorSpec, circuits: int) -> int | None:
+    """The tabulated circuit count wire_rating() used for `circuits` powered pins (None: not rated by circuit count)."""
+    by_ckt = AMPS_BY_AWG_CIRCUITS.get(spec.key)
+    if by_ckt is None:
+        return None
+    cols = sorted(next(iter(by_ckt.values())))
+    return next((k for k in cols if k >= circuits), cols[-1])
 
 
 def awg_label(n: int) -> str:

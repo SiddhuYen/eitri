@@ -25,11 +25,12 @@ m.joint(name, parent, child, type="revolute", axis=(0, 0, 1), at=None, limit_deg
     type "prismatic" slides along `axis` by the joint value in mm; type "fixed" is a rigid attachment (no limits)
 
 Actuator(name, stall_kgcm=None, rated_kgcm=None, stall_N=None, rated_N=None, speed_deg_s=None, speed_mm_s=None,
-         gear_ratio=1, efficiency=1, travel_deg=None, travel_mm=None, mass_g=0)
+         gear_ratio=1, efficiency=1, travel_deg=None, travel_mm=None, mass_g=0, continuous=False)
     the motor's own figures (at its shaft); gear_ratio > 1 multiplies torque (x efficiency) and divides speed at the joint;
-    rated_* = recommended continuous: give the datasheet's when it has one; else the catalog's (STS3215: 6.5 kg·cm), else
-    1/3 of stall, an assumption the checks name (MG996R, SG90 publish stall only); travel = the actuator's own
-    range (180 for a hobby servo; None = continuous); mass_g sits on the parent link at the joint
+    rated_* = recommended continuous: give the datasheet's when it has one; else the catalog's (STS3215: 4 kg·cm of 16.5 stall at 6 V), else
+    1/5 of stall, an assumption the checks name (MG996R, SG90 publish stall only; Feetech STS3215 0.24, ROBOTIS 1/5); travel = the actuator's own
+    range (180 for a hobby servo); without it the joint-travel check does not run and the report says so (a WARN, listed under
+    "Not run"); continuous=True for one that turns without end; mass_g sits on the parent link at the joint
 
 m.payload(mass_g, link=None, at=None)       a point mass the tip carries (default: at the tip)
 m.mass(name, link, mass_g, at=None)         an extra point mass on a link (a gripper, a camera), at a point in the link's frame
@@ -81,17 +82,19 @@ PARAMS = dict(upper_mm=120.0, fore_mm=100.0, turret_mm=40.0, payload_g=50.0)
 
 
 def build(p):
-    m = Mechanism("3-DOF arm", "yaw, shoulder, elbow on hobby servos")
+    m = Mechanism("3-DOF arm", "yaw on a hobby servo, shoulder and elbow on serial-bus servos")
     m.mount("edge")                                                                  # clamped at the bench edge: it reaches below its base
     m.link("base", fixed=True)
     m.link("turret", length_mm=p.turret_mm, mass_g=70, direction=(0, 0, 1))      # stands up from the base
     m.link("upper", length_mm=p.upper_mm, mass_g=60)                               # home pose: extended along +X
     m.link("fore", length_mm=p.fore_mm, mass_g=30)
-    big = Actuator("MG996R", stall_kgcm=9.4, speed_deg_s=400, travel_deg=180, mass_g=55)
-    small = Actuator("MG90S", stall_kgcm=2.2, speed_deg_s=600, travel_deg=180, mass_g=14)
-    m.joint("yaw", "base", "turret", axis=(0, 0, 1), at=(0, 0, 0), limit_deg=(-90, 90), actuator=big)
-    m.joint("shoulder", "turret", "upper", axis=(0, -1, 0), limit_deg=(-50, 100), actuator=big)    # +angle lifts the arm
-    m.joint("elbow", "upper", "fore", axis=(0, -1, 0), limit_deg=(-10, 120), actuator=small)
+    yaw = Actuator("MG996R", stall_kgcm=9.4, speed_deg_s=400, travel_deg=180, mass_g=55)         # vertical axis: no gravity load
+    # the lifting joints carry the arm: a servo with a published continuous rating (STS3215: 4 of 16.5 kg·cm at 6 V; the
+    # catalog supplies the rating), 0.238 s/60° = 252 °/s, 360° magnetic-encoder travel
+    lift = Actuator("STS3215", stall_kgcm=16.5, speed_deg_s=252, travel_deg=360, mass_g=55)
+    m.joint("yaw", "base", "turret", axis=(0, 0, 1), at=(0, 0, 0), limit_deg=(-90, 90), actuator=yaw)
+    m.joint("shoulder", "turret", "upper", axis=(0, -1, 0), limit_deg=(-50, 100), actuator=lift)   # +angle lifts the arm
+    m.joint("elbow", "upper", "fore", axis=(0, -1, 0), limit_deg=(-10, 120), actuator=lift)
     m.payload(mass_g=p.payload_g)
     m.target("pick", (150, 60, 20))
     m.target("place", (60, 150, 60))

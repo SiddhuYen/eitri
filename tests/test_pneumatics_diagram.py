@@ -194,13 +194,13 @@ def test_an_undeclared_exhaust_port_is_named_when_a_chamber_cannot_vent():
     assert next(x for x in analyze(c).checks if x.name == "C1.CAP can exhaust").severity == "pass"
 
 
-def _straight(supply_bar, regulator_bar=None, **valve_kw):
+def _straight(supply_bar, regulator_bar=None, regulator_max_bar=None, **valve_kw):
     from eitri.pneumatics import Circuit
     c = Circuit("pressure")
     air = c.supply("AIR", pressure_bar=supply_bar, flow_l_min=300)
     src = air["OUT"]
     if regulator_bar is not None:
-        reg = c.regulator("REG", set_bar=regulator_bar)
+        reg = c.regulator("REG", set_bar=regulator_bar, max_bar=regulator_max_bar)
         c.tube("T0", src, reg["IN"], id_mm=6, length_m=1)
         src = reg["OUT"]
     v = c.valve("V1", "5/2", actuation="solenoid", returns="spring", **valve_kw)
@@ -224,9 +224,12 @@ def test_a_supply_above_a_downstream_rating_fails_and_a_regulator_fixes_it():
     # with the default valve (SMC SY3000, 7 bar) the valve is the lowest-rated and is named first, the cylinder too
     both = pressure(_straight(12))["pressure ratings downstream of AIR"]
     assert both.severity == "fail" and "exceeds V1's 7 bar" in both.measured and "also over: C1 (10 bar)" in both.measured
-    # the same with a regulator set to 6 bar: the 12 bar only reaches the regulator (16 bar inlet, Festo LR-D-MINI)
-    ok = pressure(_straight(12, regulator_bar=6))
-    assert ok["pressure ratings downstream of AIR"].severity == "pass" and "REG's 16 bar" in ok["pressure ratings downstream of AIR"].measured
+    # a regulator with no rating of its own defaults to 10 bar (SMC AR20-AR60, 1.0 MPa): 12 bar is over it
+    reg10 = pressure(_straight(12, regulator_bar=6))["pressure ratings downstream of AIR"]
+    assert reg10.severity == "fail" and "exceeds REG's 10 bar (default: SMC AR20-AR60" in reg10.measured
+    # one rated for it (Festo LR-D-MINI, 16 bar inlet, given as max_bar): the 12 bar only reaches the regulator
+    ok = pressure(_straight(12, regulator_bar=6, regulator_max_bar=16))
+    assert ok["pressure ratings downstream of AIR"].severity == "pass" and "REG's 16 bar (as given)" in ok["pressure ratings downstream of AIR"].measured
     assert ok["pressure ratings downstream of REG"].severity == "pass" and "V1's 7 bar" in ok["pressure ratings downstream of REG"].measured
     # a rating from the part's own datasheet wins over the default; silencers on the exhaust are never reached by supply pressure
     c = _straight(6)

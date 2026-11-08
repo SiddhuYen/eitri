@@ -79,9 +79,9 @@ def _esp32_pins() -> dict:
 BOARDS = {
     "uno": dict(title="Arduino Uno R3", pins=lambda: _board_pins(14, 6, pwm=(3, 5, 6, 9, 10, 11), sda="A4", scl="A5"),
                 spec=dict(key="uno", vdd=5.0, logic_rail="5V", pin_limit_A=0.020, total_limit_A=0.200, vin_range=(7.0, 12.0), v3_from_5v=True,
-                          wire_pullups=(20_000.0, 50_000.0)),
+                          wire_pullups=(20_000.0, 50_000.0), v5_max=5.5),
                 srcs=dict(pin_limit_A="arduino-uno", total_limit_A="atmega328p", vin_range="arduino-uno", vdd="atmega328p", v3_from_5v="arduino-uno-sch",
-                          wire_pullups="arduino-wire-avr")),
+                          wire_pullups="arduino-wire-avr", v5_max="arduino-uno")),
     "nano": dict(title="Arduino Nano", pins=lambda: _board_pins(14, 8, pwm=(3, 5, 6, 9, 10, 11), sda="A4", scl="A5", input_only=("A6", "A7")),
                  spec=dict(key="nano", vdd=5.0, logic_rail="5V", pin_limit_A=0.020, total_limit_A=0.200, vin_range=(7.0, 12.0),
                            wire_pullups=(20_000.0, 50_000.0)),
@@ -154,8 +154,15 @@ MODULES = {
                     note="5 V, 15 mA; ECHO is a 5 V output: too high for a 3.3 V input. VCC range 4.5-5.5 V is an ASSUMPTION (the datasheet says DC 5 V)"),
 }
 
+# Battery chemistries for c.battery(): volts per cell, nominal and at full charge (what a board on it must take).
+BATTERIES = {
+    "li-ion": dict(nominal=3.6, full=4.2, src="molicel-p26a"),
+    "lipo": dict(nominal=3.6, full=4.2, src="molicel-p26a"),          # lithium-ion polymer: the same 4.2 V charge limit
+    "lead-acid": dict(nominal=2.0, full=round(14.5 / 6, 4), src="yuasa-np7-12"),
+}
+
 SERVOS = {
-    "SG90": dict(title="TowerPro SG90 micro servo", stall=0.5, v=(4.8, 6.0), src="towerpro-sg90"),
+    "SG90": dict(title="TowerPro SG90 micro servo", stall=2.0, v=(4.8, 6.0), src="towerpro-sg90"),     # the higher draw of TowerPro's "0.5A - 2A"
     "MG996R": dict(title="TowerPro MG996R servo", stall=2.5, v=(4.8, 6.6), src="towerpro-mg996r"),     # the higher draw, the narrower range
 }
 

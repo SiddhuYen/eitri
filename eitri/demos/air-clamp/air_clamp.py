@@ -11,7 +11,8 @@ def build(p):
     frl = c.frl("FRL", set_bar=p.p_bar, C=2.5, b=0.35)
     v = c.valve("V1", "5/2", actuation="solenoid", returns="spring", C=1.0, b=0.3)
     fc = c.flow_control("FC1", meter="out", C=0.5, b=0.3)
-    cyl = c.cylinder("C1", bore_mm=p.bore_mm, rod_mm=p.rod_mm, stroke_mm=p.stroke_mm, load_N=p.load_N, speed_mm_s=p.speed, cycles_per_min=p.cycles_per_min)
+    cyl = c.cylinder("C1", bore_mm=p.bore_mm, rod_mm=p.rod_mm, stroke_mm=p.stroke_mm, load_N=p.load_N, speed_mm_s=p.speed, cycles_per_min=p.cycles_per_min,
+                     duty="static")                                       # a clamp: SMC's static operation, load ratio up to 0.7
     c.tube("T1", air["OUT"], frl["IN"], id_mm=8, length_m=2.0)
     c.tube("T2", frl["OUT"], v["P"], id_mm=6, length_m=1.0)
     c.tube("T3", v["A"], cyl["CAP"], id_mm=6, length_m=1.5)

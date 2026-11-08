@@ -5,6 +5,8 @@ Mirrors eitri/report.py: `analyze()` runs the built-in checks and the model's ow
 """
 from __future__ import annotations
 
+from ..checks import checks_not_run, not_run_line
+
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
@@ -41,7 +43,9 @@ class HarnessReport:
         return [c for c in self.checks if c.severity == "warn"]
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        d = asdict(self)
+        d["checks_not_run"] = checks_not_run(self.checks)     # checks switched off by an unset input
+        return d
 
 
 def analyze(h: Harness, checker: Checker | None = None) -> HarnessReport:
@@ -66,6 +70,9 @@ def summarize(rep: HarnessReport) -> str:
     lines = [f"Harness {rep.name!r}: {rep.connectors} connectors, {rep.wires} wires, {rep.splices} splices, {len(rep.nets)} nets; "
              f"{rep.total_wire_mm / 1000:.2f} m of wire",
              f"Checks: {n_pass} pass, {n_warn} warn, {n_fail} FAIL"]
+    _nr = not_run_line(rep.checks)
+    if _nr:
+        lines.append(_nr)
     if rep.nets:
         lines.append("Nets:")
         for n in rep.nets:

@@ -17,6 +17,7 @@ class Check(CheckResult):
     severity: str = "pass"                       # pass | warn | fail
     category: str = ""
     refs: list[str] = field(default_factory=list)      # ids of what the check is about (an editor highlights them)
+    not_run: list[str] = field(default_factory=list)   # the model inputs left unset (None) that switch this check off; empty when it ran
 
     def line(self) -> str:
         mark = {"pass": "PASS", "warn": "WARN", "fail": "FAIL"}[self.severity]
@@ -24,9 +25,34 @@ class Check(CheckResult):
         return f"[{mark}] {self.name}: {self.measured}{exp}"
 
 
-def check(category: str, name: str, severity: str, measured: str, expected: str = "", refs: Iterable[str] = ()) -> Check:
+def check(category: str, name: str, severity: str, measured: str, expected: str = "", refs: Iterable[str] = (),
+          not_run: Iterable[str] = ()) -> Check:
     return Check(name=name, ok=severity != "fail", measured=measured, expected=expected, severity=severity, category=category,
-                 refs=list(dict.fromkeys(refs)))
+                 refs=list(dict.fromkeys(refs)), not_run=list(not_run))
+
+
+def switched_off(c: Check, *inputs: str) -> Check:
+    """Mark a check as not run because these model inputs are unset (None): its text says "not run: ..." and the build
+    report lists it under checks_not_run, so an edit that switches a check off is visible (hosted escalates on it)."""
+    c.not_run = list(dict.fromkeys(list(c.not_run) + list(inputs)))
+    if not c.measured.startswith("not run: "):
+        c.measured = "not run: " + c.measured
+    return c
+
+
+def checks_not_run(checks: Iterable[Check]) -> list[dict]:
+    """The checks a model switched off by leaving an input unset: [{name, category, severity, inputs, refs, why}], for the
+    build report (report JSON key "checks_not_run")."""
+    return [{"name": c.name, "category": c.category, "severity": c.severity, "inputs": list(c.not_run), "refs": list(c.refs),
+             "why": c.measured} for c in checks if getattr(c, "not_run", None)]
+
+
+def not_run_line(checks: Iterable[Check]) -> str | None:
+    """One summary line naming every check not run and the input that switched it off (None when there are none)."""
+    off = [c for c in checks if getattr(c, "not_run", None)]
+    if not off:
+        return None
+    return "Not run (an input is unset): " + "; ".join(f"{c.name} ({', '.join(c.not_run)} not set)" for c in off)
 
 
 def from_verify(r: CheckResult) -> Check:

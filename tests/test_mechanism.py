@@ -138,8 +138,8 @@ def test_static_torque_matches_a_hand_computation():
     j = rep.joint_info[0]
     assert j.required == pytest.approx(expected, abs=1e-3) and j.worst_pose == {"j1": 0.0} and j.moving_mass_g == pytest.approx(112.4)
     c = one(rep, "torque joint j1")
-    assert c.severity == "pass" and "1.1 kg·cm required at the worst pose (j1 0°) vs 9.4 kg·cm stall, margin 8.85x stall, 2.95x rated continuous (3.1 kg·cm, assumed, not a spec: 1/3 of stall (MG996R publishes no continuous rating))" in c.measured
-    assert j.stall == 9.4 and j.rated == pytest.approx(9.4 / 3) and j.rated_is_estimate                 # MG996R: no published rating
+    assert c.severity == "pass" and "1.1 kg·cm required at the worst pose (j1 0°) vs 9.4 kg·cm stall, margin 8.85x stall, 1.77x rated continuous (1.9 kg·cm, assumed, not a spec: 1/5 of stall (MG996R publishes no continuous rating))" in c.measured
+    assert j.stall == 9.4 and j.rated == pytest.approx(9.4 / 5) and j.rated_is_estimate                 # MG996R: no published rating
 
 
 def test_limits_change_the_worst_pose():
@@ -156,7 +156,7 @@ def test_a_vertical_axis_has_no_gravity_load():
 
 def test_levels_pass_warn_fail():
     stall = 9.4
-    for payload, sev in ((300, "pass"), (500, "warn"), (1000, "fail")):     # 3.0, 4.96, 9.9 kgf.cm against 4.7 rated / 9.4 stall
+    for payload, sev in ((150, "pass"), (500, "warn"), (1000, "fail")):     # about 1.5, 4.96, 9.9 kgf.cm against 1.88 rated (1/5) / 9.4 stall
         c = one(analyze(cantilever(payload_g=payload)), "torque joint j1")
         assert c.severity == sev, (payload, c.measured)
         assert c.ok == (sev != "fail")
@@ -174,7 +174,7 @@ def test_rated_torque_from_the_datasheet_is_not_an_estimate():
 def test_gearing_multiplies_torque_and_divides_speed():
     a = Actuator("geared", stall_kgcm=2.0, speed_deg_s=600, gear_ratio=4, efficiency=0.8, travel_deg=None)
     assert a.stall_out("revolute") == pytest.approx(6.4) and a.speed_out("revolute") == pytest.approx(150)
-    m = cantilever(payload_g=200, actuator=a)
+    m = cantilever(payload_g=100, actuator=a)                               # 6.4 stall at the joint, 1.28 rated (1/5)
     m.speed("j1", deg_s=120)
     rep = analyze(m)
     assert one(rep, "torque joint j1").severity == "pass" and "x4 @ 80%" in one(rep, "torque joint j1").name
@@ -332,7 +332,7 @@ def test_tables():
     parsed = list(csv.DictReader(io.StringIO(outputs.joints_csv(rows))))
     assert parsed[1]["actuator"] == "MG996R" and float(parsed[1]["required"]) == pytest.approx(2.138, abs=2e-3)
     md = outputs.joints_markdown(m, rep)
-    assert "| shoulder |" in md and "4.40x / 1.47x" in md and "(assumed)" in md
+    assert "| shoulder |" in md and "4.40x / 0.88x" in md and "(assumed)" in md
     mass = outputs.mass_rows(m)
     assert {r["item"] for r in mass} >= {"turret", "payload", "MG996R (yaw)"} and "Total 334 g" in outputs.mass_markdown(m, rep)
 
@@ -443,16 +443,16 @@ def test_a_misused_payload_call_says_how_to_call_it():
 
 def test_rated_torque_comes_from_the_datasheet_when_the_catalog_has_one():
     from eitri.mechanism import ASSUMED_RATED_FRACTION, catalog_actuator
-    sts = Actuator("Feetech STS3215", stall_kgcm=19.5)
-    assert catalog_actuator(sts.name).key == "STS3215" and sts.rated_out("revolute") == (6.5, False)
+    sts = Actuator("Feetech STS3215", stall_kgcm=16.5)
+    assert catalog_actuator(sts.name).key == "STS3215" and sts.rated_out("revolute") == (4.0, False)
     assert "datasheet: Feetech STS3215" in sts.rated_basis("revolute")
     mg = Actuator("TowerPro MG996R", stall_kgcm=9.4)                       # no published continuous rating: assumed, and said so
     assert mg.rated_out("revolute") == (pytest.approx(9.4 * ASSUMED_RATED_FRACTION), True)
-    assert mg.rated_basis("revolute").startswith("assumed, not a spec: 1/3 of stall") and "MG996R publishes no continuous rating" in mg.rated_basis("revolute")
+    assert mg.rated_basis("revolute").startswith("assumed, not a spec: 1/5 of stall") and "MG996R publishes no continuous rating" in mg.rated_basis("revolute")
     given = Actuator("MG996R", stall_kgcm=9.4, rated_kgcm=4.0)            # a value in the model wins
     assert given.rated_out("revolute") == (4.0, False) and given.rated_basis("revolute") == "as given"
-    m = cantilever(actuator=Actuator("STS3215", stall_kgcm=19.5))
-    assert "(6.5 kg·cm, datasheet: Feetech STS3215" in one(analyze(m), "torque joint j1").measured
+    m = cantilever(actuator=Actuator("STS3215", stall_kgcm=16.5))
+    assert "(4.0 kg·cm, datasheet: Feetech STS3215" in one(analyze(m), "torque joint j1").measured
 
 
 def test_an_arm_that_reaches_below_its_base_warns_unless_mounted_at_an_edge():

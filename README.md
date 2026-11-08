@@ -406,7 +406,7 @@ def build(p):
 ```
 
 ```bash
-eitri build eitri/demos/uno-arm-circuit/uno_arm_circuit.py                 # 31 pass, 0 warn, 0 FAIL
+eitri build eitri/demos/uno-arm-circuit/uno_arm_circuit.py                 # 32 pass, 0 warn, 0 FAIL
 eitri build eitri/demos/uno-arm-circuit/uno_arm_circuit.py --config bad    # 28 pass, 0 warn, 2 FAIL (on purpose)
 eitri bom eitri/demos/uno-arm-circuit/uno_arm_circuit.py                   # the bill of materials (--csv)
 ```

@@ -120,7 +120,7 @@ def test_every_catalog_number_has_a_fetched_source():
     assert catalog.PARTS["1N4148"]["spec"]["if_avg"] == 0.150 and catalog.PARTS["PN2222A"]["spec"]["ic_max"] == 0.6
     assert catalog.SERVOS["MG996R"]["stall"] == 2.5 and catalog.SERVOS["MG996R"]["v"] == (4.8, 6.6)       # TowerPro 1.4 A vs 2.5 A at 6 V
     assert catalog.PARTS["SRD-05VDC-SL-C"]["spec"]["coil_ohm"] == 69.4                                     # 69.4 vs 70 Ohm: the higher coil current
-    assert catalog.SERVOS["SG90"]["stall"] == 0.5 and "ASSUMPTION" in cite("towerpro-sg90")                 # kept by decision, marked
+    assert catalog.SERVOS["SG90"]["stall"] == 2.0 and "ASSUMPTION" in cite("towerpro-sg90")                 # the higher of TowerPro's "0.5A - 2A", marked
     assert catalog.BOARDS["esp32"]["spec"]["pin_limit_A"] == 0.028
 
 

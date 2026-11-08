@@ -59,8 +59,10 @@ A splice may only join wires of ONE net, so a trunk and its branches are all on 
 An unknown type is allowed (`Connector("X", "ACME-9", pins=4, rating_a=5, pitch_mm=3.5)`); without `rating_a` its pins
 are not graded and a warning says so. Crimp-type connectors need one crimp terminal per populated pin (the BOM counts them).
 Ratings are continuous. Between an XT60's or XT90's continuous and its short-time rating the check warns (peaks under a
-minute only); past it, it fails. Spade terminals are rated by the wire crimped in (22 AWG 3 A ... 12 AWG 20 A), and so is Micro-Fit 3.0
-(18 AWG 8.5 A, 20-30 AWG 5 A): a thicker wire raises their rating, and the BOM names the terminal for each wire's size.
+minute only); past it, it fails. Spade terminals are rated by the wire crimped in (22 AWG 3 A ... 12 AWG 20 A, 10 AWG 24 A), and
+so is Micro-Fit 3.0, which also derates with the number of powered circuits in the housing (Molex PS-43045, wire-to-wire:
+18 AWG 7 A at 2 circuits, 6 A at 6, 5.5 A at 12; 20 AWG 6.5 / 5 / 4.5 A; 22 AWG 5.5 / 4 / 3.5 A; 24 AWG 5 / 4 / 3 A; 26-30 AWG
+4 A or less): a thicker wire or fewer powered pins raises the rating, and the BOM names the terminal for each wire's size.
 
 ## The checks every build runs
 
@@ -140,7 +142,7 @@ PARAMS = dict(trunk_mm=600, pump_mm=400, fan_mm=350, led_mm=250)
 def build(p):
     h = Harness("12 V accessories")
     batt = h.add(Connector("BATT", "XT60", pins=["+", "-"]))
-    pump = h.add(Connector("PUMP", "MOLEX-MICROFIT-3.0", pins=["+", "-"]))
+    pump = h.add(Connector("PUMP", "XT30", pins=["+", "-"]))          # 6 A: over 80 % of a 2-circuit Micro-Fit's 7 A (18 AWG, Molex)
     fan = h.add(Connector("FAN", "MOLEX-MICROFIT-3.0", pins=["+", "-"]))
     led = h.add(Connector("LED", "JST-XH", pins=["+", "-"]))
     bus_p, bus_n = h.splice("BUS_P"), h.splice("BUS_N")

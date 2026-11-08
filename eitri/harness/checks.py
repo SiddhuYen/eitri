@@ -16,10 +16,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from ..checks import Check, check
+from ..checks import switched_off, Check, check
 from ..model import CheckResult  # noqa: F401
 from .. import power
-from .catalog import BOARD_TYPES, nearest_awg, voltage_drop, wire_rating
+from .catalog import BOARD_TYPES, circuit_column, nearest_awg, voltage_drop, wire_rating
 from .model import Endpoint, Harness, Link, PinRef, SpliceRef
 
 WARN_FRACTION = 0.8          # within 20 % of the limit: a warning
@@ -229,29 +229,35 @@ def _ampacity(h: Harness) -> list[HCheck]:
         rating = c.rating
         by_wire = c.rating_a is None and c.spec is not None and c.spec.by_wire
         loads = []
+        # a family rated by circuit count too (Micro-Fit, Molex PS-43045 s4.2): the circuits are the pins that carry current
+        powered = sum(1 for pin in c.pin_names if any((h.wire_current(l) or 0) > 0 for l in h.links_at(PinRef(c.name, pin))))
         for pin in c.pin_names:
             ref = PinRef(c.name, pin)
             cur = [h.wire_current(l) for l in h.links_at(ref)]
             cur = [x for x in cur if x is not None]
             if cur:
-                pin_rating = min(wire_rating(c.spec, l.gauge) for l in h.links_at(ref)) if by_wire else rating
+                pin_rating = min(wire_rating(c.spec, l.gauge, powered) for l in h.links_at(ref)) if by_wire else rating
                 loads.append((sum(cur), ref, pin_rating))
         if not loads:
             continue
         worst, wref, pin_rating = max(loads, key=lambda t: t[0] / t[2] if t[2] else t[0])
         refs = [c.name] + [l.id for l in h.links_at(wref)]
         if by_wire:                                   # rated by the wire crimped into it (spades: TE 108-106496; Micro-Fit: by terminal)
-            g = min((l.gauge for l in h.links_at(wref)), key=lambda gg: wire_rating(c.spec, gg))
+            g = min((l.gauge for l in h.links_at(wref)), key=lambda gg: wire_rating(c.spec, gg, powered))
             frac = worst / pin_rating
             sev = "fail" if worst > pin_rating else "warn" if frac >= WARN_FRACTION else "pass"
+            col = circuit_column(c.spec, powered)
+            ckt = (f", {powered} powered circuit{'s' if powered != 1 else ''} (rated as {col}, wire-to-wire, Molex PS-43045 Rev P s4.2)"
+                   if col is not None else "")
             out.append(_check("ampacity", f"connector rating {c.name} ({c.type}, by wire size)", sev,
-                              f"worst pin {wref}: {_fmt_a(worst)} of {_fmt_a(pin_rating)} with {g.label} crimped in ({frac * 100:.0f}%)",
+                              f"worst pin {wref}: {_fmt_a(worst)} of {_fmt_a(pin_rating)} with {g.label} crimped in{ckt} ({frac * 100:.0f}%)",
                               f"<= {_fmt_a(pin_rating)}" + (" (within 20% of the limit)" if sev == "warn" else ""), refs))
             continue
         if rating is None:
             if not c.known and worst > 0:
-                out.append(_check("ampacity", f"connector rating {c.name} ({c.type})", "warn",
-                                  f"unknown type {c.type!r}: {_fmt_a(worst)} on {wref} is not graded", "give Connector(..., rating_a=<A per pin>)", refs))
+                out.append(switched_off(_check("ampacity", f"connector rating {c.name} ({c.type})", "warn",
+                                               f"unknown type {c.type!r}: {_fmt_a(worst)} on {wref} is not graded", "give Connector(..., rating_a=<A per pin>)", refs),
+                                        f"{c.name}.rating_a"))
             continue
         frac = worst / rating
         burst = c.spec.burst_a if c.spec and c.rating_a is None else None
@@ -302,9 +308,9 @@ def _drops(h: Harness, stats: dict[str, NetInfo]) -> list[HCheck]:
         if n.drop_V is None:
             continue
         if not n.graded:
-            out.append(_check("voltage drop", f"voltage drop {name}", "warn",
-                              f"{n.drop_V:.3f} V over {' + '.join(n.worst_path)}; the net has no voltage_V, so the percentage is not graded",
-                              "h.net(..., voltage_V=...)", n.worst_path))
+            out.append(switched_off(_check("voltage drop", f"voltage drop {name}", "warn",
+                                           f"{n.drop_V:.3f} V over {' + '.join(n.worst_path)}; the net has no voltage_V, so the percentage is not graded",
+                                           "h.net(..., voltage_V=...)", n.worst_path), f"{name}.voltage_V"))
             continue
         sev = "pass" if n.drop_pct <= n.max_drop_pct else "fail"
         rt = "round trip" if n.round_trip else "one way"
@@ -417,8 +423,9 @@ def _power(h: Harness) -> list[HCheck]:
             how = f"{label} on {'USB' if b.powered == 'usb' else f'VIN {b.vin_V:g} V' if b.vin_V is not None else 'VIN'}"
             name = f"supply {b.name}.{pin} ({how})"
             if any(c is None for c in cur):
-                out.append(_check("power", name, "warn", f"{len(links)} wire(s) leave {b.name}.{pin} but not all of them have a current: not graded",
-                                  "give the net (or the wire) current_A: what the loads draw, at their worst (a servo's stall current)", refs))
+                out.append(switched_off(_check("power", name, "warn", f"{len(links)} wire(s) leave {b.name}.{pin} but not all of them have a current: not graded",
+                                               "give the net (or the wire) current_A: what the loads draw, at their worst (a servo's stall current)", refs),
+                                        *[f"{n}.current_A" for n in nets] or ["current_A"]))
                 continue
             draw = sum(cur)
             sev = power.grade(draw, lim)

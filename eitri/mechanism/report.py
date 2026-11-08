@@ -5,7 +5,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from ..checks import Check, from_verify
+from ..checks import Check, from_verify, checks_not_run, not_run_line
 from ..model import Checker
 from .checks import JointInfo, TargetInfo, run_checks
 from .model import Mechanism
@@ -38,7 +38,9 @@ class MechanismReport:
         return [c for c in self.checks if c.severity == "warn"]
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        d = asdict(self)
+        d["checks_not_run"] = checks_not_run(self.checks)     # checks switched off by an unset input
+        return d
 
 
 def analyze(m: Mechanism, checker: Checker | None = None) -> MechanismReport:
@@ -57,6 +59,9 @@ def summarize(rep: MechanismReport) -> str:
     lines = [f"Mechanism {rep.name!r}: {rep.links} links, {rep.joints} moving joint(s), {rep.targets} target(s); "
              f"total mass {rep.masses.get('total_g', 0):g} g" + (f", payload {rep.masses['payload_g']:g} g" if rep.masses.get("payload_g") else ""),
              f"Checks: {len(rep.checks) - n_fail - n_warn} pass, {n_warn} warn, {n_fail} FAIL"]
+    _nr = not_run_line(rep.checks)
+    if _nr:
+        lines.append(_nr)
     if rep.joint_info:
         lines.append("Joints (worst-pose load vs actuator):")
         for j in rep.joint_info:

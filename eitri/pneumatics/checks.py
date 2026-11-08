@@ -3,8 +3,8 @@
     circuit       every cylinder port fed from a supply through a valve in some position, and able to exhaust in another; valve
                   ports connected as their class needs; no dead-headed lines (a tee or an inline component with one connection)
     force         usable cylinder force (pressure at the cylinder x area x (1 - friction allowance)) against the load for each
-                  stroke: FAIL below the load, WARN when the load ratio (load / theoretical force) exceeds 0.7 (the usual dynamic
-                  sizing guidance, an ESTIMATE); a single-acting return is its spring
+                  stroke: FAIL below the load, WARN when the load ratio (load / theoretical force) exceeds SMC's limit for the
+                  cylinder's duty (moving 0.5, static 0.7, guided 1.0: model.LOAD_RATIOS); a single-acting return is its spring
     air           free-air consumption per cycle and per minute (swept volumes plus the dead volume of the lines between valve
                   and cylinder), summed against the supply's capacity (FAIL above, WARN above 80 %)
     speed         ISO 6358 flow available through the fill path (supply -> regulator -> valve -> tube) and the exhaust path
@@ -19,14 +19,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ..checks import Check, check as _check, level
+from ..checks import Check, check as _check, level, switched_off
 from .flow import DEFAULT_C, consumption_per_cycle_l, cylinder_forces, drop_for_flow, flow_l_s, required_flow_l_s, series, tube_data
-from .model import EXHAUST_PORTS, pressure_rating, P_ATM, Circuit, Cylinder, FlowControl, Node, PortRef, Regulator, Silencer, Supply, Tube, Valve
+from .model import EXHAUST_PORTS, LOAD_RATIOS, pressure_rating, P_ATM, Circuit, Cylinder, FlowControl, Node, PortRef, Regulator, Silencer, Supply, Tube, Valve
 
-LOAD_RATIO_WARN = 0.7          # ESTIMATE: manufacturers' dynamic sizing guidance (SMC / Festo selection guides: 50-70 %)
+LOAD_RATIO_WARN = LOAD_RATIOS["moving"]   # SMC: dynamic operation, the load moved vertically or horizontally (model.LOAD_RATIOS)
 SUPPLY_WARN = 0.8
 DROP_WARN_BAR = 0.3
-FREE_FLOW_C = 3.0              # ESTIMATE: the bypass check of a speed controller, or a node: no significant restriction
 
 
 @dataclass
@@ -108,7 +107,10 @@ def _comp_step(comp, from_port: str, to_port: str) -> Step | None:
         if comp.throttles(from_port, to_port):
             c, b = (comp.C, comp.b) if comp.has_flow_data else DEFAULT_C["flow_control"]
             return Step("component", comp.name, c, b, not comp.has_flow_data, f"meter-{comp.meter} throttle {from_port}->{to_port}")
-        return Step("component", comp.name, FREE_FLOW_C, 0.3, False, f"free flow {from_port}->{to_port} (bypass check)")
+        # SMC AS catalogue (AS_EU.pdf): one effective area for "Controlled (Free) flow" with the needle fully open, so the
+        # bypass direction passes no more than the throttle's own C (was a flat 3.0, more than any M5 to 1/4" AS passes)
+        c, b = (comp.C, comp.b) if comp.has_flow_data else DEFAULT_C["flow_control"]
+        return Step("component", comp.name, c, b, not comp.has_flow_data, f"free flow {from_port}->{to_port} (bypass check)")
     if isinstance(comp, (Valve, Regulator, Silencer)):
         c, b = (comp.C, comp.b) if comp.has_flow_data else DEFAULT_C[comp.kind]
         return Step("component", comp.name, c, b, not comp.has_flow_data, f"{from_port}->{to_port}")
@@ -325,7 +327,8 @@ def run_checks(c: Circuit) -> tuple[list[Check], list[CylinderInfo], list[Supply
                 checks.append(_check("force", f"force {cyl.name} {stroke}", "fail", "no supply reaches the cylinder, so there is no force to grade", "", [cyl.name]))
             elif stroke == "retract" and cyl.acting == "single":
                 if cyl.spring_N is None:
-                    checks.append(_check("force", f"force {cyl.name} retract", "warn", f"single-acting: the return spring's force is not given, so the retract stroke is not graded (load {load:g} N)", "spring_N=", [cyl.name]))
+                    checks.append(switched_off(_check("force", f"force {cyl.name} retract", "warn", f"single-acting: the return spring's force is not given, so the retract stroke is not graded (load {load:g} N)", "spring_N=", [cyl.name]),
+                                               f"{cyl.name}.spring_N"))
                 else:
                     si.theoretical_N = si.usable_N = cyl.spring_N
                     si.load_ratio = load / cyl.spring_N if cyl.spring_N else None
@@ -336,12 +339,14 @@ def run_checks(c: Circuit) -> tuple[list[Check], list[CylinderInfo], list[Supply
                 th, us = (forces["extend_theoretical_N"], forces["extend_usable_N"]) if stroke == "extend" else (forces["retract_theoretical_N"], forces["retract_usable_N"])
                 si.theoretical_N, si.usable_N = th, us
                 si.load_ratio = load / th if th else None
-                sev = "fail" if load > us else "warn" if si.load_ratio is not None and si.load_ratio > LOAD_RATIO_WARN else "pass"
+                lim = LOAD_RATIOS[cyl.duty]
+                sev = "fail" if load > us else "warn" if si.load_ratio is not None and si.load_ratio > lim else "pass"
                 si.status = sev
                 area = fill_area
                 checks.append(_check("force", f"force {cyl.name} {stroke}", sev,
                                      f"{us:.0f} N usable ({th:.0f} N theoretical: {p_cyl:g} bar x {area:.0f} mm², less {cyl.friction_fraction:.0%} friction allowance) vs {load:g} N load, load ratio {si.load_ratio:.2f}",
-                                     f"load <= {us:.0f} N usable, load ratio <= {LOAD_RATIO_WARN:g} for a dynamic application" if load else "", [cyl.name]))
+                                     (f"load <= {us:.0f} N usable, load ratio <= {lim:g} for a {cyl.duty} load (duty={cyl.duty!r}; SMC: moving 0.5, "
+                                      "static/clamping 0.7, guided 1.0)") if load else "", [cyl.name]))
             # speed
             fill, ex = fed.get(port if stroke == "extend" else port), exh.get("ROD" if (stroke == "extend" and cyl.acting == "double") else "CAP" if stroke == "retract" else port)
             if stroke == "extend":
@@ -413,7 +418,8 @@ def run_checks(c: Circuit) -> tuple[list[Check], list[CylinderInfo], list[Supply
         d = demand.get(sup.name, 0.0)
         if sup.flow_l_min is None:
             status = "warn"
-            checks.append(_check("air", f"supply {sup.name} capacity", "warn", f"{d:.1f} L/min ANR drawn; the supply declares no capacity (flow_l_min), so it is not graded", "flow_l_min=", [sup.name]))
+            checks.append(switched_off(_check("air", f"supply {sup.name} capacity", "warn", f"{d:.1f} L/min ANR drawn; the supply declares no capacity (flow_l_min), so it is not graded", "flow_l_min=", [sup.name]),
+                                       f"{sup.name}.flow_l_min"))
         else:
             frac = d / sup.flow_l_min
             status = "fail" if frac > 1 else "warn" if frac > SUPPLY_WARN else "pass"

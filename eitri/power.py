@@ -31,12 +31,12 @@ SRC_UNO_USB = ("Arduino UNO R3 schematic, docs.arduino.cc/resources/schematics/A
                "the fuse will automatically break the connection\"")
 SRC_USB2 = ("USB 2.0 Specification, section 7.2.1: a port supplies at most 5 unit loads of 100 mA (500 mA) to a configured high-power "
             "device; the Nano's 5V pin is fed from the host's USB port when it runs on USB")
-SRC_UNO_REG = ("Arduino UNO R3 datasheet A000066 (rev. 06/2021), board topology: U1 SPX1117M3-L-5 regulator (the R3 schematic shows "
+SRC_UNO_REG = ("Arduino UNO R3 datasheet A000066 (rev 4, 20/10/2026; re-read 2026-11-07), board topology: U1 SPX1117M3-L-5 regulator (the R3 schematic shows "
                "an NCP1117ST50T3G, rated 1.0 A; the lower rating is used). MaxLinear SPX1117 datasheet: guaranteed 0.8 A output; "
                "SOT-223 thermal resistance 15 C/W junction-to-tab + 31 C/W tab-to-ambient = 46 C/W; maximum junction temperature "
                "125 C; PD = (VIN - VOUT) x IOUT")
-SRC_NANO_VIN = ("Arduino Nano datasheet A000005 (docs.arduino.cc/resources/datasheets/A000005-datasheet.pdf) names an LDO on the VIN "
-                "path but publishes no current rating for it")
+SRC_NANO_VIN = ("Arduino Nano datasheet A000005 (rev 5, 20/10/2026; docs.arduino.cc/resources/datasheets/A000005-datasheet.pdf) names "
+                "an LDO on the VIN path but publishes no current rating for it")
 
 SPX1117_MAX_A = 0.8           # MaxLinear SPX1117 datasheet: guaranteed output current
 SPX1117_THETA_JA = 46.0       # C/W, SOT-223, junction to ambient (15 + 31), same datasheet

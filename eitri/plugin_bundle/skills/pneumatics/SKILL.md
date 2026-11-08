@@ -35,7 +35,7 @@ For follow-up requests, edit the existing model (read it with `read_model` if yo
 # Rules
 
 - `verify()` and the built-in checks are the specification. When a check fails, fix the circuit (a bigger bore, a higher regulated pressure within the supply, a bigger valve or tube, a shorter run, a slower cycle, a bigger supply); never delete, loosen or replace a check so that it passes, and never lower a load, a speed or a cycle rate the user gave. If you are convinced a check measures the wrong thing, keep it, add the right one, and say so in the final reply.
-- Size for the usable force (the theoretical force less the 10% friction allowance) and keep the load ratio at or below 0.7 for anything that moves; a warning is a decision: fix it or say why it is acceptable.
+- Size for the usable force (the theoretical force less the 10% friction allowance) and keep the load ratio at or below 0.5 for a load the cylinder moves (SMC; 0.7 for static clamping, 1.0 on a guide: set the cylinder's `duty=`); a warning is a decision: fix it or say why it is acceptable.
 - Give C and b from datasheets whenever you can; the estimates the checks fall back on are conservative and the report names every component graded with one.
 - Every cylinder port must be fed through a valve position and vented through another; a double-acting cylinder needs a 4- or 5-ported valve, a single-acting one a 3/2. Put the speed controller on the exhaust side (meter-out) unless the request says otherwise.
 

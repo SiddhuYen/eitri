@@ -33,14 +33,20 @@ _S = [
            "https://ww1.microchip.com/downloads/aemDocuments/documents/MCU08/ProductDocuments/DataSheets/ATmega48A-PA-88A-PA-168A-PA-328-P-DS-DS40002061B.pdf",
            '"DC Current per I/O Pin 40.0mA"; "DC Current VCC and GND Pins 200.0mA"; "Voltage on any Pin except RESET with respect to Ground -0.5V to '
            'VCC+0.5V"; VIL max 0.3VCC and VIH min 0.6VCC (VCC = 2.4V - 5.5V); "IOL = 20mA, VCC = 5V TA=85C 0.9" (VOL max); "IOH = -20mA, VCC = 5V '
-           'TA=85C 4.2" (VOH min); "RPU I/O Pin Pull-up Resistor 20 50 k" (Table 30-1, p.323)'),
-    Source("arduino-uno", "Arduino UNO R3 pinout and tech specs", "Arduino UNO R3 full pinout A000066 (last update 6 Oct 2022) and docs.arduino.cc/hardware/uno-rev3 tech specs",
+           'TA=85C 4.2" (VOH min); "RPU I/O Pin Pull-up Resistor 20 50 k" (Table 30-1, p.323); s14.2.1 Configuring the Pin (p.85, re-read '
+           '2026-11-07): "The port pins are tri-stated when reset condition becomes active, even if no clocks are running."'),
+    Source("arduino-uno", "Arduino UNO R3 pinout, tech specs and datasheet rev 4", "Arduino UNO R3 full pinout A000066 (last update 6 Oct 2022), "
+           "docs.arduino.cc/hardware/uno-rev3 tech specs, and datasheet A000066 rev 4 (20/10/2026; re-read 2026-11-07)",
            "https://docs.arduino.cc/resources/pinouts/A000066-full-pinout.pdf",
            '"MAXIMUM current per I/O pin is 20mA"; "MAXIMUM current per +3.3V pin is 50mA"; tech specs "Input voltage (nominal): 7-12V", "DC Current per '
-           'I/O Pin: 20 mA". The datasheet A000066 and the pinout give VIN 6-20 V (maximum); the narrower nominal 7-12 V is used.'),
+           'I/O Pin: 20 mA". Datasheet s2.2: "VINMax Maximum input voltage from VIN pad 6 - 20 V", "VUSBMax Maximum input voltage from USB '
+           'connector - 5.5 V"; s3.1 "U1 SPX1117M3-L-5 Regulator". The narrower nominal 7-12 V is used for VIN; 5.5 V is the most the 5 V '
+           'rail (USB or the 5V pin, which bypasses the regulator) may see.', fetched="2026-11-07"),
     Source("arduino-nano", "Arduino Nano pinout and tech specs", "Arduino Nano full pinout A000005 (last update 30/06/2021) and docs.arduino.cc/hardware/nano tech specs",
            "https://docs.arduino.cc/resources/pinouts/A000005-full-pinout.pdf",
-           '"VIN 7-12 V input to the board."; "MAXIMUM current per I/O pin is 20mA"; "MAXIMUM current per +3.3V pin is 50mA"; tech specs "DC Current per I/O Pin: 20 mA"'),
+           '"VIN 7-12 V input to the board."; "MAXIMUM current per I/O pin is 20mA"; "MAXIMUM current per +3.3V pin is 50mA"; tech specs "DC Current per I/O Pin: 20 mA". '
+           'The datasheet A000005 rev 5 (20/10/2026, re-read 2026-11-07) says "7-15V unregulated external power supply (pin 30)": the pinout\'s '
+           'lower 7-12 V is used.'),
     Source("arduino-uno-sch", "Arduino UNO R3 schematic", "Arduino UNO R3 schematic A000066",
            "https://docs.arduino.cc/resources/schematics/A000066-schematics.pdf",
            'page 1: "U2" "LP2985-33DBVR", pins "1 IN" and "3 ON/OFF" on the net "+5V", "OUT 5 +3V3": the 3.3 V regulator runs from the 5 V rail, so '
@@ -97,11 +103,23 @@ _S = [
            'TowerPro: "Operating voltage: 4.8~ 6.6v", "Stall current draw 1400mA" (no voltage stated). The distributor datasheet says "Stall Current 2.5 A '
            '(6V)" and "Operating voltage: 4.8 V a 7.2 V". By the conservative-figure rule the higher draw, 2.5 A, and the narrower range, TowerPro\'s '
            "4.8-6.6 V, are used."),
-    Source("towerpro-sg90", "TowerPro SG90 (ASSUMPTION for current)", "TowerPro SG90 product page (towerpro.com.tw)",
+    Source("towerpro-sg90", "TowerPro SG90 (Q&A reply for current)", "TowerPro SG90 product page (towerpro.com.tw), spec list and Q&A",
            "https://towerpro.com.tw/product/sg90-7/",
-           '"Operating voltage: 4.8v"; the spec publishes no stall current. The only figure is an admin reply in the page\'s Q&A (2021-11-07): "The '
-           'operation current for our SG90 is about 0.5A - 2A. Voltages from 4.8V - 6V are fine." ASSUMPTION: 0.5 A is used as its draw (a project '
-           "decision: the reply is not a specification, and its range runs to 2 A); give servo(..., current_A=) from a measured stall current.", assumption=True),
+           '"Operating voltage: 4.8v"; "Stall torque: 1.8kg/cm(4.8v)"; the spec list publishes no current. The only figure is an admin reply '
+           'in the page\'s Q&A (2021-11-07, re-read 2026-11-07): "The operation current for our SG90 is about 0.5A - 2A. Voltages from 4.8V - 6V '
+           'are fine." By the conservative-figure rule (the higher figure for a draw) 2 A is used as its stall draw (0.5 A up to eitri 0.7.0). '
+           "ASSUMPTION: that the reply's upper figure is the stall current; give servo(..., current_A=) from a measured stall current.",
+           fetched="2026-11-07", assumption=True),
+    # ---------------------------------------------------------------- batteries (c.battery)
+    Source("molicel-p26a", "Molicel INR-18650-P26A data sheet v1.4", "Molicel INR-18650-P26A Product Data Sheet, version 1.4 (lithium-ion)",
+           "https://www.molicel.com/wp-content/uploads/INR18650P26A_1.4_Product-Data-Sheet-of-INR-18650-P26A-80087.pdf",
+           'Cell Voltage: "Nominal 3.6 V", "Charge 4.2 V", "Discharge 2.5 V"; Charge Characteristics: "CC-CV Charge to 4.2V". The 4.2 V charge '
+           "voltage is the lithium-ion (and lithium-polymer) full-charge figure used per cell.", fetched="2026-11-07"),
+    Source("yuasa-np7-12", "Yuasa NP7-12 data sheet", "Yuasa NP7-12 Industrial VRLA Battery, technical data sheet (yuasaeurope.com, French edition)",
+           "https://res.cloudinary.com/sonepar-fr/raw/upload/s--wpLzFKbh--/v1/documents/894/NP7-12.pdf",
+           '"Tension nominale 12" V; "Tension de charge en floating a 20C (V)/bloc 13.65 (+-1%)"; "Tension de charge en cyclique (ou Boost) a '
+           '20C (V)/bloc 14.5 (+-3%)", 2.42 V per cell. A 12 V lead-acid battery on charge (a charger, a vehicle) reaches 14.5 V: the full-charge '
+           "figure used.", fetched="2026-11-07"),
     # ---------------------------------------------------------------- passives and power parts (filled from the fetched datasheets below)
     Source("iec-60063", "IEC 60063 E-series (Vishay 28372)", "IEC 60063 (a paid standard, not fetched); its values from Vishay \"E-Series Values ... "
            "according to IEC 60063\", document 28372, rev 22-Aug-12", "https://www.vishay.com/docs/28372/e-series.pdf",

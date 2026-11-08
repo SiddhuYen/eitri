@@ -119,7 +119,7 @@ def test_cli(tmp_path, capsys):
     assert capsys.readouterr().out.startswith("Circuit 'Uno arm electronics'")
     main(["build", str(pr.model_path), "--config", "bad"])
     out = capsys.readouterr().out
-    assert "Checks: 28 pass, 0 warn, 2 FAIL" in out
+    assert "Checks: 29 pass, 0 warn, 2 FAIL" in out
     assert main(["bom", str(pr.folder)]) == 0
     out = capsys.readouterr().out
     assert "# Bill of materials: Uno arm electronics" in out and "| 4 | S1 S2 S3 S4 | servo |" in out
