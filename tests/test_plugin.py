@@ -71,6 +71,17 @@ def test_generated_files_are_current():
     assert json.loads((BUNDLE / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))["version"] == __version__
 
 
+def test_icon():
+    """A square PNG of 512-2048 px under 2 MB (what Claude Code's plugin directory accepts), named in plugin.json."""
+    from PIL import Image
+    manifest = json.loads((BUNDLE / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+    icon = BUNDLE / manifest["icon"]
+    assert manifest["icon"].startswith("./") and icon.is_file() and icon.stat().st_size < 2_000_000
+    with Image.open(icon) as im:
+        assert im.format == "PNG" and im.size[0] == im.size[1] and 512 <= im.size[0] <= 2048
+    assert (BUNDLE / "assets" / "icon.svg").is_file()
+
+
 def test_mcp_config_has_both_servers():
     cfg = json.loads((BUNDLE / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]
     assert set(cfg) == {"eitri", "eitri-combined"}

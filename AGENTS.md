@@ -43,7 +43,7 @@ The installer (A, and C, which runs the same script on the clone) installs `uv` 
 `claude-agent-sdk` package from PyPI: about 390 MB of downloads, 1 to 5 minutes), runs `eitri doctor` (up to a
 minute the first time), and adds the tool folder to the shell `PATH`. It needs no sudo. Set
 `EITRI_NO_PATH_EDIT=1` to leave the shell profile alone (then call eitri by the full path it prints),
-`EITRI_NO_UV_INSTALL=1` to stop it from installing uv, `EITRI_VERSION=0.6.0` to pin a version. If the
+`EITRI_NO_UV_INSTALL=1` to stop it from installing uv, `EITRI_VERSION=0.7.0` to pin a version. If the
 PyPI is unreachable, the installer installs the matching GitHub release archive instead. An older eitri installed as
 `eitri-cad` (the package name up to 0.5.6) is uninstalled first; projects, key and settings are kept.
 
@@ -67,7 +67,7 @@ eitri doctor
 ```
 eitri doctor
   ok   python: 3.12.x (...)
-  ok   eitri: 0.6.0 (installed from PyPI with uv tool)
+  ok   eitri: 0.7.0 (installed from PyPI with uv tool)
   ok   CAD kernel: build123d 0.13.0, OCP 8.0.1.1.0
   ok   test build: 20 mm cube, volume 8000 mm^3, STEP + report + review image in 2.0 s
   ok   Claude Code binary: 2.1.301 (Claude Code) (from Anthropic's claude-agent-sdk package); API-key-only mode (--bare) supported

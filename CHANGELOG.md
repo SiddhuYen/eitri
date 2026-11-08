@@ -3,6 +3,46 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
+## 0.7.0: eitri as a plugin in your own agent
+
+eitri now also runs inside the agent you already use (Claude Code, Codex, Cursor), on that agent's own subscription. In
+plugin mode eitri never calls Claude and needs no API key: your agent writes the model files and calls eitri's tools.
+The app (`eitri`) is unchanged and stays API-key only.
+
+### Added
+
+- **`eitri mcp`**: the local MCP server in plugin mode, for an agent to start. The six single domains with the same checks
+  as the app. `new_project` / `open_project` / `list_projects` in a folder the person picks (default `~/eitri-projects`);
+  the viewer opens in the browser at the first build and follows every rebuild; every build result ends with a
+  **PROJECT STATUS** (each failing or warning check with its numbers, files edited but not rebuilt, what to do next),
+  in place of the app's agent-loop reminders. New tools `rebuild`, `project_status`, `open_viewer`, `cad_reference`,
+  `domain_guide`.
+- **The eitri plugin** (`eitri/plugin_bundle/`): one plugin with two servers, the local `eitri` and the combined
+  multi-domain workspace on eitri.io (`eitri-combined`, `https://eitri.io/mcp`, the default for whole machines), and
+  skills: `design` (picks the combined workspace or one local domain and says which), `combined` (the build-and-fix loop)
+  and one per local domain, generated from the app's own prompts. A Claude Code marketplace at the repository root
+  (`/plugin marketplace add SiddhuYen/eitri`, then `/plugin install eitri@eitri`).
+- **`eitri plugin install | login | logout | uninstall | status`**. `install` registers the plugin in every agent app it
+  finds: Claude Code (a real plugin), Codex (`~/.codex/config.toml` servers and `~/.agents/skills`), Cursor
+  (`~/.cursor/mcp.json`, `--cursor-rules` for a project rule). `login` opens eitri.io/account, checks the personal token
+  with eitri.io, stores it readable only by you and tells you what happens to combined-workspace files. No shell file is
+  edited; the plugin sends no telemetry.
+- **`curl -fsSL https://eitri.io/install | sh -s -- --plugin`**: install, register the plugin and sign in, in one go.
+  `eitri update` refreshes an installed plugin.
+
+### Changed
+
+- **Lazy import for the plugin server**: with `EITRI_LAZY_IMPORT=1` (set by the plugin's launcher and its Codex and
+  Cursor entries), `import eitri` no longer loads the CAD kernel until a name is used, so the server answers an agent's
+  connect within its time limit (Claude Code allows 30 s; loading the kernel took ~17 s on a busy Mac). `from eitri
+  import *` gives the same names. The app's path is unchanged.
+- MCP tool errors reach the agent as readable text (they were a generic "Error executing tool").
+
+### Requirements
+
+- **The plugin needs eitri 0.7.0 or newer** (the release that adds `eitri mcp` and `eitri plugin`). On an older eitri the
+  plugin's launcher and `install … --plugin` say so instead of failing; run `eitri update`.
+
 ## 0.6.0: electronics, and a one-command install
 
 eitri gains its sixth domain, circuits at breadboard and module level, and becomes installable with one command from PyPI

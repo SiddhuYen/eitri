@@ -11,7 +11,7 @@
 # Settings (environment variables):
 #   EITRI_NO_UV_INSTALL=1   do not install uv automatically (stop and say how instead)
 #   EITRI_NO_PATH_EDIT=1    leave your shell profile alone (then run eitri by the full path printed at the end)
-#   EITRI_VERSION=0.6.0     install this version instead of the newest
+#   EITRI_VERSION=0.7.0     install this version instead of the newest
 #   EITRI_INSTALL_SOURCE=…  install from this instead: a checkout folder, a wheel, or any uv requirement
 #                           (./install.sh in a checkout sets it to the checkout)
 #   EITRI_PLUGIN=1          same as --plugin
@@ -29,7 +29,7 @@
 # The whole script is one function called on the last line, so a download cut off half-way runs nothing.
 set -eu
 
-EITRI_FALLBACK_TAG="${EITRI_FALLBACK_TAG:-v0.6.0}"
+EITRI_FALLBACK_TAG="${EITRI_FALLBACK_TAG:-v0.7.0}"
 EITRI_REPO="https://github.com/SiddhuYen/eitri"
 PYPI_PACKAGE="eitri-hardware"
 OLD_PACKAGE="eitri-cad"          # the name up to 0.5.6 (installed from GitHub); both provide the `eitri` command

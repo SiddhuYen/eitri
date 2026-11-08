@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- The eitri plugin icon: eitri's isometric-cube mark (accent top, steel sides) on a dark tile, with a green check
+       badge for "every check passes". Original artwork for eitri; no third-party marks. -->
+  <rect width="512" height="512" rx="112" fill="#141922"/>
+  <g transform="translate(46 34) scale(13)" stroke-linejoin="round">
+    <path d="M16 3.5 28 10.25 16 17 4 10.25Z" fill="#ff8a3d"/>
+    <path d="M4 10.25 16 17v13.5L4 23.75Z" fill="#8b95a3"/>
+    <path d="M28 10.25 16 17v13.5l12-6.75Z" fill="#5c6675"/>
+    <path d="M16 17v13.5M4 10.25 16 17l12-6.75" fill="none" stroke="#0d1015" stroke-width="1.1"/>
+  </g>
+  <circle cx="382" cy="382" r="86" fill="#2ea043" stroke="#141922" stroke-width="20"/>
+  <path d="M338 384l30 30 56-62" fill="none" stroke="#ffffff" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
