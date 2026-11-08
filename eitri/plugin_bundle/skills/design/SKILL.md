@@ -10,9 +10,9 @@ source (a datasheet, a standard, a measured figure). You write the files and fix
 eitri never calls a model itself and needs no API key. It has two workspaces:
 
 - **Combined workspace (default)**: the `eitri-combined` server's `combined_*` tools, hosted on eitri.io. One project
-  holds every domain of a machine (structure, wiring, motion, air, firmware, electronics). Each build checks them
-  together: the arm's torque against its servos, the servos' current against the supply, the wires against that current,
-  the board against its enclosure. Then follow the **combined** skill.
+  holds the domains of a machine (structure, wiring, motion, air, firmware). Each build checks them together: the arm's
+  torque against its servos, the servos' current against the supply, the wires against that current. Electronics
+  (breadboard circuits) is not part of a combined project yet. Then follow the **combined** skill.
 - **One local domain**: the `eitri` server's tools, which run on this computer. Use it only when the task clearly fits one
   domain and nothing else needs checking with it:
   - **cad**: one part or a small assembly (a bracket, an enclosure, a mount, an adapter, a gear, a 3D-print or CNC part)
@@ -24,10 +24,13 @@ eitri never calls a model itself and needs no API key. It has two workspaces:
 
 ## Decide
 
-1. If the request is a machine or a product with moving parts and electronics, spans two or more of the domains above,
-   or doesn't say, use the **combined workspace**. A robot arm, a pan-tilt camera with its servos and power, a plotter or
+1. If the request is a machine or a product with moving parts, wiring or firmware, spans two or more of the domains
+   above, or doesn't say, use the **combined workspace**. A robot arm, a pan-tilt camera with its servos and power, a plotter or
    a rover is combined.
-2. If it clearly fits one domain, use that local domain.
+2. If it clearly fits one domain, use that local domain. A breadboard or module-level circuit is always the local
+   **electronics** domain, because the combined workspace has no electronics yet. When a machine also needs its circuit
+   checked (resistor values, logic levels, I2C), do the machine in the combined workspace and the circuit locally, and
+   tell the user the two are not checked against each other.
 3. Tell the user in one line which one you picked and why, and that they can ask for the other ("Using eitri's
    combined workspace: this arm needs its servos, wiring and power checked together. Say 'local CAD only' to just
    model the parts.").

@@ -1,6 +1,6 @@
 ---
 name: combined
-description: Design a whole machine in eitri's combined workspace on eitri.io (the combined_* tools) - structure, wiring, motion, air, firmware and electronics in one project, built and checked together until every single-domain and cross-domain check passes. Use for robots, arms, rovers, plotters, grippers with their drive and power, and anything spanning two or more domains.
+description: Design a whole machine in eitri's combined workspace on eitri.io (the combined_* tools) - structure, wiring, motion, air and firmware in one project, built and checked together until every single-domain and cross-domain check passes. Use for robots, arms, rovers, plotters, grippers with their drive and power, and anything spanning two or more domains.
 ---
 
 # eitri: the combined workspace
@@ -46,6 +46,10 @@ skill (`eitri plugin login`). Don't work around it.
    link. When the user wants files, use `combined_export(project_id, formats)`, which returns download links.
 
 ## Notes
+
+- The combined workspace has no electronics (breadboard circuits) yet; `combined_reference()` lists the kinds it takes.
+  Don't put a circuit file in a combined project. If the user needs the circuit checked, design it with the local
+  **electronics** skill and say it is not checked against the combined project.
 
 - Results give each failing check's numbers and source. Quote them to the user when you explain a change.
 - Work in visible stages on a big machine: get the structure and motion right first, then wiring and power, then

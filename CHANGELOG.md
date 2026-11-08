@@ -18,7 +18,8 @@ The app (`eitri`) is unchanged and stays API-key only.
   in place of the app's agent-loop reminders. New tools `rebuild`, `project_status`, `open_viewer`, `cad_reference`,
   `domain_guide`.
 - **The eitri plugin** (`eitri/plugin_bundle/`): one plugin with two servers, the local `eitri` and the combined
-  multi-domain workspace on eitri.io (`eitri-combined`, `https://eitri.io/mcp`, the default for whole machines), and
+  multi-domain workspace on eitri.io (`eitri-combined`, `https://eitri.io/mcp`, the default for whole machines: CAD,
+  mechanisms, harnesses, firmware and pneumatics; electronics is not part of combined projects yet), and
   skills: `design` (picks the combined workspace or one local domain and says which), `combined` (the build-and-fix loop)
   and one per local domain, generated from the app's own prompts. A Claude Code marketplace at the repository root
   (`/plugin marketplace add SiddhuYen/eitri`, then `/plugin install eitri@eitri`).
@@ -37,6 +38,14 @@ The app (`eitri`) is unchanged and stays API-key only.
   connect within its time limit (Claude Code allows 30 s; loading the kernel took ~17 s on a busy Mac). `from eitri
   import *` gives the same names. The app's path is unchanged.
 - MCP tool errors reach the agent as readable text (they were a generic "Error executing tool").
+
+### Fixed
+
+- **Countersinks were upside down.** `countersink_cutter`, `screw_hole_cutter(head="countersink")`,
+  `cut_holes(head="countersink")` and the viewer's hole edit with a countersunk head made the cone narrow at the entry
+  face and widest about one head-depth inside the part (an undercut a flat-head screw cannot seat in), on every face.
+  The cone now opens at the entry face. A model that used these will change shape on its next build; the shipped demos
+  do not use them (the racket holder's final model builds its own cutter).
 
 ### Requirements
 

@@ -15,8 +15,10 @@ combined workspace. It needs eitri.io's remote MCP server (eitri-hosted branch `
 0. **Install (10 s, sped up).** The one curl line. Cut to the `ok  Claude Code: plugin eitri@eitri` line and the
    `saved eitr…` line from `eitri plugin login`.
 1. **Ask (5 s).** Type:
-   > Design a 2-DOF desk robot arm that lifts 100 g at 150 mm reach. Hobby servos, an Arduino Nano, a 5 V wall
-   > supply, and the wiring. Make every check pass.
+   > Design a small desktop robot arm that picks up a 20 mm block, with an Arduino Uno, servos and wiring.
+
+   This is the exact prompt of the plugin end-to-end run (reports/2026-11-06-plugin-e2e.md). Don't add "the circuit"
+   or "electronics": breadboard circuits are not part of the combined workspace yet, and the server tells the agent so.
 2. **Routing (5 s).** Claude loads the eitri `design` skill and says one line: *"Using eitri's combined workspace:
    this arm needs its servos, wiring and power checked together."* It then gives the privacy line once. Keep both
    on screen.
@@ -24,8 +26,8 @@ combined workspace. It needs eitri.io's remote MCP server (eitri-hosted branch `
    on the right opens the empty assembly.
 4. **First build (15 s).** `combined_put_files` (the structure and motion files), then `combined_build`. Zoom in on the
    result: a red `torque joint shoulder` (needed vs stall, with the datasheet source) and the next steps (*"wiring not
-   built yet"*, *"electronics not built yet"*).
-5. **The loop (30 s, sped up 8-16x).** Claude swaps the servo, adds the harness and the circuit, and rebuilds. The
+   built yet"*, *"firmware not built yet"*).
+5. **The loop (30 s, sped up 8-16x).** Claude swaps the servo, adds the harness and the firmware, and rebuilds. The
    check list fills in and turns from red to green. Freeze on one cross-domain check passing, for example servo
    stall current against the supply rail, or wire gauge against the servo current.
 6. **Done (10 s).** Every check passes and the next steps list is empty. Claude replies with the tightest margins and

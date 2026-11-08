@@ -81,9 +81,11 @@ Or, with eitri already installed: `eitri plugin install` (it registers the plugi
 The plugin brings two MCP servers and a set of skills:
 
 - **Combined workspace (the default):** `eitri-combined`, eitri.io's remote server (`https://eitri.io/mcp`). It holds
-  a whole machine in one project: structure, wiring, motion, air, firmware and electronics, built together, with the
-  cross-domain checks (servo torque against the arm, supply current against the servos, wire gauge against that
-  current...). It needs a personal token: `eitri plugin login` opens eitri.io/account, where any GitHub sign-in can
+  a whole machine in one project: structure, wiring, motion, air and firmware, built together, with the cross-domain
+  checks (servo torque against the arm, supply current against the servos, wire gauge against that current...).
+  Electronics (breadboard circuits) is not part of combined projects yet: a circuit is designed with the local
+  electronics domain, and is not checked against the combined project. It needs a personal token:
+  `eitri plugin login` opens eitri.io/account, where any GitHub sign-in can
   make one, and saves it in eitri's config folder (no shell file is edited). **In combined mode your model files go
   to eitri.io, are kept there as your projects, and are used to train eitri's models unless you turn that off on
   eitri.io/account.**

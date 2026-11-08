@@ -28,6 +28,46 @@ def test_fastener_tables():
         screw_clearance("M7")
 
 
+def _hole_radius(body, entry, into, depth):
+    """The hole's radius `depth` mm below `entry` along `into`: the first probe distance (sideways) that is material."""
+    ax = into
+    side = (0.0, 1.0, 0.0) if abs(ax[0]) > 0.9 else (1.0, 0.0, 0.0)
+    c = [entry[i] + ax[i] * depth for i in range(3)]
+    for k in range(600):
+        r = k * 0.02
+        if point_inside(body, (c[0] + side[0] * r, c[1] + side[1] * r, c[2] + side[2] * r)):
+            return r
+    return None
+
+
+@pytest.mark.parametrize("face", ["top", "side"])
+def test_countersink_is_widest_at_the_entry_face(face):
+    """A 90 deg countersink opens at the face the screw goes in from and narrows to the clearance hole (it was an
+    undercut, wide inside the part, before 0.7.0). Checked on a top face and through Plane(face) on a side face, for
+    cut_holes(head="countersink"), countersink_cutter and screw_hole_cutter."""
+    d, (cs_d, angle) = screw_clearance("M4"), countersink_dims("M4")
+    cs_h = (cs_d - d) / 2 / math.tan(math.radians(angle / 2))
+    block = Box(30, 30, 20, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    if face == "top":
+        entry, into = (0.0, 0.0, 20.0), (0.0, 0.0, -1.0)
+        bodies = [cut_holes(block, [(0, 0)], size="M4", head="countersink"),
+                  block - Pos(0, 0, 20) * countersink_cutter(0, size="M4"),
+                  block - Pos(0, 0, 20) * screw_hole_cutter("M4", head="countersink")]
+    else:
+        f = block.faces().sort_by(Axis.X)[-1]
+        c = f.center()
+        entry, into = (c.X, c.Y, c.Z), (-1.0, 0.0, 0.0)
+        bodies = [cut_holes(block, [(0, 0)], size="M4", head="countersink", plane=Plane(f)),
+                  block - Plane(f) * countersink_cutter(0, size="M4")]
+    for body in bodies:
+        _valid_solid(body)
+        r = [_hole_radius(body, entry, into, t) for t in (0.2, 1.0, cs_h - 0.2, cs_h + 1.0, 10.0)]
+        assert abs(r[0] - (cs_d / 2 - 0.2)) < 0.1, r          # 90 deg: the radius drops 1 mm per mm of depth
+        assert abs(r[1] - (cs_d / 2 - 1.0)) < 0.1, r
+        assert r[0] > r[1] > r[2] > d / 2 - 0.05, r            # narrowing all the way down, never an undercut
+        assert abs(r[3] - d / 2) < 0.1 and abs(r[4] - d / 2) < 0.1, r
+
+
 def test_hole_cutter_and_cut_holes():
     plate = Box(60, 40, 6, align=(Align.CENTER, Align.CENTER, Align.MIN))
     out = cut_holes(plate, [(-20, 0), (20, 0)], size="M3")

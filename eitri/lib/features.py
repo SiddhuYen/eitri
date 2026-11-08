@@ -42,7 +42,10 @@ def hole_cutter(d: float, depth: float = 200.0, counterbore: tuple[float, float]
     if countersink:
         cs_d, angle = countersink
         cs_h = (cs_d - d) / 2 / math.tan(math.radians(angle / 2))
-        cone = Cone(cs_d / 2, d / 2, cs_h, align=_TOP)
+        # wide end at the entry face (Z=0), narrowing to the hole diameter cs_h below it: build123d's Cone takes
+        # (bottom radius, top radius), so the hole's radius goes first (until 0.7.0 the two were swapped, which made an
+        # undercut that flared inside the part)
+        cone = Cone(d / 2, cs_d / 2, cs_h, align=_TOP)
         top_ext = Cylinder(cs_d / 2, extra, align=_BOTTOM)
         cutter = cutter + cone + top_ext
     return cutter

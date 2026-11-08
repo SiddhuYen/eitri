@@ -104,6 +104,13 @@ def test_skills():
             assert word not in text, (name, word)
     for tool in TOOLS:                                       # the combined skill uses the whole contract
         assert tool in skills["combined"], tool
+    # electronics is not part of combined projects yet (eitri.io's combined_reference says so): nothing may list it as one
+    combined_claims = [skills["combined"].split("---")[1], skills["design"].split("## Decide")[0],
+                       json.loads((BUNDLE / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))["description"].split("six local")[0],
+                       (ROOT / "README.md").read_text(encoding="utf-8").split("- **Combined workspace (the default):**")[1].split("- **Six local")[0]]
+    for text in combined_claims:
+        assert "firmware and electronics" not in text and "firmware, electronics)" not in text, text[:200]
+    assert "not part of" in combined_claims[1] and "not part of combined projects" in combined_claims[3]
     router = skills["design"]
     assert "eitri plugin login" in router and "train" in router and "telemetry" in router
     assert "default" in router.lower()

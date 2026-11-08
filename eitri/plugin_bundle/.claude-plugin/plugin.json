@@ -2,7 +2,7 @@
   "name": "eitri",
   "displayName": "eitri",
   "version": "0.7.0",
-  "description": "Hardware design with checks that run on every build: the combined multi-domain workspace on eitri.io (a whole machine: structure, wiring, motion, air, firmware and electronics checked together) and six local single domains (CAD, wire harnesses, mechanisms, pneumatics, firmware, electronics). Every check's number cites its source. No telemetry.",
+  "description": "Hardware design with checks that run on every build: the combined multi-domain workspace on eitri.io (a whole machine: structure, wiring, motion, air and firmware checked together) and six local single domains (CAD, wire harnesses, mechanisms, pneumatics, firmware, electronics). Every check's number cites its source. No telemetry.",
   "icon": "./.claude-plugin/icon.png",
   "author": {
     "name": "eitri",
