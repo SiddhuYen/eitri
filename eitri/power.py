@@ -33,13 +33,21 @@ SRC_USB2 = ("USB 2.0 Specification, section 7.2.1: a port supplies at most 5 uni
             "device; the Nano's 5V pin is fed from the host's USB port when it runs on USB")
 SRC_UNO_REG = ("Arduino UNO R3 datasheet A000066 (rev 4, 20/10/2026; re-read 2026-11-07), board topology: U1 SPX1117M3-L-5 regulator (the R3 schematic shows "
                "an NCP1117ST50T3G, rated 1.0 A; the lower rating is used). MaxLinear SPX1117 datasheet: guaranteed 0.8 A output; "
-               "SOT-223 thermal resistance 15 C/W junction-to-tab + 31 C/W tab-to-ambient = 46 C/W; maximum junction temperature "
-               "125 C; PD = (VIN - VOUT) x IOUT")
+               "maximum junction temperature 125 C; PD = (VIN - VOUT) x IOUT; SOT-223 junction-to-ambient 46 to 85 C/W by board copper "
+               "(Table 1); the highest, 85 C/W (900 mm2 board, 240 mm2 topside copper, none on the back), is used: the Uno's real "
+               "copper is not published, and a limit takes the conservative figure")
 SRC_NANO_VIN = ("Arduino Nano datasheet A000005 (rev 5, 20/10/2026; docs.arduino.cc/resources/datasheets/A000005-datasheet.pdf) names "
                 "an LDO on the VIN path but publishes no current rating for it")
 
 SPX1117_MAX_A = 0.8           # MaxLinear SPX1117 datasheet: guaranteed output current
-SPX1117_THETA_JA = 46.0       # C/W, SOT-223, junction to ambient (15 + 31), same datasheet
+# C/W, SOT-223 junction to ambient. MaxLinear SPX1117 datasheet Rev. 2.2.0 (June 10, 2025), https://www.maxlinear.com/ds/spx1117.pdf
+# (re-read 2026-11-07), p.8 Table 1, measured on 1/16" FR-4 with 1 oz copper: 46 C/W with 2500 mm2 of copper on both sides
+# (the "15 + 31 = 46" of the Thermal Characteristics text, p.6), rising as copper shrinks: 51 (2500 mm2 top only), 67
+# (600 mm2 top), 72 (900 mm2 board, 240 mm2 top + 900 back), 85 (900 mm2 board, 240 mm2 top, no backside copper). Arduino
+# publishes no copper area for U1, so by the conservative-figure rule (the higher thermal resistance gives the lower current
+# limit) 85 C/W is used. Up to eitri 0.7.0 this was 46 C/W, the datasheet's best case. (onsemi's NCP1117, which the R3
+# schematic shows, gives 160 C/W on a minimum pad: not used, as the Uno's tab sits on a copper pour, not a minimum pad.)
+SPX1117_THETA_JA = 85.0
 SPX1117_TJ_MAX = 125.0        # C, same datasheet
 REGULATED_V = 5.0
 

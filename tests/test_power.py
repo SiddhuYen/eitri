@@ -24,11 +24,12 @@ def test_limits_and_their_sources():
     assert power.supply_limit("nano", "5V").limit_A == 0.5 and "USB 2.0" in power.supply_limit("nano", "5V").source
     assert power.supply_limit("nano", "5V", "vin", 9).limit_A is None                     # not published: ungraded, never guessed
     assert power.supply_limit("esp32", "3V3").limit_A is None
-    # the Uno on VIN: the regulator's rating, or its heat (PD = (VIN - 5) x I, 46 C/W, 125 C junction, 25 C ambient)
+    # the Uno on VIN: the regulator's rating, or its heat (PD = (VIN - 5) x I, 85 C/W, 125 C junction, 25 C ambient)
     assert power.supply_limit("uno", "5V", "vin").limit_A == 0.8
     hot = power.supply_limit("uno", "5V", "vin", vin_V=12)
-    assert hot.limit_A == pytest.approx((125 - 25) / (46 * 7), abs=1e-3) and "heat" in hot.basis
-    assert power.supply_limit("uno", "5V", "vin", vin_V=6.5).limit_A == 0.8
+    assert hot.limit_A == pytest.approx((125 - 25) / (85 * 7), abs=1e-3) and "heat" in hot.basis
+    assert power.supply_limit("uno", "5V", "vin", vin_V=6.4).limit_A == 0.8           # 1.4 V headroom: 0.84 A thermal, the 0.8 A rating binds
+    assert power.supply_limit("uno", "5V", "vin", vin_V=6.5).limit_A == pytest.approx(100 / (85 * 1.5), abs=1e-3)
     assert power.supply_limit("uno", "5V", "vin", vin_V=5).limit_A == 0.0
     for lim in (usb, hot, power.supply_limit("nano", "5V")):
         assert lim.source, "every graded limit names its source"

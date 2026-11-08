@@ -223,3 +223,19 @@ def test_other_domains_list_their_switched_off_checks():
     h.connect(a["2"], b["2"], Wire(22, "BK", 300), net="G")
     inputs = {i for x in h_analyze(h).to_dict()["checks_not_run"] for i in x["inputs"]}
     assert "A.rating_a" in inputs and any(i.endswith(".voltage_V") for i in inputs)
+
+
+# --------------------------------------------------------------------------- the Uno's 5 V regulator heat
+
+
+def test_uno_regulator_uses_the_spx1117_worst_case_thermal_resistance():
+    from eitri import power
+    # SPX1117 Rev 2.2.0 Table 1: 46 C/W (2500 mm2 copper both sides) to 85 C/W (240 mm2 top, no back); the highest is used
+    assert power.SPX1117_THETA_JA == 85.0 and "85 C/W" in power.SRC_UNO_REG and "Table 1" in power.SRC_UNO_REG
+    # 9 V on VIN, 25 C: (125 - 25) / (85 x 4) = 0.294 A (at the old 46 C/W it read 0.54 A)
+    nine = power.supply_limit("uno", "5V", "vin", vin_V=9)
+    assert nine.limit_A == pytest.approx(0.294, abs=1e-3) and "heat at 9 V in" in nine.basis
+    # a 0.4 A load on a 9 V VIN now fails, 0.2 A passes
+    assert power.grade(0.4, nine) == "fail" and power.grade(0.2, nine) == "pass"
+    # 12 V at 40 C ambient: 85 / (85 x 7) = 0.143 A
+    assert power.supply_limit("uno", "5V", "vin", vin_V=12, ambient_C=40).limit_A == pytest.approx(0.143, abs=1e-3)
