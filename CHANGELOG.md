@@ -3,7 +3,7 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
-## Unreleased: sourced figure fixes, two new electronics checks, checks switched off are reported
+## Unreleased (planned 0.7.1): sourced figure fixes, two new electronics checks, checks switched off are reported
 
 Every changed figure cites its document, revision and page in the code. Where sources disagree the conservative figure
 is used (the lower for a limit, the higher for a draw).
@@ -23,6 +23,8 @@ is used (the lower for a limit, the higher for a draw).
   direction passes no more than its throttle.
 - **Servos**: SG90 draws 2 A at stall (the higher of TowerPro's "0.5A - 2A"). STS3215 16.5 kg·cm stall, 4 rated at
   6 V (Feetech spec sheet). An actuator with no published continuous rating is assumed at 1/5 of stall (was 1/3).
+- **Uno on VIN**: the 5 V regulator's heat uses 85 °C/W, the worst board in the SPX1117 datasheet's Table 1 (was 46,
+  its best case). At 9 V on VIN the 5V pin gives about 0.29 A (was 0.54 A).
 
 ### Added
 
