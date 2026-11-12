@@ -208,7 +208,7 @@ def test_bom_counts_each_fitting_once():
     c = load_model(EXAMPLE).build()
     rows = outputs.bom(c)
     fits = {r["description"]: r for r in rows if r["category"] == "fitting"}
-    # the valves sit on the manifold (no P/R/S fittings), their A/B and the AS2201F tube sides are built-in push-in, the AS2201F are
+    # the valves sit on the manifold (no 1/3/5 fittings), their 2/4 and the AS2201F tube sides are built-in push-in, the AS2201F are
     # screwed into the cylinders: only the manifold's Rc1/8 P (a KQ2H06-01S) and the FRL / supply ends (ports not given) need fittings
     rc = next(r for d, r in fits.items() if "Rc1/8" in d)
     assert rc["qty"] == 1 and rc["part_number"] == "KQ2H06-01S"
@@ -236,7 +236,7 @@ def _two_valve_circuit(cls="5/2", returns="spring", center="closed", acting="dou
 def test_failsafe_states_per_valve_function():
     from eitri.pneumatics import failsafe
     cases = [  # (valve, cylinder, power loss, air loss)
-        (dict(cls="5/2", returns="spring"), {}, "extend", "release"),         # rest: P-A, A feeds CAP
+        (dict(cls="5/2", returns="spring"), {}, "extend", "release"),         # rest: 1-2, port 2 feeds CAP
         (dict(cls="5/2", returns="solenoid"), {}, "hold", "release"),         # double solenoid keeps its last position
         (dict(cls="5/3", center="closed"), {}, "trapped", "trapped"),
         (dict(cls="5/3", center="exhaust"), {}, "release", "release"),

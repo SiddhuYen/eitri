@@ -30,7 +30,7 @@ def pusher(load=350.0, speed=200.0, p_bar=6.0, bore=32.0, with_fc=True, supply_f
     frl = c.frl("FRL", set_bar=p_bar, C=2.5, b=0.35)
     v = c.valve("V1", "5/2", C=1.2, b=0.3)
     cyl = c.cylinder("C1", bore_mm=bore, rod_mm=12, stroke_mm=100, load_N=load, speed_mm_s=speed, cycles_per_min=cycles,
-                     on_power_loss="extend", on_air_loss="release")     # V1 at rest joins P-A, A feeds CAP
+                     on_power_loss="extend", on_air_loss="release")     # V1 at rest joins 1-2, port 2 feeds CAP
     c.tube("T1", air["OUT"], frl["IN"], id_mm=8, length_m=2.0, C=3.0)
     c.tube("T2", frl["OUT"], v["1"], id_mm=6, length_m=1.0, C=2.0)
     c.tube("T3", v["2"], cyl["CAP"], id_mm=6, length_m=1.5, C=1.8)

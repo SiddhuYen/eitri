@@ -3,7 +3,28 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
-## Unreleased (planned 0.8.1): the pneumatics package a fixture shop hands its customer
+## 0.8.0: tickets and checked change packages, a source on every check, fuses, pneumatic catalogue parts, reference parts
+
+> **Read this first: pneumatic valve ports were swapped on SMC valves in every eitri before 0.8.0.** eitri named a 5/2 valve's
+> ports P, A, B, R, S and took "A" to be the port fed at rest. SMC prints the opposite: on an SMC valve, A is port 4, which gets
+> air only when coil 14 is energised; the port fed at rest is 2 (B) (SMC SY catalogue CAT.EUS11-83, SY_EU.pdf p.14; Festo VUVG
+> catalogue p.12 numbers them the same way). So a design written with SMC's letters was graded backwards: the fail-safe check
+> could pass a clamp that actually opens when the 24 V supply drops, and the schematics labelled A and B the wrong way round,
+> telling whoever plumbs it to connect it backwards. From 0.8.0 valve ports are the ISO 5599 numbers "1"-"5"; SMC's letters are
+> accepted only on SMC catalogue valves, with SMC's meaning (A = 4); any other valve given a letter stops with an error.
+> **Who must act:** every pneumatic design that used `v["A"]` / `v["B"]` on an SMC valve must be checked and rebuilt; every
+> design that used letters on another valve stops until it is migrated (`A` → `"2"`, `B` → `"4"`, `P` → `"1"`, `R` → `"3"`,
+> `S` → `"5"` keeps what eitri graded before). Schematics, drawings and I/O lists made before 0.8.0 showed A/B in eitri's old
+> sense: redo them.
+
+eitri for a shop that takes a ticket and hands back a checked change package. A ticket holds the customer's request and
+acceptance criteria; the agent writes a plan; **only a person approves it**, in their own terminal; the package is a fresh
+rebuild of the base and the result with every check's status and source, the diffs, the outputs and a draft change order,
+and it is refused while any check fails or did not run unwaived. Every check in every domain now carries a structured
+source. This release replaces the planned 0.7.1: its sourced figure fixes are here too.
+
+Every changed figure cites its document, revision and page in the code. Where sources disagree the conservative figure
+is used (the lower for a limit, the higher for a draw).
 
 ### Added
 
@@ -23,35 +44,6 @@ annotated tags (`git show v0.4.0`).
 - **Catalogue parts**: Festo DSNU 16-63, SMC CQ2 12-100, Festo DSBC 32-100 (ISO 15552), SMC MGPM 20-32 (guided), SMC AW20 and
   Festo MS4-LFR filter regulators (set pressure checked against the regulation range), AS1201F-M5-04 / AS2201F-02-08, TU0425 /
   TU0805, AN10-01; every figure cited with its document and page.
-
-### Changed
-
-- **Valve ports are the ISO 5599 numbers** "1" (supply), "2" / "4" (working), "3" / "5" (exhaust), as SMC (SY_EU.pdf PDF p.14)
-  and Festo (VUVG catalogue p.12) print them: at rest a spring-return 5/2 connects 1-2 and 4-5, coil 14 connects 1-4 and 2-3.
-  Up to 0.8.0 eitri named them P, A, B, R, S with A = 2; SMC marks A = 4, so on the SMC catalogue valves eitri's "A" was SMC's
-  "B": a model written with SMC's letters was graded backwards (its fail-safe and sequence results inverted) and the drawing's
-  A/B labels told the customer to plumb it backwards. Letters are now accepted only on a catalogue valve whose maker prints
-  them, with the maker's meaning (SMC: A = 4, B = 2, P = 1, EA = 5, EB = 3); a generic valve refuses them with the mapping
-  eitri used before. **Models must change**: `v["A"]` → `v["2"]`, `v["B"]` → `v["4"]`, `v["P"]` → `v["1"]`, `v["R"]` → `v["3"]`,
-  `v["S"]` → `v["5"]` keeps what eitri graded; silencers are named `S_V1_3` / `S_V1_5`.
-- Valve symbols are drawn as ISO 1219 does: the box beside coil 14 is the 1-4 position, the rest box (beside the spring / coil 12)
-  carries the ports, labelled with the number and the maker's letter ("4(A)").
-- The I/O list says what each coil connects and which cylinder end it pressurises ("connects 1-4, 2-3; pressurises 4 (C2 CAP)").
-- The default valve flow source now names the SY3000 body-ported table (C 0.6, b 0.29), not the series' best case.
-
-## 0.8.0: tickets and checked change packages, a source on every check, fuses, pneumatic catalogue parts, reference parts
-
-eitri for a shop that takes a ticket and hands back a checked change package. A ticket holds the customer's request and
-acceptance criteria; the agent writes a plan; **only a person approves it**, in their own terminal; the package is a fresh
-rebuild of the base and the result with every check's status and source, the diffs, the outputs and a draft change order,
-and it is refused while any check fails or did not run unwaived. Every check in every domain now carries a structured
-source. This release replaces the planned 0.7.1: its sourced figure fixes are here too.
-
-Every changed figure cites its document, revision and page in the code. Where sources disagree the conservative figure
-is used (the lower for a limit, the higher for a draw).
-
-### Added
-
 - **"Not run" is a check status.** Every check (and every `verify()` / reference check) has `status`: `pass | warn | fail |
   not_run`, in `result.json` (each check's `"status"`) and in `checks_not_run` (now in the CAD report too). The older
   form still works: a not-run check keeps severity `warn` and text starting "not run: ". The fuse, pneumatic fail-safe and
@@ -157,6 +149,18 @@ is used (the lower for a limit, the higher for a draw).
 
 ### Changed
 
+- **Valve ports are the ISO 5599 numbers** "1" (supply), "2" / "4" (working), "3" / "5" (exhaust), as SMC (SY_EU.pdf PDF p.14)
+  and Festo (VUVG catalogue p.12) print them: at rest a spring-return 5/2 connects 1-2 and 4-5, coil 14 connects 1-4 and 2-3.
+  Up to 0.8.0 eitri named them P, A, B, R, S with A = 2; SMC marks A = 4, so on the SMC catalogue valves eitri's "A" was SMC's
+  "B": a model written with SMC's letters was graded backwards (its fail-safe and sequence results inverted) and the drawing's
+  A/B labels told the customer to plumb it backwards. Letters are now accepted only on a catalogue valve whose maker prints
+  them, with the maker's meaning (SMC: A = 4, B = 2, P = 1, EA = 5, EB = 3); a generic valve refuses them with the mapping
+  eitri used before. **Models must change**: `v["A"]` → `v["2"]`, `v["B"]` → `v["4"]`, `v["P"]` → `v["1"]`, `v["R"]` → `v["3"]`,
+  `v["S"]` → `v["5"]` keeps what eitri graded; silencers are named `S_V1_3` / `S_V1_5`.
+- Valve symbols are drawn as ISO 1219 does: the box beside coil 14 is the 1-4 position, the rest box (beside the spring / coil 12)
+  carries the ports, labelled with the number and the maker's letter ("4(A)").
+- The I/O list says what each coil connects and which cylinder end it pressurises ("connects 1-4, 2-3; pressurises 4 (C2 CAP)").
+- The default valve flow source now names the SY3000 body-ported table (C 0.6, b 0.29), not the series' best case.
 - **Fasteners**: countersinks take the ISO 10642:2020 head diameter (M3 6.72, M5 11.2, M6 13.44, M8 17.92, M10 22.4,
   M12 26.88 mm; M4 8.96). Heat-set insert holes follow ruthex: M2.5 4.0 mm, M8 9.6 mm.
 - **Bearings**: a bare miniature bearing name is the open bearing (683 is 2 mm wide); `683ZZ` / `-2RS` give the

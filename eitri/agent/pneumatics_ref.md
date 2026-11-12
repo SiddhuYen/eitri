@@ -50,7 +50,7 @@ c.mount(valve, m, station=None)                                  mount a valve o
     on it draw at once (per sequence step when c.step(...) declares one, else all at once). The I/O list names each coil's station.
 every component also takes max_bar= and min_bar= (its working pressure range, from its datasheet) and part_number=; a tube max_bar=
 valves also take coil_V=, coil_W=, connector=, signal= / signal_12= (the PLC signal names of coils 14 / 12), terminal=,
-  C_exhaust= / b_exhaust= (the A/B -> R/S passage when the datasheet gives it apart)
+  C_exhaust= / b_exhaust= (the 4/2 -> 5/3 passage when the datasheet gives it apart)
 cylinders also take load_mass_kg= (the mass the rod moves), allowable_ke_J=, piston_mass_kg=, speed_min_mm_s= / speed_max_mm_s=, magnet=,
   on_power_loss= / on_air_loss= (what it must do: "hold" | "extend" | "retract" | "release"; graded against its valves)
 c.screw_in(port_a, port_b)                                       two parts screwed straight together (a speed controller in a cylinder port): no tube, no fitting
@@ -68,7 +68,7 @@ A figure you also give must agree with the part's. Known part numbers (the strok
   `CQ2B32-...DZ` is the same without a magnet)
 - manifolds: `SMC SS5Y3-20-<stations>[00F|00N|00T]-Q` (SY3000, 2-20 stations, P/EA/EB 1/8, valve on base C 0.72 b 0.29, exhaust 0.80
   / 0.36, blanking plate SY3000-26-19A-Q), `SMC SS5Y5-20-<stations>-Q` (SY5000, 1/4, C 1.9 / 2.2); silencer `SMC AN10-01` (R1/8, C 2)
-- valves: `SMC SY3120-5LZ-C6` (5/2 single solenoid, spring return, C 0.76 b 0.30 P->A/B, C 0.65 b 0.39 A/B->R/S, 1.5-7 bar,
+- valves: `SMC SY3120-5LZ-C6` (5/2 single solenoid, spring return, C 0.76 b 0.30 1->4/2, C 0.65 b 0.39 4/2->5/3 (SMC prints these P->A/B, A/B->EA/EB: SMC's A is port 4), 1.5-7 bar,
   24 VDC 0.4 W, L plug), `SMC SY3220-5LZ-C6` (the same, double solenoid: holds its position unpowered, 1-7 bar),
   `SMC SY5120-5LZ-01` (C 1.9 / 2.4, all ports 1/8); drop the Z for the 0.35 W coil without indicator light
 - more cylinders: `FESTO DSNU-<16|20|25|32|40|50|63>-<stroke>-P-A`, `SMC C[D]Q2B<12..100>-<stroke>DZ` (standard strokes per bore),
@@ -89,7 +89,7 @@ is used (the smallest of those sizes: valve 0.6, silencer 1.0, flow control 0.3)
 ## The checks every build runs
 
 - circuit: every cylinder port fed from a supply through a valve in some position and able to exhaust in another (a chamber that
-  cannot vent is dead-headed); every valve's P supplied and work ports connected; no tee or inline component with a single connection.
+  cannot vent is dead-headed); every valve's supply port 1 fed and work ports 2 / 4 connected; no tee or inline component with a single connection.
 - force per stroke (FAIL below the load, WARN above the duty's load ratio: 0.5 moving, 0.7 static, 1.0 guided): usable force = pressure at the cylinder x area x (1 -
   friction allowance), the pressure being the lowest regulator on the supply path (or the supply's); the load ratio is load / theoretical
   force. A single-acting cylinder retracts by its spring (spring_N), graded against load_retract_N.

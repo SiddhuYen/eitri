@@ -9,11 +9,11 @@ with a dash ... If several devices within a circuit have the same code, consecut
 equipment lists name "-AZ1 On-off valve with filter regulating valve" and "-XM1 Distributor block").
 
 What we follow:  -MM cylinders, -QM directional valves, -BG position sensors, -AZ the air-preparation (filter-regulator) unit,
-                 -XM a tee / distributor; numbered consecutively per code; every tag starts with a dash; ports keep the ISO 5599
-                 numbers' letters (P, A, B, R, S) and coils their pilot numbers 14 / 12.
+                 -XM a tee / distributor; numbered consecutively per code; every tag starts with a dash; ports carry their ISO 5599
+                 numbers (1-5; with the maker's letter where it prints one, SMC "4(A)") and coils their pilot numbers 14 / 12.
 What we don't:   the workbook does not define a class code for one-way flow controls; we use -RZ (as on the workbook's own cover
                  circuit, where -RZ1 / -RZ2 sit in the cylinder lines), which is an inference. Silencers get no tag of their own:
-                 they are named by the valve port they are screwed into (-QM1:R), the EN 81346 port-designation style. The air
+                 they are named by the valve port they are screwed into (-QM1:3), the EN 81346 port-designation style. The air
                  supply is the drawing's interface, not a device: it is labelled AIR without a tag. No function (=) or location (+)
                  aspects, no IEC 81346-1 multi-level structure; the older ISO 1219-2:1995 numbering (1A1, 1V1, 0Z1) is not used.
 """

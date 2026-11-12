@@ -308,7 +308,7 @@ tubes and silencers, connected port to port. Every build checks:
 - **Air.** Consumption per cycle and per minute, including dead volume in the tubes, against the supply.
 - **Pressure drop.** The drop across each tube and component on every stroke's path, at the flow that stroke needs.
 - **Circuit validity.** A supply exists, every cylinder chamber is fed from it through a valve and can exhaust in some valve
-  position, every valve has P supplied and its work ports connected, and no line is dead-headed.
+  position, every valve has its supply port 1 fed and its work ports (2, 4) connected, and no line is dead-headed.
 
 A component or tube without datasheet `C`/`b` is graded with a conservative estimate and the check warns. It writes a BOM
 (Markdown and CSV), a cylinder table and an ISO 1219-style schematic (SVG and PNG). The editor shows the component list and the

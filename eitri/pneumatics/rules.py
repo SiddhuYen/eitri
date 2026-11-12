@@ -205,7 +205,7 @@ RULES = [
     Rule(P + "separate-lines", "circuit", r".+\.CAP and .+\.ROD on separate lines$", (rule("a double-acting cylinder's two chambers are on separate lines"),)),
     Rule(P + "fed", "circuit", r".+ fed from supply$", (ISO_1219,)),
     Rule(P + "exhaust", "circuit", r".+ can exhaust$", (ISO_1219,)),
-    Rule(P + "valve-ports", "circuit", r"valve .+ ports$", (rule("a valve's P is supplied and every work port connected"),)),
+    Rule(P + "valve-ports", "circuit", r"valve .+ ports$", (rule("a valve's supply port (1) is fed and every work port (2, 4) connected"),)),
     Rule(P + "dead-headed", "circuit", r"no dead-headed lines$", (rule("every line leads somewhere (no tee or inline part with one connection)"),)),
     Rule(P + "force", "force", r"force ", (requirement("load_N"), SMC_LOAD_RATIO, FRICTION, model_file("spring_N")), _force),
     Rule(P + "speed", "speed", r"speed ", (requirement("speed_mm_s"), ISO_6358, TUBE_ESTIMATE, B_ESTIMATE) + tuple(FLOW_DOCS.values()), _speed),

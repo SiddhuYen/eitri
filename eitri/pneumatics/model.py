@@ -207,7 +207,7 @@ class Valve(Component):
     returns: str = "spring"              # spring | solenoid | detent
     normally: str = "closed"             # 3/2 and 2/2: closed | open (which position is the rest position)
     center: str = "closed"               # 5/3: closed | exhaust | pressure (the middle position)
-    C_exhaust: float | None = None       # ISO 6358 C, b of the work-to-exhaust passages (A/B -> R/S) when the datasheet gives them apart
+    C_exhaust: float | None = None       # ISO 6358 C, b of the work-to-exhaust passages (4/2 -> 5/3) when the datasheet gives them apart
     b_exhaust: float | None = None
     coil_V: float | None = None          # solenoid coil rated voltage (DC) and power, from the datasheet: the I/O list's outputs
     coil_W: float | None = None
