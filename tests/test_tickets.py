@@ -85,7 +85,7 @@ def test_ticket_file_criteria_and_history(tmp_path):
     assert t.id == "T-0001" and t.status == "draft" and t.data["target"] == {"file": "tilt.py", "revision": None}
     assert t.data["acceptance"][0] == {"id": "AC-1", "text": "tilt holds it", "check": "torque joint tilt*"}
     assert t.data["acceptance"][1]["human_verify"] is True and "human verifies" in t.data["acceptance"][1]["note"]
-    text = (p.folder / "tickets" / "T-0001" / "ticket.yaml").read_text()
+    text = (p.folder / "tickets" / "T-0001" / "ticket.yaml").read_text(encoding="utf-8")
     assert "Our camera is 150 g now" in text and "status: draft" in text
     assert T.active(p).id == "T-0001"
     with pytest.raises(T.TicketError, match="still draft"):            # one active ticket per project
@@ -132,7 +132,7 @@ def test_approval_refused_when_the_file_changed_after_the_plan(tmp_path):
     p = _project(tmp_path, mech())
     T.new_ticket(p, "t", "r")
     T.set_plan(p, "T-0001", PLAN)
-    (p.folder / "tilt.py").write_text(mech().replace("100.0", "120.0"))     # the agent's own file tools, before approval
+    (p.folder / "tilt.py").write_text(mech().replace("100.0", "120.0"), encoding="utf-8")     # the agent's own file tools, before approval
     with pytest.raises(T.TicketError, match="changed on disk after the plan"):
         T.approve(p, "T-0001", confirm=_person)
     T.approve(p, "T-0001", confirm=_person, despite_changes=True)     # accepted out loud: recorded for the package's page 1
@@ -146,16 +146,16 @@ def test_editing_an_approved_ticket_or_forging_one_does_not_pass(tmp_path):
     T.set_plan(p, "T-0001", PLAN)
     T.approve(p, "T-0001", confirm=_person)
     path = p.folder / "tickets" / "T-0001" / "ticket.yaml"
-    data = yaml.safe_load(path.read_text())
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
     data["request"] = "a bigger request"                               # changed after approval
-    path.write_text(T.store.dump_yaml(data))
+    path.write_text(T.store.dump_yaml(data), encoding="utf-8")
     with pytest.raises(T.ChangeRefused, match="changed after it was approved"):
         p.write_model("x")
     with pytest.raises(T.PackageRefused, match="changed after it was approved"):
         T.make_package(p, "T-0001")
     data["request"] = "the request"                                    # a hand-made approval: right hash, no key
     data["approval"]["by"] = "someone else"
-    path.write_text(T.store.dump_yaml(data))
+    path.write_text(T.store.dump_yaml(data), encoding="utf-8")
     with pytest.raises(T.ChangeRefused, match="signature does not verify"):
         p.write_model("x")
 
@@ -319,9 +319,9 @@ def test_package_refuses_failed_and_not_run_checks_and_takes_a_waiver(tmp_path):
             confirm=_person)
     pkg = T.make_package(p, "T-0001")
     assert pkg["waivers"][0]["check"] == "joint limits tilt" and pkg["checks"]["summary"]["to"]["not_run"] == 1
-    page1 = Path(pkg["folder"], "report.md").read_text().split("## Acceptance criteria")[0]
+    page1 = Path(pkg["folder"], "report.md").read_text(encoding="utf-8").split("## Acceptance criteria")[0]
     assert "WAIVERS" in page1 and "joint limits tilt" in page1 and "180 deg per TowerPro" in page1
-    html = Path(pkg["folder"], "report.html").read_text()
+    html = Path(pkg["folder"], "report.html").read_text(encoding="utf-8")
     assert html.index("WAIVERS") < html.index("Acceptance criteria")
     assert any(n["kind"] == "waived" for n in pkg["not_checked"])
     assert T.load(p, "T-0001").status == "packaged"
@@ -339,7 +339,7 @@ def test_new_design_package_has_no_diff_sections(tmp_path):
     assert pkg["parameters"] is None and pkg["bom"] is None
     out = Path(pkg["folder"])
     assert not (out / "source.diff").exists() and not (out / "parameters.csv").exists() and not (out / "bom_diff.csv").exists()
-    assert "## Parameter changes" not in (out / "report.md").read_text()
+    assert "## Parameter changes" not in (out / "report.md").read_text(encoding="utf-8")
     assert {c["status"] for c in pkg["acceptance"]} <= {"pass", "pass_with_warning"}
     _validate(out / "package.json")
 
@@ -369,8 +369,8 @@ def _sources_are_structured(pkg: dict) -> None:
 
 def _validate(path: Path) -> None:
     jsonschema = pytest.importorskip("jsonschema")
-    schema = json.loads((ROOT / "eitri" / "tickets" / "package.schema.json").read_text())
-    jsonschema.validate(json.loads(path.read_text()), schema)
+    schema = json.loads((ROOT / "eitri" / "tickets" / "package.schema.json").read_text(encoding="utf-8"))
+    jsonschema.validate(json.loads(path.read_text(encoding="utf-8")), schema)
 
 
 # ---------------------------------------------------------------------------------------------------- end to end: the pan-tilt demo
@@ -420,7 +420,7 @@ def test_end_to_end_pan_tilt_servo_change(tmp_path):
     res = tools.package("T-0001")
     assert not res.is_error, res.text
     pkg_dir = next((folder / "tickets" / "T-0001").glob("T-0001-pan_tilt-rev-B"))
-    pkg = json.loads((pkg_dir / "package.json").read_text())
+    pkg = json.loads((pkg_dir / "package.json").read_text(encoding="utf-8"))
     _validate(pkg_dir / "package.json")
     assert pkg["revisions"]["from"]["letter"] == "A" and pkg["revisions"]["to"]["letter"] == "B"
     assert [r["letter"] for r in pkg["revision_table"]] == ["A", "B"] and pkg["revision_table"][1]["ticket"] == "T-0001"
@@ -437,7 +437,7 @@ def test_end_to_end_pan_tilt_servo_change(tmp_path):
     _sources_are_structured(pkg)
     tilt = rows["torque joint tilt (MG996R)"]
     assert tilt["rule"] == "mechanism.joint-load" and tilt["sources"], tilt
-    assert "rule" in (pkg_dir / "checks.csv").read_text().splitlines()[0]
+    assert "rule" in (pkg_dir / "checks.csv").read_text(encoding="utf-8").splitlines()[0]
     assert pkg["checks"]["summary"]["to"]["fail"] == 0 and pkg["checks"]["summary"]["to"]["not_run"] == 0
     kinds = {n["kind"] for n in pkg["not_checked"]}
     assert {"plan", "human_verify", "removed_check", "domain", "scope"} <= kinds
@@ -451,17 +451,17 @@ def test_end_to_end_pan_tilt_servo_change(tmp_path):
     for f in pkg["files"]:
         if f["sha256"]:
             assert T.store.file_sha256(pkg_dir / f["path"]) == f["sha256"]
-    md = (pkg_dir / "report.md").read_text()
+    md = (pkg_dir / "report.md").read_text(encoding="utf-8")
     page1 = md.split("## Acceptance criteria")[0]
     assert "Rev A -> Rev B" in page1 and "Pat Person" in page1 and "0 fail, 0 not run" in page1
     assert "Is the supply still 4.8-5 V?" in page1 and "5 V supply, yes." in page1
-    assert "MG996R" in (pkg_dir / "source.diff").read_text()
-    html = (pkg_dir / "report.html").read_text()
+    assert "MG996R" in (pkg_dir / "source.diff").read_text(encoding="utf-8")
+    html = (pkg_dir / "report.html").read_text(encoding="utf-8")
     assert "data:image/png;base64," in html and "<script" not in html and not re.search(r"""(src|href)=['"]https?:""", html)
     with zipfile.ZipFile(str(pkg_dir) + ".zip") as z:
         assert "T-0001-pan_tilt-rev-B/package.json" in z.namelist()
     assert not (folder / "tickets" / "T-0001" / ".package-build").exists()
-    revs = json.loads((folder / "tickets" / "revisions.json").read_text())
+    revs = json.loads((folder / "tickets" / "revisions.json").read_text(encoding="utf-8"))
     assert [r["letter"] for r in revs["files"]["pan_tilt.py"]] == ["A", "B"]
     assert T.load(p, "T-0001").status == "packaged"
     T.close(p, "T-0001", confirm=_person)
@@ -511,7 +511,7 @@ def test_cad_hole_pattern_package_has_step_stl_3mf_and_drawing(tmp_path):
     part = next(r for r in pkg["bom"] if r["table"] == "parts" and r["key"] == "plate")
     assert part["change"] == "changed" and "hole_centres" in part["fields"]
     assert pkg["unplanned_changes"] == ["width"]
-    assert "did not list it: width" in Path(pkg["folder"], "report.md").read_text()
+    assert "did not list it: width" in Path(pkg["folder"], "report.md").read_text(encoding="utf-8")
     _sources_are_structured(pkg)
     _export_sample(Path(pkg["folder"]))
 
@@ -546,5 +546,5 @@ def test_harness_package_refuses_a_fuse_check_not_run_until_a_person_waives_it(t
     assert any(x["basis"] == "document" and x["url"].startswith("https://") and "Littelfuse" in x["text"] for x in cont["sources"]), cont
     assert "Littelfuse" in cont["source"] and "https://" in cont["source"]
     _sources_are_structured(pkg)
-    assert "F1 interrupting rating" in Path(pkg["folder"], "report.md").read_text().split("## Acceptance criteria")[0]
+    assert "F1 interrupting rating" in Path(pkg["folder"], "report.md").read_text(encoding="utf-8").split("## Acceptance criteria")[0]
     _export_sample(Path(pkg["folder"]))

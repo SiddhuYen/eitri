@@ -67,14 +67,14 @@ def test_eitri_hardware_command_starts_the_mcp_server(monkeypatch):
     eitri_hardware.main(["mcp"])
     eitri_hardware.main(["doctor", "--json"])
     assert seen[-2:] == [["mcp"], ["doctor", "--json"]]
-    scripts = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["scripts"]
+    scripts = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["scripts"]
     assert scripts == {"eitri": "eitri.cli:main", "eitri-hardware": "eitri_hardware:main"}
 
 
 def test_registry_files():
-    readme = (ROOT / "README.md").read_text()
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert re.search(r"^<!-- mcp-name: io\.github\.SiddhuYen/eitri -->$", readme, re.M)
-    glama = json.loads((ROOT / "glama.json").read_text())
+    glama = json.loads((ROOT / "glama.json").read_text(encoding="utf-8"))
     assert glama["$schema"] == "https://glama.ai/mcp/schemas/server.json" and glama["maintainers"] == ["SiddhuYen"]
 
 
@@ -87,3 +87,16 @@ def test_public_names_for_hosts():
     assert amps == 2.0 and why.startswith("ASSUMPTION")
     assert Actuator("STS3215").stall_current()[0] is None
     assert Actuator("x", stall_A=1.5).stall_current() == (1.5, "the model file (x stall_A)")
+
+
+def test_3mf_export_leaves_the_process_locale_alone(tmp_path):
+    """lib3mf (build123d's Mesher) sets the C locale for the whole process; after a 3MF export the warm worker or the web server
+    would then read and write text as ASCII and fail on the next "Ø" or "°". kernel.export_parts restores it."""
+    import locale
+    from eitri import Box
+    from eitri.kernel import export_parts
+    from eitri.model import normalize_result
+    before = (locale.getpreferredencoding(False), locale.setlocale(locale.LC_CTYPE))
+    out = export_parts(normalize_result(Box(4, 3, 5), "plate"), tmp_path, "plate", ("3mf",))
+    assert Path(out["3mf"]).stat().st_size > 200
+    assert (locale.getpreferredencoding(False), locale.setlocale(locale.LC_CTYPE)) == before

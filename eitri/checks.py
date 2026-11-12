@@ -26,12 +26,11 @@ class Check(CheckResult):
     @property
     def status(self) -> str:
         """pass | warn | fail | not_run. A check switched off by an unset input is not_run: its severity stays "warn" and its text
-        starts "not run: ", so a reader of the older form (severity + text) still sees a warning that says why."""
-        if self.severity == "fail":
-            return "fail"
-        if self.not_run or str(self.measured).startswith("not run: "):
-            return "not_run"
-        return self.severity
+        starts "not run: ", so a reader of the older form (severity + text) still sees a warning that says why. A check that
+        passes on a declaration (Actuator(continuous=True): no travel to grade) stays a pass, though checks_not_run lists it."""
+        if self.severity != "warn":
+            return self.severity
+        return "not_run" if self.not_run or str(self.measured).startswith("not run: ") else "warn"
 
     def line(self, numbers: dict | None = None) -> str:
         mark = {"pass": "PASS", "warn": "WARN", "fail": "FAIL"}[self.severity]
@@ -55,12 +54,12 @@ def status_of(c) -> str:
         return c.status
     if c.get("status") in STATUSES:
         return c["status"]
-    sev = c.get("severity") or ("pass" if c.get("ok", True) else "fail")
-    if sev == "fail":
+    off = bool(c.get("not_run")) or str(c.get("measured", "")).startswith("not run: ")
+    if "severity" in c:                                   # a domain Check: only a warning can be "not run" (see Check.status)
+        return "not_run" if c["severity"] == "warn" and off else c["severity"]
+    if not c.get("ok", True):                             # a verify() / CAD CheckResult
         return "fail"
-    if c.get("not_run") or str(c.get("measured", "")).startswith("not run: "):
-        return "not_run"
-    return sev
+    return "not_run" if off else "pass"
 
 
 def stamp_status(d: dict, checks: Iterable) -> dict:
@@ -85,12 +84,12 @@ def checks_not_run(checks: Iterable[Check]) -> list[dict]:
     build report (report JSON key "checks_not_run")."""
     return [{"name": c.name, "category": getattr(c, "category", "") or "verify",
              "severity": getattr(c, "severity", "pass" if c.ok else "fail"), "status": c.status, "inputs": list(c.not_run),
-             "refs": list(getattr(c, "refs", []) or []), "why": c.measured} for c in checks if c.status == "not_run"]
+             "refs": list(getattr(c, "refs", []) or []), "why": c.measured} for c in checks if c.not_run or c.status == "not_run"]
 
 
 def not_run_line(checks: Iterable[Check]) -> str | None:
     """One summary line naming every check not run and the input that switched it off (None when there are none)."""
-    off = [c for c in checks if c.status == "not_run"]
+    off = [c for c in checks if c.not_run or c.status == "not_run"]
     if not off:
         return None
     return "Not run (an input is unset): " + "; ".join(f"{c.name} ({', '.join(c.not_run) or 'an input'} not set)" for c in off)
@@ -98,7 +97,8 @@ def not_run_line(checks: Iterable[Check]) -> str | None:
 
 def from_verify(r: CheckResult) -> Check:
     """A verify() result as a Check (category "verify")."""
-    return Check(name=r.name, ok=r.ok, measured=r.measured, expected=r.expected, severity="pass" if r.ok else "fail", category="verify",
+    sev = "fail" if not r.ok else "warn" if r.status == "not_run" else "pass"      # a CheckResult that did not run is a warning
+    return Check(name=r.name, ok=r.ok, measured=r.measured, expected=r.expected, severity=sev, category="verify",
                  source=list(r.source), kind=r.kind, rule=r.rule or "verify", not_run=list(r.not_run))
 
 

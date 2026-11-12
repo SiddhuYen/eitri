@@ -173,7 +173,7 @@ def test_an_actuator_without_travel_is_a_visible_check_not_run():
     c = _by_name(off.checks, "joint limits j1")
     assert c.severity == "warn" and c.not_run == ["travel_deg"] and c.measured.startswith("not run: joint travel: MG996R declares no travel_deg")
     listed = off.to_dict()["checks_not_run"]
-    assert listed == [{"name": "joint limits j1", "category": "limits", "severity": "warn", "inputs": ["travel_deg"], "refs": ["j1"],
+    assert listed == [{"name": "joint limits j1", "category": "limits", "severity": "warn", "status": "not_run", "inputs": ["travel_deg"], "refs": ["j1"],
                        "why": c.measured}]
     assert "Not run (an input is unset): joint limits j1 (travel_deg not set)" in summarize(off)
     # gearing past the travel still fails as before
@@ -187,6 +187,7 @@ def test_a_declared_continuous_actuator_passes_but_stays_listed():
     c = _by_name(rep.checks, "joint limits j1")
     assert c.severity == "pass" and "declared continuous" in c.measured
     assert rep.to_dict()["checks_not_run"][0]["inputs"] == ["travel_deg (declared continuous)"]
+    assert c.status == "pass" and rep.to_dict()["checks_not_run"][0]["status"] == "pass"   # a declaration, not a missing input
 
 
 def test_other_domains_list_their_switched_off_checks():

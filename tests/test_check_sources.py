@@ -88,7 +88,7 @@ def _sites(domain: str):
 
 
 def _file_sites(domain: str, path: Path):
-    tree = ast.parse(path.read_text())
+    tree = ast.parse(path.read_text(encoding="utf-8"))
     out = []
     module: dict[str, list] = {}                         # module-level constants (CAT = "protection")
     for n in tree.body:
@@ -129,7 +129,7 @@ def test_every_reference_check_has_a_rule_and_a_document_for_iso_273():
         assert rid.startswith("cad.reference-") and srcs
         for x in srcs:
             assert x.basis in BASES and (not x.url or x.url.startswith("https://"))
-    tree = ast.parse((ROOT / "eitri" / "reference.py").read_text())
+    tree = ast.parse((ROOT / "eitri" / "reference.py").read_text(encoding="utf-8"))
     made = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "CheckResult"]
     assert len(made) == 1, "make reference checks through _res(rule_id, ...)"
     used = {n.args[0].value for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "_res"

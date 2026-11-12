@@ -5,6 +5,8 @@ a model loops forever, and gives every build a wall-clock timeout.
 """
 from __future__ import annotations
 
+import contextlib
+
 import json
 import os
 import subprocess
@@ -354,9 +356,35 @@ def export_parts(parts, out_dir: Path, stem: str, formats: tuple[str, ...]) -> d
         out["iges"] = str(p)
     if "3mf" in formats:
         p = out_dir / f"{stem}.3mf"
-        mesher = bd.Mesher()
-        for part in parts:
-            mesher.add_shape(part.shape, linear_deflection=0.02, angular_deflection=0.15, part_number=part.name)
-        mesher.write(str(p))
+        with locale_kept():                   # lib3mf (build123d's Mesher) switches the whole process to the C locale
+            mesher = bd.Mesher()
+            for part in parts:
+                mesher.add_shape(part.shape, linear_deflection=0.02, angular_deflection=0.15, part_number=part.name)
+            mesher.write(str(p))
         out["3mf"] = str(p)
     return out
+
+
+@contextlib.contextmanager
+def locale_kept():
+    """Restore the process locale after a library that changes it (lib3mf sets "C": afterwards Python's default text encoding is
+    ASCII in that process, so a warm worker or the web server would fail on the next non-ASCII file it reads without an
+    explicit encoding)."""
+    import locale
+    cats = [getattr(locale, n) for n in ("LC_CTYPE", "LC_NUMERIC", "LC_TIME", "LC_COLLATE", "LC_MONETARY", "LC_MESSAGES")
+            if hasattr(locale, n)]
+    saved = {}
+    for c in cats:
+        try:
+            saved[c] = locale.setlocale(c)
+        except locale.Error:
+            pass
+    try:
+        yield
+    finally:
+        for c, v in saved.items():
+            try:
+                if locale.setlocale(c) != v:
+                    locale.setlocale(c, v)
+            except locale.Error:
+                pass

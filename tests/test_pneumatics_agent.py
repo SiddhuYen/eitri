@@ -20,7 +20,8 @@ def build(p):
     air = c.supply("AIR", pressure_bar=7.0, flow_l_min=600)
     frl = c.frl("FRL", set_bar=p.p_bar, C=2.5, b=0.35)
     v = c.valve("V1", "5/2", C=1.2, b=0.3)
-    cyl = c.cylinder("C1", bore_mm=p.bore_mm, rod_mm=12, stroke_mm=100, load_N=p.load_N, load_retract_N=100, speed_mm_s=200, cycles_per_min=20)
+    cyl = c.cylinder("C1", bore_mm=p.bore_mm, rod_mm=12, stroke_mm=100, load_N=p.load_N, load_retract_N=100, speed_mm_s=200, cycles_per_min=20,
+                     on_power_loss="extend", on_air_loss="release")   # V1's spring-return rest position feeds C1.CAP (0.8.0 fail-safe check)
     c.tube("T1", air["OUT"], frl["IN"], id_mm=8, length_m=2.0, C=3.0)
     c.tube("T2", frl["OUT"], v["P"], id_mm=6, length_m=1.0, C=2.0)
     c.tube("T3", v["A"], cyl["CAP"], id_mm=6, length_m=1.5, C=1.8)
@@ -117,6 +118,6 @@ def test_cli(tmp_path, capsys):
     assert capsys.readouterr().out.startswith("Pneumatic circuit 'Pusher'")
     assert main(["bom", str(pr.folder)]) == 0
     out = capsys.readouterr().out
-    assert out.startswith("# Bill of materials: Pusher") and "pneumatic tube, 6 mm bore (ID)" in out and "sized by the tube's OD" in out
+    assert out.startswith("# Bill of materials: Pusher") and "pneumatic tube, 6 mm bore (ID)" in out and "push-in fitting for the 6 mm-bore tube" in out
     assert main(["bom", str(pr.folder), "--csv"]) == 0
     assert capsys.readouterr().out.startswith("item,category,description")

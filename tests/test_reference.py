@@ -111,7 +111,7 @@ def test_a_malformed_file_fails_the_build_cleanly(tmp_path):
     folder = _folder(tmp_path)
     data = _good()
     (folder / "inputs" / "bad.step").write_bytes(data[: len(data) // 2] + b"\nENDSEC;\nEND-ISO-10303-21;\n")   # cut mid-DATA
-    (folder / "m.py").write_text('from eitri import *\n\ndef build(p):\n    reference_step("inputs/bad.step")\n    return Box(1, 1, 1)\n')
+    (folder / "m.py").write_text('from eitri import *\n\ndef build(p):\n    reference_step("inputs/bad.step")\n    return Box(1, 1, 1)\n', encoding="utf-8")
     with pytest.raises(R.ReferenceError, match="bad.step.* is malformed"):
         load_model(folder / "m.py").build()
     with pytest.raises(R.ReferenceError, match="unbalanced"):
@@ -167,7 +167,7 @@ EDITS = [
     {"op": "combine", "part": "plate", "tool": "block", "mode": "cut"},
     {"op": "move", "part": "plate", "delta": [1, 0, 0]},
 ]
-''')
+''', encoding="utf-8")
     model = load_model(folder / "m.py")
     parts = model.build()
     notes = model.edit_notes
@@ -198,7 +198,7 @@ def build(p):
 
 def test_project_records_the_hash_and_the_checks_catch_a_bad_design(tmp_path):
     folder = _folder(tmp_path / "job", "test_block.step")
-    (folder / "clamp.py").write_text(BAD)
+    (folder / "clamp.py").write_text(BAD, encoding="utf-8")
     pr = Project(folder, name="clamp")
     res = pr.build(note="bad", render=False)
     assert res.error is None, res.error
@@ -216,7 +216,7 @@ def test_project_records_the_hash_and_the_checks_catch_a_bad_design(tmp_path):
 
 def test_fixing_the_design_turns_every_reference_check_green(tmp_path):
     folder = _folder(tmp_path / "job", "test_block.step")
-    (folder / "clamp.py").write_text(BAD)
+    (folder / "clamp.py").write_text(BAD, encoding="utf-8")
     pr = Project(folder, name="clamp")
     res = pr.build(note="good", render=False, params={"hole_dx": "0.3", "hole_d": "4.4", "base_gap": "1.5", "overlap": "0"})
     assert res.error is None, res.error
@@ -232,7 +232,7 @@ def test_fixing_the_design_turns_every_reference_check_green(tmp_path):
 def test_a_changed_file_fails_until_a_person_accepts_it(tmp_path, capsys, person):
     from eitri.cli import main as cli
     folder = _folder(tmp_path / "job", "test_block.step")
-    (folder / "clamp.py").write_text(BAD.replace("blk.mount(h, ", "pass  # blk.mount(h, "))
+    (folder / "clamp.py").write_text(BAD.replace("blk.mount(h, ", "pass  # blk.mount(h, "), encoding="utf-8")
     pr = Project(folder, name="clamp")
     assert pr.build(note="first", render=False).error is None
     f = folder / "inputs" / "test_block.step"
@@ -254,7 +254,7 @@ def test_a_changed_file_fails_until_a_person_accepts_it(tmp_path, capsys, person
 def test_a_reference_cannot_be_dropped_and_direct_edits_on_it_are_refused(tmp_path, person):
     from eitri.cli import main as cli
     folder = _folder(tmp_path / "job", "test_block.step")
-    (folder / "clamp.py").write_text(BAD)
+    (folder / "clamp.py").write_text(BAD, encoding="utf-8")
     pr = Project(folder, name="clamp")
     assert pr.build(note="first", render=False).error is None
     with pytest.raises(ValueError, match="reference part"):
@@ -293,7 +293,7 @@ def test_example_motor_bracket_builds_green_and_exports_the_motor(tmp_path):
     assert res.error is None, res.error
     assert [c.line() for c in res.report.checks if not c.ok] == []
     assert sum("coaxial" in c.name for c in res.report.checks) == 4
-    data = json.loads((folder / "out" / "result.json").read_text())
+    data = json.loads((folder / "out" / "result.json").read_text(encoding="utf-8"))
     assert [r["name"] for r in data["references"]] == ["motor"]
     import build123d as bd
     labels = sorted(c.label for c in bd.import_step(res.outputs["step"]).children)
@@ -328,7 +328,7 @@ def test_accept_add_and_remove_are_person_only_like_ticket_approve(tmp_path, mon
     from eitri.tickets import store
     monkeypatch.setenv("EITRI_CONFIG_DIR", str(tmp_path / "config"))
     folder = _folder(tmp_path / "job", "test_block.step")
-    (folder / "clamp.py").write_text(BAD)
+    (folder / "clamp.py").write_text(BAD, encoding="utf-8")
     pr = Project(folder, name="clamp")
     assert pr.build(note="first", render=False).error is None             # first use records the hash (unsigned: no person)
     before = json.dumps(Project(folder).references(), sort_keys=True)
@@ -361,7 +361,7 @@ def test_accept_add_and_remove_are_person_only_like_ticket_approve(tmp_path, mon
     f.write_bytes(f.read_bytes().replace(b"test_block", b"test_blocc", 1))
     pr.accept_reference("inputs/test_block.step", by="Pat Person")
     assert pr.reference_acceptance("inputs/test_block.step")[1] is True
-    st = json.loads((folder / "eitri.json").read_text())
+    st = json.loads((folder / "eitri.json").read_text(encoding="utf-8"))
     st["references"]["clamp.py"]["inputs/test_block.step"]["sha256"] = "0" * 64
-    (folder / "eitri.json").write_text(json.dumps(st))
+    (folder / "eitri.json").write_text(json.dumps(st), encoding="utf-8")
     assert Project(folder).reference_acceptance("inputs/test_block.step")[1] is False
