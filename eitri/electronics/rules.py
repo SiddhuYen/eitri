@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 
 from .. import power
-from ..check_sources import CheckSource, Rule, assumption, model_file, rule
+from ..check_sources import CheckSource, Rule, assumption, doc, model_file, rule
 from .sources import SOURCES, cite
 
 _INLINE = re.compile(r"\[source: ([^\]]*)\]")
@@ -50,6 +50,7 @@ def _part_sources(c, circuit) -> list[CheckSource]:
 
 
 UNCITED = assumption("the check's text names no source for its figure")
+_ASSUMED = re.compile(r"([^,;:()]+?)\s*\(ASSUMPTION: ([^;)\]]+)")
 _UNGRADED = re.compile(r"not graded|not connected|unpowered|no per-pin limit|declares no|no vin_V|no supply drives")
 
 
@@ -57,8 +58,9 @@ def _inline(*fallback: CheckSource):
     """The check's own citations; else `fallback`; else the datasheets of the parts it names; else UNCITED."""
     def resolve(c, circuit):
         text = f"{c.measured} {c.expected}"
-        return (inline_sources(text) or list(fallback) or ([NO_FIGURE] if _UNGRADED.search(text) else [])
-                or _part_sources(c, circuit) or [UNCITED])
+        got = (inline_sources(text) or list(fallback) or ([NO_FIGURE] if _UNGRADED.search(text) else [])
+               or _part_sources(c, circuit) or [UNCITED])
+        return got + [assumption(f"{m.group(1).strip(' +')}: {m.group(2).strip()}") for m in _ASSUMED.finditer(text)]     # a figure its text marks ASSUMPTION
     return resolve
 
 
@@ -77,7 +79,7 @@ def _logic_parts(c, circuit):
 
 def _r(rid: str, category: str, name: str, *src: CheckSource) -> Rule:
     """A rule whose figures the check's own text cites; `src` is what it falls back to when the text names none."""
-    listed = tuple(src) if src else (rule(f"{category}: the parts' datasheet figures (eitri/electronics/sources.py), cited in the check's text"),)
+    listed = tuple(src) if src else (doc(f"{category}: the part datasheet figure the check's text cites (an id in eitri/electronics/sources.py)"),)
     return Rule("electronics." + rid, category, name, listed, _inline(*src))
 
 

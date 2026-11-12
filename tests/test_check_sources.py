@@ -207,3 +207,13 @@ def test_extension_checks_without_a_source_say_so(tmp_path):
         extensions._REGISTRY.pop("srcless", None)
     got = next(c for c in checks if c.name == "widgets")
     assert got.source[0].basis == "assumption" and "srcless gives no source" in got.source[0].text
+
+
+def test_an_assumption_named_in_electronics_text_is_structured():
+    from eitri.checks import check
+    c = check("i2c", "I2C pull-ups SDA (Standard-mode, 100 kHz)", "pass",
+              "4.7 kΩ; Cb = 60 pF estimated: 1 x 10 pF per device pin (UM10204 Ci max) + 50 pF of wiring (ASSUMPTION: no source; give capacitance_pF) "
+              "[source: NXP UM10204 Rev. 7.0, fetched 2026-11-05: Rp(min)]")
+    attach([c], _rules("electronics"))
+    assert [s.basis for s in c.source] == ["document", "assumption"]
+    assert c.source[0].url.startswith("https://www.nxp.com/") and c.source[1].text == "ASSUMPTION: 50 pF of wiring: no source"
