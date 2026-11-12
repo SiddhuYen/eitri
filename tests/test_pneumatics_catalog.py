@@ -480,3 +480,22 @@ def test_sequence_outputs(tmp_path):
     svg = Path(paths["sequence_svg"]).read_text()
     assert "Displacement-step diagram" in svg and "CLAMP_CLOSE" in svg
     assert Path(paths["sequence_pdf"]).read_bytes().startswith(b"%PDF")
+
+
+def test_new_0_8_1_checks_carry_rules_sources_and_status():
+    from eitri.check_sources import KINDS
+    from eitri.checks import STATUSES, status_of
+    c = manifold_station(valves=2)
+    c.step("one", "C1+")                                   # no until: a failing step check, still sourced
+    reps = [analyze(c), analyze(fixture_with(GOOD)), analyze(fixture_with([]))]
+    seen = set()
+    for rep in reps:
+        for ch in rep.checks:
+            if ch.category in ("manifold", "sequence", "cycle time"):
+                seen.add(ch.rule)
+                assert ch.rule and ch.kind in KINDS and ch.source and status_of(ch) in STATUSES, ch.name
+                assert all(s.basis and s.text for s in ch.source), ch.name
+    assert {"pneumatics.manifold-stations", "pneumatics.manifold-supply", "pneumatics.step-ends-on-sensor", "pneumatics.step-valve-commands",
+            "pneumatics.sequence-closes", "pneumatics.cycle-time", "pneumatics.sequence-declared"} <= seen
+    ct = next(ch for ch in reps[1].checks if ch.name == "cycle time estimate")
+    assert any(s.basis == "document" and "SY_EU.pdf" in s.url for s in ct.source) and any(s.basis == "assumption" for s in ct.source)
