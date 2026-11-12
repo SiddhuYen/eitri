@@ -533,6 +533,7 @@ class Circuit:
         self.mounts: dict[str, tuple[str, int]] = {}     # valve name -> (manifold name, station)
         self.sequence: list[SeqStep] = []                # the declared step sequence (step())
         self.start_state: dict[str, str] = {}            # cylinder -> "retracted" | "extended" at the start of the cycle
+        self.safeguards: list[dict] = []                 # declared measures that make a start / air-return transition safe (safeguard())
         self.control_V: float | None = None          # the control voltage (DC) the coils and sensors run on (the I/O list's)
         self.meta: dict[str, str] = {}               # the drawing's title block (drawing_info)
 
@@ -626,6 +627,34 @@ class Circuit:
         st = SeqStep(str(name), parsed, u, dwell_s, note)
         self.sequence.append(st)
         return st
+
+    SAFEGUARD_MEASURES = ("two-hand control", "interlocked guard", "soft-start valve", "dump valve", "restart reset", "other")
+    SAFEGUARD_COVERS = ("start", "air return")
+
+    def safeguard(self, cylinder, measure: str, evidence: str, covers=("start", "air return")) -> dict:
+        """Declare how an uncommanded or unexpected move of a cylinder is made safe where its valve's own state does not do it:
+        at the start of the cycle (power-up, loading) and / or when air returns after a loss. measure: two-hand control |
+        interlocked guard | soft-start valve | dump valve | restart reset | other; evidence: free text naming the part, drawing
+        or program that does it. A declaration lets the start-state / air-return check pass ON THAT BASIS: the check prints it
+        and the build lists it for a person to verify. It is not a safety assessment."""
+        cyl = cylinder.name if isinstance(cylinder, Component) else str(cylinder)
+        if cyl not in self.components or self.components[cyl].kind != "cylinder":
+            raise PneumaticsError(f"safeguard: {cyl!r} is not a cylinder of this circuit")
+        measure = str(measure).strip().lower()
+        if measure not in self.SAFEGUARD_MEASURES:
+            raise PneumaticsError(f"safeguard {cyl}: measure must be one of {', '.join(self.SAFEGUARD_MEASURES)}")
+        if not str(evidence).strip():
+            raise PneumaticsError(f"safeguard {cyl}: give the evidence (the part, drawing or program that makes it safe)")
+        covers = (covers,) if isinstance(covers, str) else tuple(covers)
+        bad = [x for x in covers if x not in self.SAFEGUARD_COVERS]
+        if bad or not covers:
+            raise PneumaticsError(f"safeguard {cyl}: covers must be among {self.SAFEGUARD_COVERS}")
+        d = {"cylinder": cyl, "measure": measure, "evidence": str(evidence).strip(), "covers": list(covers)}
+        self.safeguards.append(d)
+        return d
+
+    def safeguards_for(self, cylinder: str, cover: str) -> list[dict]:
+        return [d for d in self.safeguards if d["cylinder"] == cylinder and cover in d["covers"]]
 
     def start(self, **states: str) -> None:
         """The cylinders' positions at the start of the cycle (default: every cylinder retracted)."""

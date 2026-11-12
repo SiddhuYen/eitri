@@ -134,7 +134,8 @@ def test_cylinder_force_and_consumption():
 
 def test_good_pusher_passes():
     rep = analyze(pusher(load=200))
-    assert rep.ok and not rep.warnings, summarize(rep)
+    # the only warnings: no sequence (start state not run) and no soft-start valve (C1 lurches when air returns, SMC M-E03-3-03 item 8)
+    assert rep.ok and {w.name for w in rep.warnings} == {"start state", "air return C1"}, summarize(rep)
     cy = rep.cylinders[0]
     assert cy.pressure_bar == 6.0 and cy.strokes[0].usable_N == pytest.approx(434.3, abs=0.2) and cy.strokes[0].status == "pass"
     fill = cy.strokes[0].fill
@@ -376,7 +377,7 @@ def test_reference_examples_build_green(tmp_path):
         c = lm.build()
         rep = analyze(c, lm.verify(c))
         assert rep.ok, f"example {i + 1}:\n{summarize(rep)}"
-        assert all(w.name in ("flow data estimated", "force C1 extend") for w in rep.warnings), [w.line() for w in rep.warnings]
+        assert all(w.name in ("flow data estimated", "force C1 extend", "start state", "air return C1") for w in rep.warnings), [w.line() for w in rep.warnings]
     fast = load_model(tmp_path / "ex1" / "model.py", config="fast")
     cf = fast.build()
     assert one(analyze(cf, fast.verify(cf)), "speed C1 extend").severity == "fail"
@@ -388,7 +389,7 @@ def test_air_clamp_demo():
     lm = load_model(demo)
     c = lm.build()
     rep = analyze(c, lm.verify(c))
-    assert rep.ok and [w.name for w in rep.warnings] == ["flow data estimated"], summarize(rep)
+    assert rep.ok and sorted(w.name for w in rep.warnings) == ["air return C1", "flow data estimated", "start state"], summarize(rep)
     fast = load_model(demo, config="fast")
     cf = fast.build()
     assert one(analyze(cf), "speed C1 extend").severity == "fail"

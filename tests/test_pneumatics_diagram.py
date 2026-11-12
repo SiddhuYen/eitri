@@ -107,7 +107,9 @@ def test_no_label_collides_with_anything():
 def test_the_flow_data_notice_does_not_paint_the_whole_drawing():
     sc, rep = _scene(cyl25())
     assert any(k.category == "flow data" and k.severity == "warn" for k in rep.checks)       # it is still reported
-    assert not status_from(rep)                                                                # but colours nothing
+    others = {r for k in rep.checks if k.category != "flow data" and k.severity != "pass" for r in k.refs}   # e.g. the air-return warning
+    flow_only = {r for k in rep.checks if k.category == "flow data" for r in k.refs} - others
+    assert set(status_from(rep)) <= others and not set(status_from(rep)) & flow_only                     # the notice colours nothing
 
 
 def two_cylinders() -> Circuit:

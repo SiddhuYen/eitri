@@ -599,7 +599,7 @@ stream
 [] 0 d
 696.00 150.00 m 996.00 150.00 l S
 0.420 0.463 0.525 rg BT /F1 8.0 Tf 700.00 138.00 Td (eitri checks) Tj ET
-0.106 0.141 0.188 rg BT /F1 9.5 Tf 778.00 138.00 Td (87 pass, 1 warn, 0 fail, 0 not run) Tj ET
+0.106 0.141 0.188 rg BT /F1 9.5 Tf 778.00 138.00 Td (89 pass, 3 warn, 0 fail, 0 not run) Tj ET
 0.169 0.227 0.290 RG 0.60 w
 [] 0 d
 696.00 133.00 m 996.00 133.00 l S

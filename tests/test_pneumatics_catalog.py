@@ -177,7 +177,11 @@ def test_clamp_fixture_example_builds_green(tmp_path):
     c = lm.build()
     rep = analyze(c, lm.verify(c))
     assert rep.ok, summarize(rep)
-    assert [w.name for w in rep.warnings] == ["flow data estimated"], summarize(rep)
+    # flow data estimated, and the open air-return item: no soft-start / dump valve yet (DESIGN.md)
+    assert sorted(w.name for w in rep.warnings) == ["air return C1", "air return C2", "flow data estimated"], summarize(rep)
+    st = next(ch for ch in rep.checks if ch.name == "start state C2")
+    assert st.severity == "pass" and st.measured.startswith("PASS ON A DECLARATION") and "restart reset" in st.measured
+    assert rep.to_verify and "C2 (start): restart reset" in rep.to_verify[0]
     assert len(outputs.io_rows(c)) == 7
 
 
@@ -640,3 +644,106 @@ def test_io_list_and_drawing_name_the_ports():
     assert display_index(v, v.rest_position) == 1                         # the rest box is drawn on the spring side (right)
     pts = _ports(v, 0.0, 0.0)
     assert pts["4"][0] < pts["2"][0] and pts["5"][0] < pts["1"][0] < pts["3"][0]   # 4 left of 2, 5-1-3 as the makers draw them
+
+
+
+# ---------------------------------------------------------------------------- start state and air return
+
+
+def _seq_circuit(valve_kw, cap_port="4", start=None, safeguard=None, acting="double"):
+    """A clamp C1 on one valve, two sensors, a two-step sequence (close, open). cap_port: the valve port on the cap end."""
+    c = Circuit("start")
+    c.control_voltage(24)
+    air = c.supply("AIR", pressure_bar=6, flow_l_min=100)
+    v = c.valve("V1", C=1, b=0.3, **valve_kw)
+    cy = c.cylinder("C1", 32, 12, 20, acting=acting, spring_N=40 if acting == "single" else None)
+    c.tube("T1", air["OUT"], v["1"])
+    c.tube("T2", v[cap_port], cy["CAP"])
+    if acting == "double":
+        c.tube("T3", v["2" if cap_port == "4" else "4"], cy["ROD"])
+        c.silencer(v["5"])
+    c.silencer(v["3"])
+    c.sensor("B1", cy, "retracted")
+    c.sensor("B2", cy, "extended")
+    first = (start or "retracted") == "retracted"
+    c.step("close" if first else "open", "C1+" if first else "C1-", until="B2" if first else "B1")
+    c.step("open" if first else "close", "C1-" if first else "C1+", until="B1" if first else "B2")
+    if start:
+        c.start(C1=start)
+    if safeguard:
+        c.safeguard("C1", *safeguard)
+    return c
+
+
+def _st(c, name="start state C1"):
+    return one(analyze(c), name)
+
+
+def test_start_state_spring_return():
+    # 5/2 spring return, port 2 on the cap end: at rest (1-2) the clamp is driven CLOSED (extend)
+    bad = _st(_seq_circuit(dict(cls="5/2", returns="spring"), cap_port="2", start="retracted"))
+    assert bad.severity == "fail" and "moves to extend by itself" in bad.measured and "not an ISO 12100 risk assessment" in bad.measured
+    assert bad.rule == "pneumatics.start-state" and any(s.basis == "document" for s in bad.source)
+    assert _st(_seq_circuit(dict(cls="5/2", returns="spring"), cap_port="2", start="extended")).severity == "pass"
+    assert _st(_seq_circuit(dict(cls="5/2", returns="spring"), cap_port="4", start="retracted")).severity == "pass"   # rest feeds the rod end
+    # the default start state (retracted) is graded too, and says it was the default
+    assert "c.start default" in _st(_seq_circuit(dict(cls="5/2", returns="spring"), cap_port="2")).measured
+    # declared safeguard: passes on the declaration, printed, and listed for a person to verify
+    c = _seq_circuit(dict(cls="5/2", returns="spring"), cap_port="2", start="retracted",
+                     safeguard=("two-hand control", "two-hand start buttons S1/S2 per drawing E-02", "start"))
+    rep = analyze(c)
+    ok = one(rep, "start state C1")
+    assert ok.severity == "pass" and ok.measured.startswith("PASS ON A DECLARATION, for a person to verify: two-hand control")
+    assert rep.to_verify == ["C1 (start): two-hand control: two-hand start buttons S1/S2 per drawing E-02"]
+    assert "For a person to verify" in summarize(rep) and rep.to_dict()["to_verify"] == rep.to_verify
+    # a single-acting cylinder on a 3/2: at rest vented, the spring retracts it
+    assert _st(_seq_circuit(dict(cls="3/2"), cap_port="2", start="retracted", acting="single")).severity == "pass"
+    assert _st(_seq_circuit(dict(cls="3/2"), cap_port="2", start="extended", acting="single")).severity == "fail"
+
+
+def test_start_state_double_solenoid_and_5_3():
+    d = _st(_seq_circuit(dict(cls="5/2", returns="solenoid"), start="retracted"))
+    assert d.severity == "warn" and "last position it was switched to" in d.measured and "M-E03-3-02 p.1 item 10" in d.measured
+    assert _st(_seq_circuit(dict(cls="5/2", returns="solenoid"), start="retracted",
+                            safeguard=("restart reset", "PLC reset drives the clamp open first", "start"))).severity == "pass"
+    for centre in ("closed", "exhaust"):
+        w = _st(_seq_circuit(dict(cls="5/3", center=centre), start="retracted"))
+        assert w.severity == "warn" and "does not drive it" in w.measured, centre
+    # pressure centre: both ends fed, the cap area wins: driven to extend at power-up
+    assert _st(_seq_circuit(dict(cls="5/3", center="pressure"), start="retracted")).severity == "fail"
+    assert _st(_seq_circuit(dict(cls="5/3", center="pressure"), start="extended")).severity == "pass"
+
+
+def test_start_state_not_run_without_a_sequence():
+    from eitri.checks import status_of
+    c = _seq_circuit(dict(cls="5/2", returns="spring"))
+    c.sequence.clear()
+    nr = one(analyze(c), "start state")
+    assert status_of(nr) == "not_run" and nr.not_run == ["c.step"] and "no step sequence is declared" in nr.measured
+    with pytest.raises(PneumaticsError, match="evidence"):
+        c.safeguard("C1", "interlocked guard", " ")
+    with pytest.raises(PneumaticsError, match="measure"):
+        c.safeguard("C1", "a sign on the wall", "x")
+    with pytest.raises(PneumaticsError, match="covers"):
+        c.safeguard("C1", "dump valve", "x", covers="power")
+
+
+def test_air_return():
+    # a double-acting cylinder is driven from vented chambers when air returns: flagged per step, with the source
+    w = _st(_seq_circuit(dict(cls="5/2", returns="spring"), cap_port="4"), "air return C1")
+    assert w.severity == "warn" and "start: driven to retract" in w.measured and "step 1 close: driven to extend" in w.measured
+    assert "M-E03-3-03 p.1 items 8, 11" in w.measured and w.rule == "pneumatics.air-return"
+    # a declared soft-start valve: passes on the declaration
+    ok = _st(_seq_circuit(dict(cls="5/2", returns="spring"), safeguard=("soft-start valve", "SMC AV2000 after the FRL, drawing P-01", "air return")),
+             "air return C1")
+    assert ok.severity == "pass" and "soft-start valve" in ok.measured
+    # 5/3 closed centre: at the start (centre) nothing is driven; in the steps the held coil drives it
+    cc = _st(_seq_circuit(dict(cls="5/3", center="closed")), "air return C1")
+    assert cc.severity == "warn" and "start:" not in cc.measured
+    # single acting on a 3/2: during the loss the spring retracts it; at rest the valve vents it: no move at the start
+    sa = _st(_seq_circuit(dict(cls="3/2"), cap_port="2", acting="single"), "air return C1")
+    assert "start:" not in sa.measured and "step 1 close: driven to extend" in sa.measured
+    # no sequence: every valve position is a situation
+    c = _seq_circuit(dict(cls="5/2", returns="spring"))
+    c.sequence.clear()
+    assert "V1 position 1" in _st(c, "air return C1").measured

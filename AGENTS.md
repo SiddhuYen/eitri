@@ -187,7 +187,7 @@ power, logic-level, I2C, flyback and gate checks, each against a datasheet figur
 
 ```sh
 eitri build eitri/demos/pan-tilt/pan_tilt.py         # 12 pass, 0 warn, 0 FAIL
-eitri build eitri/demos/air-clamp/air_clamp.py       # 25 pass, 1 warn, 0 FAIL (the warning is intended: estimated flow data)
+eitri build eitri/demos/air-clamp/air_clamp.py       # 25 pass, 3 warn, 0 FAIL (intended: estimated flow data; no soft-start valve, so the cylinder lurches when air returns; start state not run: no sequence)
 eitri build eitri/demos/servo-sweep/servo_sweep.py   # 12 pass, 0 warn, 0 FAIL once arduino-cli is installed (below)
 eitri build eitri/demos/uno-arm-circuit/uno_arm_circuit.py   # 32 pass, 0 warn, 0 FAIL
 ```
