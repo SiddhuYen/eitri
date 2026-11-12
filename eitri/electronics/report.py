@@ -6,9 +6,11 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from ..checks import Check, from_verify, checks_not_run, not_run_line
+from ..check_sources import attach, check_lines
 from ..model import Checker
 from .analysis import INF, Analysis
 from .checks import board_draw, i2c_buses, rail_limit, rail_loads, run_checks
+from .rules import RULES
 from .model import Circuit, PinRef, amps_text
 
 
@@ -73,6 +75,7 @@ def analyze(c: Circuit, checker: Checker | None = None) -> ElectronicsReport:
     checks, an = run_checks(c)
     for r in (checker.results if checker else []):
         checks.append(from_verify(r))
+    attach(checks, RULES, c)
     rep = ElectronicsReport(c.name, len(c.parts), len(c.nets), rails_of(c, an),
                             [{"parts": s.parts, "from": s.flow[0], "to": s.flow[1], "current_A": None if s.current == INF else round(s.current, 6),
                               "typical_A": None if s.typical is None or s.typical == INF else round(s.typical, 6)}
@@ -102,8 +105,7 @@ def summarize(rep: ElectronicsReport) -> str:
             lines.append(f"  {s['from']} -> {' -> '.join(s['parts'])} -> {s['to']}: " + ("unlimited" if s["current_A"] is None else amps_text(s["current_A"]))
                          + (f" worst case ({amps_text(typ)} at typical Vf)" if shared else ""))
     order = {"fail": 0, "warn": 1, "pass": 2}
-    for ch in sorted(rep.checks, key=lambda c: order[c.severity]):
-        lines.append(ch.line())
+    lines += check_lines(sorted(rep.checks, key=lambda c: order[c.severity]))
     for i in rep.issues:
         lines.append(f"ISSUE: {i}")
     return "\n".join(lines)

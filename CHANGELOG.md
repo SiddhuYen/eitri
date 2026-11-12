@@ -35,6 +35,14 @@ is used (the lower for a limit, the higher for a draw).
   a load with no voltage range and the like. The check is a warning whose text starts "not run:", the summary has a
   "Not run" line, and the build's `result.json` report lists them under `checks_not_run`.
   `Actuator(continuous=True)` declares an actuator that turns without end.
+- **Every check names its source, in every domain**: each check result has a `source` (a list of `{text, url, rev,
+  basis}`), a `kind` (`"rule"`: every check is a deterministic rule) and a `rule` id (`"harness.wire-ampacity"`), in
+  the text report and in `result.json`. `basis` says what the limit is: a cited `document`, a `requirement` the person
+  gave ("design requirement": `max_drop_pct`, a target, a load, every `verify()` check), a `model` figure the model
+  file gives (`rating_a=`, `stall_kgcm=`), an eitri `rule` with no figure (connectivity), a `tool` verdict
+  (arduino-cli), or an `assumption` (an ESTIMATE with no source, listed rather than hidden). A check line ends with
+  `[source: ...]`; the documents' URLs follow the checks as a numbered `Sources:` list. Each domain's rule table is
+  `eitri/<domain>/rules.py`. A build extension's check that gives no source says so.
 
 ## 0.7.0: eitri as a plugin in your own agent
 

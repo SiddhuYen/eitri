@@ -6,8 +6,10 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from ..checks import Check, from_verify, checks_not_run, not_run_line
+from ..check_sources import attach, check_lines
 from ..model import Checker
 from .checks import JointInfo, TargetInfo, run_checks
+from .rules import RULES
 from .model import Mechanism
 
 
@@ -48,6 +50,7 @@ def analyze(m: Mechanism, checker: Checker | None = None) -> MechanismReport:
     checks, joints, targets, reach, masses = run_checks(m)
     for r in (checker.results if checker else []):
         checks.append(from_verify(r))
+    attach(checks, RULES, m)
     rep = MechanismReport(name=m.name, links=len(m.links), joints=len([j for j in m.joints if j.moving]), targets=len(m.targets),
                           joint_info=joints, target_info=targets, reach=reach, masses=masses, checks=checks)
     rep.analysis_seconds = round(time.time() - t0, 3)
@@ -81,8 +84,7 @@ def summarize(rep: MechanismReport) -> str:
     if rep.reach:
         lines.append(f"Reach: radius up to {rep.reach.get('max_radius_mm', 0):g} mm, height {rep.reach.get('z_min_mm', 0):g}..{rep.reach.get('z_max_mm', 0):g} mm")
     order = {"fail": 0, "warn": 1, "pass": 2}
-    for c in sorted(rep.checks, key=lambda c: order[c.severity]):
-        lines.append(c.line())
+    lines += check_lines(sorted(rep.checks, key=lambda c: order[c.severity]))
     for i in rep.issues:
         lines.append(f"ISSUE: {i}")
     return "\n".join(lines)

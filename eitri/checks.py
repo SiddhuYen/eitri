@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Iterable
 
+from .check_sources import CheckSource, source_tag
 from .model import CheckResult
 
 
@@ -18,17 +19,20 @@ class Check(CheckResult):
     category: str = ""
     refs: list[str] = field(default_factory=list)      # ids of what the check is about (an editor highlights them)
     not_run: list[str] = field(default_factory=list)   # the model inputs left unset (None) that switch this check off; empty when it ran
+    # the sources of its limit (eitri.check_sources), given by the domain's rule table (rules.py) after the checks run
+    source: list[CheckSource] = field(default_factory=list, kw_only=True)
+    rule: str = field(default="", kw_only=True)        # the rule-table id ("harness.wire-ampacity"); "" when no rule matched
 
-    def line(self) -> str:
+    def line(self, numbers: dict | None = None) -> str:
         mark = {"pass": "PASS", "warn": "WARN", "fail": "FAIL"}[self.severity]
         exp = f" (expected {self.expected})" if self.expected else ""
-        return f"[{mark}] {self.name}: {self.measured}{exp}"
+        return f"[{mark}] {self.name}: {self.measured}{exp}{source_tag(self, numbers)}"
 
 
 def check(category: str, name: str, severity: str, measured: str, expected: str = "", refs: Iterable[str] = (),
-          not_run: Iterable[str] = ()) -> Check:
+          not_run: Iterable[str] = (), source: Iterable[CheckSource] = (), kind: str = "rule") -> Check:
     return Check(name=name, ok=severity != "fail", measured=measured, expected=expected, severity=severity, category=category,
-                 refs=list(dict.fromkeys(refs)), not_run=list(not_run))
+                 refs=list(dict.fromkeys(refs)), not_run=list(not_run), source=list(source), kind=kind)
 
 
 def switched_off(c: Check, *inputs: str) -> Check:
@@ -57,7 +61,8 @@ def not_run_line(checks: Iterable[Check]) -> str | None:
 
 def from_verify(r: CheckResult) -> Check:
     """A verify() result as a Check (category "verify")."""
-    return Check(name=r.name, ok=r.ok, measured=r.measured, expected=r.expected, severity="pass" if r.ok else "fail", category="verify")
+    return Check(name=r.name, ok=r.ok, measured=r.measured, expected=r.expected, severity="pass" if r.ok else "fail", category="verify",
+                 source=list(r.source), kind=r.kind, rule="verify")
 
 
 def level(value: float, limit: float, warn_fraction: float = 0.8, above_is_bad: bool = True) -> str:

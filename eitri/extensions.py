@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
+from .check_sources import CheckSource, assumption, rule  # noqa: F401  (CheckSource: what an extension's check cites)
 from .harness.checks import HCheck as Check   # name, ok, measured, expected, severity (pass|warn|fail), category, refs
 
 ENV_VAR = "EITRI_EXTENSIONS"
@@ -116,9 +117,13 @@ def _import_spec(spec: str, what: str) -> None:
         _LOAD_ERRORS.append(f"{what}: {type(exc).__name__}: {exc}")
 
 
-def _check(name: str, severity: str, measured: str, expected: str = "", refs: Iterable[str] = ()) -> Check:
+_RULES = {"loaded": rule("an extension that cannot be imported is a failed check"), "ran": rule("an extension that raises is a failed check"),
+          "guard": rule("what an earlier build declared stays declared (only Project.release_guard lowers it)")}
+
+
+def _check(name: str, severity: str, measured: str, expected: str = "", refs: Iterable[str] = (), why: str = "guard") -> Check:
     return Check(name=name, ok=severity != "fail", measured=measured, expected=expected, severity=severity, category="extension",
-                 refs=list(dict.fromkeys(refs)))
+                 refs=list(dict.fromkeys(refs)), source=[_RULES[why]], rule=f"extension.{why}")
 
 
 def guard_check(name: str, remembered: dict | None, declared: dict | None) -> Check | None:
@@ -162,7 +167,7 @@ def run(ctx: BuildContext) -> tuple[list[Check], dict[str, Any], dict[str, dict]
     data: dict[str, Any] = {}
     guards: dict[str, dict] = {}
     for problem in load():
-        checks.append(_check("extension loaded", "fail", problem, "an importable module or entry point"))
+        checks.append(_check("extension loaded", "fail", problem, "an importable module or entry point", why="loaded"))
     for name, fn in list(_REGISTRY.items()):
         ctx.progress(f"running the {name} extension")
         try:
@@ -176,8 +181,11 @@ def run(ctx: BuildContext) -> tuple[list[Check], dict[str, Any], dict[str, dict]
                     raise TypeError(f"returned {type(c).__name__}, not an eitri.extensions.Check")
         except Exception:
             tb = traceback.format_exc().strip().splitlines()
-            checks.append(_check(f"extension {name} ran", "fail", tb[-1] if tb else "error", "no exception", [name]))
+            checks.append(_check(f"extension {name} ran", "fail", tb[-1] if tb else "error", "no exception", [name], why="ran"))
             continue
+        for c in out.checks:                     # an extension's check names its own source; one that does not says so
+            if not c.source:
+                c.source = [assumption(f"extension {name} gives no source for this check")]
         checks.extend(out.checks)
         if out.data is not None:
             data[name] = out.data

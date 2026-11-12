@@ -6,8 +6,10 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from ..checks import Check, from_verify, checks_not_run, not_run_line
+from ..check_sources import attach, check_lines
 from ..model import Checker
 from .checks import CylinderInfo, PathInfo, StrokeInfo, SupplyInfo, run_checks
+from .rules import RULES
 from .model import Circuit
 
 
@@ -52,6 +54,7 @@ def analyze(c: Circuit, checker: Checker | None = None) -> CircuitReport:
     checks, cyls, sups = run_checks(c)
     for r in (checker.results if checker else []):
         checks.append(from_verify(r))
+    attach(checks, RULES, c)
     rep = CircuitReport(name=c.name, components=len(c.components), tubes=len(c.tubes), cylinders=cyls, supplies=sups, checks=checks)
     rep.analysis_seconds = round(time.time() - t0, 3)
     return rep
@@ -77,8 +80,7 @@ def summarize(rep: CircuitReport) -> str:
     for s in rep.supplies:
         lines.append(f"  supply {s.name}: {s.pressure_bar:g} bar, {s.demand_l_min:g} L/min drawn" + (f" of {s.capacity_l_min:g}" if s.capacity_l_min else ", capacity not given"))
     order = {"fail": 0, "warn": 1, "pass": 2}
-    for c in sorted(rep.checks, key=lambda c: order[c.severity]):
-        lines.append(c.line())
+    lines += check_lines(sorted(rep.checks, key=lambda c: order[c.severity]))
     for i in rep.issues:
         lines.append(f"ISSUE: {i}")
     return "\n".join(lines)

@@ -6,6 +6,7 @@ Mirrors eitri/report.py: `analyze()` runs the built-in checks and the model's ow
 from __future__ import annotations
 
 from ..checks import checks_not_run, not_run_line
+from ..check_sources import attach, check_lines
 
 import time
 from dataclasses import asdict, dataclass, field
@@ -15,6 +16,7 @@ from ..model import Checker, CheckResult
 from ..power import amps
 from .checks import HCheck, NetInfo, run_checks
 from .model import Harness, endpoint_to_json
+from .rules import RULES
 
 
 @dataclass
@@ -53,6 +55,7 @@ def analyze(h: Harness, checker: Checker | None = None) -> HarnessReport:
     checks, stats = run_checks(h)
     for r in (checker.results if checker else []):
         checks.append(_from_verify(r))
+    attach(checks, RULES, h)
     rep = HarnessReport(
         name=h.name, connectors=len(h.connectors), wires=len(h.links), splices=len(h.splices), cables=len(h.cables),
         total_wire_mm=round(sum(l.length_mm for l in h.links), 1), nets=list(stats.values()), checks=checks)
@@ -87,8 +90,7 @@ def summarize(rep: HarnessReport) -> str:
             bits.append(f"{len(n.wires)} wire(s), {n.length_mm:.0f} mm")
             lines.append(f"  {n.name}: " + ", ".join(bits))
     order = {"fail": 0, "warn": 1, "pass": 2}
-    for c in sorted(rep.checks, key=lambda c: order[c.severity]):
-        lines.append(c.line())
+    lines += check_lines(sorted(rep.checks, key=lambda c: order[c.severity]))
     for i in rep.issues:
         lines.append(f"ISSUE: {i}")
     return "\n".join(lines)

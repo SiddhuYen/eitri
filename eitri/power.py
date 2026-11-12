@@ -132,3 +132,32 @@ def grade(draw_A: float, limit: SupplyLimit) -> str:
 def advice(pin: str) -> str:
     return (f"power the load from a separate supply (its own regulator or battery) and connect that supply's ground to the board's GND, "
             f"keeping only the signal wire on the board; the {pin} pin then carries nothing")
+
+
+# ---------------------------------------------------------------------------- the sources above as structured records (eitri.check_sources)
+
+from .check_sources import doc  # noqa: E402  (light: no build123d)
+
+# eitri.power's quoted sources (SupplyLimit.source), as structured records: the same documents, by the constant that quotes them.
+POWER_DOCS = {
+    SRC_UNO_PINOUT: doc("Arduino UNO R3 full pinout: 3.3 V pin 50 mA", "https://docs.arduino.cc/resources/pinouts/A000066-full-pinout.pdf",
+                  "Arduino UNO R3 full pinout A000066"),
+    SRC_NANO_PINOUT: doc("Arduino Nano full pinout: 3.3 V pin 50 mA", "https://docs.arduino.cc/resources/pinouts/A000005-full-pinout.pdf",
+                  "Arduino Nano full pinout A000005"),
+    SRC_UNO_IO: doc("Arduino UNO R3 full pinout: I/O pin 20 mA", "https://docs.arduino.cc/resources/pinouts/A000066-full-pinout.pdf",
+                  "Arduino UNO R3 full pinout A000066"),
+    SRC_NANO_IO: doc("Arduino Nano full pinout: I/O pin 20 mA", "https://docs.arduino.cc/resources/pinouts/A000005-full-pinout.pdf",
+                  "Arduino Nano full pinout A000005"),
+    SRC_UNO_USB: doc("Arduino UNO R3 schematic: 500 mA USB polyfuse", "https://docs.arduino.cc/resources/schematics/A000066-schematics.pdf",
+                  "Arduino UNO R3 schematic A000066"),
+    SRC_USB2: doc("USB 2.0 Specification s7.2.1: 500 mA per port", "", "USB 2.0 Specification"),
+    SRC_UNO_REG: doc("MaxLinear SPX1117 datasheet: 0.8 A, 125 C, 85 C/W (the Uno's 5 V regulator)", "https://www.maxlinear.com/ds/spx1117.pdf",
+                  "MaxLinear SPX1117 datasheet Rev. 2.2.0, June 10 2025; Arduino UNO R3 datasheet A000066 rev 4"),
+    SRC_NANO_VIN: doc("Arduino Nano datasheet A000005: no VIN regulator rating published",
+                            "https://docs.arduino.cc/resources/datasheets/A000005-datasheet.pdf", "Arduino Nano datasheet A000005 rev 5, 20/10/2026"),
+}
+
+
+def power_sources(text: str) -> list:
+    """The structured records for an eitri.power source text ([] when it is empty or not one of power's quoted sources)."""
+    return [POWER_DOCS[text]] if text in POWER_DOCS else []

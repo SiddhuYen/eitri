@@ -19,6 +19,7 @@ import build123d as bd
 from build123d import Vector
 
 from . import measure
+from .check_sources import check_lines
 from .model import CheckResult, Checker, Parts
 
 
@@ -382,8 +383,7 @@ def _summarize_core(report: Report, max_parts: int = 30) -> str:
         lines.append(f"! {issue}")
     if report.checks:
         lines.append("Checks (verify):")
-        for c in report.checks:
-            lines.append("  " + c.line())
+        lines += ["  " + x for x in check_lines(report.checks)]
     return "\n".join(lines)
 
 

@@ -37,6 +37,8 @@ from typing import Any, Iterable
 
 import build123d as bd
 
+from .check_sources import CheckSource, source_tag, verify_sources
+
 # A readable palette for parts without an explicit colour (sRGB hex).
 PALETTE = [
     "#6C8EBF", "#D79B5B", "#7FA86B", "#B06C8E", "#8C8C8C",
@@ -268,11 +270,14 @@ class CheckResult:
     ok: bool
     measured: str
     expected: str = ""
+    # where the limit comes from (eitri.check_sources): a verify() result checks the model's own requirement
+    source: list[CheckSource] = field(default_factory=verify_sources, kw_only=True)
+    kind: str = field(default="rule", kw_only=True)         # rule (deterministic) | judgement
 
-    def line(self) -> str:
+    def line(self, numbers: dict | None = None) -> str:
         mark = "PASS" if self.ok else "FAIL"
         exp = f" (expected {self.expected})" if self.expected else ""
-        return f"[{mark}] {self.name}: {self.measured}{exp}"
+        return f"[{mark}] {self.name}: {self.measured}{exp}{source_tag(self, numbers)}"
 
 
 class Checker:

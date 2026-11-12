@@ -6,8 +6,10 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from ..checks import Check, from_verify, checks_not_run, not_run_line
+from ..check_sources import attach, check_lines
 from ..model import Checker
 from .checks import PinInfo, run_checks
+from .rules import RULES
 from .compile import CompileResult
 from .model import Firmware
 
@@ -47,6 +49,7 @@ def analyze(fw: Firmware, checker: Checker | None = None, compiled: CompileResul
     checks, infos, comp = run_checks(fw, compiled)
     for r in (checker.results if checker else []):
         checks.append(from_verify(r))
+    attach(checks, RULES, fw)
     b = fw.board
     rep = FirmwareReport(fw.name, fw.board_key, b.fqbn if b else "", infos, [s.name for s in fw.sources], comp, checks)
     rep.analysis_seconds = round(time.time() - t0, 3)
@@ -69,8 +72,7 @@ def summarize(rep: FirmwareReport) -> str:
     if c:
         lines.append("Compile: " + (c["message"] if not c.get("available") else ("ok" if c.get("ok") else "FAILED")) + (f", flash {c['flash_pct']}%, RAM {c['ram_pct']}%" if c.get("flash_pct") is not None else ""))
     order = {"fail": 0, "warn": 1, "pass": 2}
-    for ch in sorted(rep.checks, key=lambda c: order[c.severity]):
-        lines.append(ch.line())
+    lines += check_lines(sorted(rep.checks, key=lambda c: order[c.severity]))
     for i in rep.issues:
         lines.append(f"ISSUE: {i}")
     return "\n".join(lines)
