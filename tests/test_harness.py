@@ -186,8 +186,15 @@ def test_drop_sums_along_a_path_not_across_branches():
 
 
 def test_good_lead_is_clean():
-    rep = analyze(lead())
+    h = lead()
+    h.source(h.connectors["J1"]["+"], 5.0, max_current_A=2.0, kind="psu")     # a 2 A-limited supply: no fuse needed on 22 AWG
+    rep = analyze(h)
     assert rep.ok and not rep.failed and not rep.warnings, summarize(rep)
+
+
+def test_a_lead_with_no_declared_source_says_its_protection_is_not_run():
+    rep = analyze(lead())
+    assert rep.ok and [d["name"] for d in rep.to_dict()["checks_not_run"]] == ["every supply net fed by a declared source"]
 
 
 def test_unconnected_pins():
@@ -706,10 +713,12 @@ def test_quadcopter_demo_builds_green():
     h = m.build()
     rep = analyze(h, m.verify(h))
     assert rep.ok and not rep.failed, summarize(rep)
-    # the only warnings are the connectors at or past their continuous rating: the XT60 carries the 44.5 A peak (30 A
-    # continuous, 60 A short-time), each XT30 its ESC's full 20 A (20 A rating)
+    # the warnings: the connectors at or past their continuous rating (the XT60 carries the 44.5 A peak, 30 A continuous,
+    # 60 A short-time; each XT30 its ESC's full 20 A), and the overcurrent protection not run: the demo declares no source
     warned = {c.name: c for c in rep.warnings}
-    assert set(warned) == {"connector rating BATT (XT60, 30 A/pin)"} | {f"connector rating ESC{i} (XT30, 20 A/pin)" for i in range(1, 5)}, summarize(rep)
+    assert set(warned) == ({"connector rating BATT (XT60, 30 A/pin)", "every supply net fed by a declared source"}
+                           | {f"connector rating ESC{i} (XT30, 20 A/pin)" for i in range(1, 5)}), summarize(rep)
+    assert [d["name"] for d in rep.to_dict()["checks_not_run"]] == ["every supply net fed by a declared source"]
     assert "short-time rating" in warned["connector rating BATT (XT60, 30 A/pin)"].measured
     assert len(h.connectors) == 6 and len(h.splices) == 2 and len(h.links) == 12
     st = net_stats(h)

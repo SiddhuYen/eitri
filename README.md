@@ -236,7 +236,11 @@ Every build computes: **connectivity** (unconnected pins unless declared NC, sev
 dangling splices, nets shorted at a splice), **ampacity** (each wire against a chassis-wiring AWG table, FAIL over the limit,
 WARN within 20%; each connector pin against its catalog rating), **voltage drop** (`V = 2*K*I*L/CM`, K = 12.9 for copper at 75 °C, per net against
 `max_drop_pct`, summed along the worst source-to-load path) and **consistency** (one gauge and one colour per net, shields
-terminated), plus the model's own `verify()`. It writes a wire-harness diagram (SVG, and the PNG review image with the failing
+terminated), **overcurrent protection** (DC up to 60 V: from every declared `h.source(...)`, each branch that could carry
+more than its thinnest wire passes a `Fuse` / `Breaker` first; the device's rating is within that wire, the steady load within
+the maker's continuous-load derating, its DC voltage and interrupting ratings cover the system, and it sits within 175 mm of the
+source; a figure the source or part does not give is reported "not run", never passed; AC and anything above 60 V are refused),
+plus the model's own `verify()`. It writes a wire-harness diagram (SVG, and the PNG review image with the failing
 wires outlined red), a **BOM** (connectors with part numbers, crimp terminals inferred from connector type x populated pins,
 wire by gauge and colour with a 10% service loop, splices, labels), a **cut list** (cut length, strip lengths and terminations
 at both ends of every wire) and a WireViz-compatible YAML (interop only), all in `out/`.
@@ -245,7 +249,9 @@ In the browser a harness project opens a **harness editor** instead of the 3D vi
 length or net; click a connector to rename pins, change its type from the catalog, add or remove pins; drag connectors around;
 click a failing check and the wires it is about light up. Changes are direct edits (`EDITS` in the model file, the same path as CAD
 edits) and positions are `LAYOUT` hints, so eitri sees your changes and carries on from them. A demo to start from:
-`eitri build eitri/demos/quad-power/quad_power.py` (battery XT60 -> distribution splice -> 4 ESCs at 20 A + a flight controller).
+`eitri build eitri/demos/quad-power/quad_power.py` (battery XT60 -> distribution splice -> 4 ESCs at 20 A + a flight controller;
+it declares no source, so its protection is "not run"), or `eitri build eitri/demos/servo-arm/servo_arm_harness.py` (a fused 5 V
+servo rail).
 
 ```bash
 eitri build harness.py                  # the checks, the diagram, BOM and cut list (no LLM)

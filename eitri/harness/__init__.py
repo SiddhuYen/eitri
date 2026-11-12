@@ -13,8 +13,9 @@ from ..model import Checker, Params                                  # noqa: F40
 from .catalog import (CATALOG, Gauge, awg_ampacity, awg_circular_mils, catalog_table, normalize_color,   # noqa: F401
                       voltage_drop)
 from .checks import HCheck, NetInfo, net_stats, run_checks           # noqa: F401
-from .model import (Cable, Connector, Harness, HarnessError, Link, Net, PinRef, Splice, SpliceRef, Wire,   # noqa: F401
-                    is_harness)
+from .model import (Breaker, Cable, Connector, Fuse, Harness, HarnessError, Link, Net, PinRef, Source, Splice,   # noqa: F401
+                    SpliceRef, Wire, is_harness)
+from .fuses import FUSES, fuse_table                                  # noqa: F401
 
 __all__ = ["Harness", "Connector", "Wire", "Cable", "Splice", "Net", "HarnessError", "Gauge", "CATALOG", "voltage_drop",
-           "awg_ampacity", "awg_circular_mils", "net_stats"]
+           "awg_ampacity", "awg_circular_mils", "net_stats", "Fuse", "Breaker", "FUSES"]

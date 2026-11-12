@@ -9,7 +9,7 @@ import io
 from collections import OrderedDict
 
 from .catalog import BOARD_TYPES, color_name, gauge_awg, housing_pn, terminal_pn
-from .model import Harness, Link, PinRef, SpliceRef
+from .model import Fuse, Harness, Link, PinRef, SpliceRef
 
 SERVICE_LOOP = 0.10          # extra wire bought on top of the cut lengths
 
@@ -27,6 +27,8 @@ def bom(h: Harness) -> list[dict]:
     # connectors, grouped by what they are
     groups: OrderedDict[tuple, list] = OrderedDict()
     for c in h.connectors.values():
+        if isinstance(c, Fuse):
+            continue                                 # protective devices: their own rows below
         pn = c.part_number or (housing_pn(c.spec, c.pins, c.gender) if c.spec else "")
         groups.setdefault((c.type, c.pins, c.gender, pn), []).append(c)
     for (typ, pins, gender, pn), cs in groups.items():
@@ -36,6 +38,15 @@ def bom(h: Harness) -> list[dict]:
         if gender:
             desc += f", {gender}"
         add("connector", desc, len(cs), part_number=pn, notes=", ".join(c.name for c in cs))
+
+    # protective devices (fuses, PTCs, breakers) and, for a cartridge or blade fuse, its holder
+    devs: OrderedDict[tuple, list] = OrderedDict()
+    for f in h.fuses.values():
+        devs.setdefault((f.device.bom_description, f.part_number), []).append(f)
+    for (desc, pn), fs in devs.items():
+        add("protection", desc, len(fs), part_number=pn, notes=", ".join(f.name for f in fs))
+        if fs[0].device.holder:
+            add("protection", fs[0].device.holder, len(fs), notes=", ".join(f.name for f in fs))
 
     # crimp terminals: one per populated pin of a crimp connector (a ring/spade connector is its own terminal)
     terminals: OrderedDict[str, OrderedDict] = OrderedDict()

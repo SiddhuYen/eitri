@@ -25,7 +25,9 @@ def domain_reference_text(kind: str, fill: dict[str, str] | None = None) -> str:
 def harness_reference_text() -> str:
     """The wire-harness reference (the connector catalog filled in from the code, so it cannot drift)."""
     from ..harness.catalog import catalog_table
-    return (_HERE / "harness_ref.md").read_text(encoding="utf-8").replace("{{CATALOG}}", catalog_table()).strip()
+    from ..harness.fuses import fuse_table
+    return ((_HERE / "harness_ref.md").read_text(encoding="utf-8").replace("{{CATALOG}}", catalog_table())
+            .replace("{{FUSES}}", fuse_table()).strip())
 
 
 def system_prompt(project: Project | None = None, include_reference: bool = True) -> str:

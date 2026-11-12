@@ -23,6 +23,7 @@ def build(p):
     h = Harness("Lead")
     a = h.add(Connector("J1", "JST-XH", pins={"1": "GND", "2": "5V"}))
     b = h.add(Connector("J2", "JST-XH", pins={"1": "GND", "2": "5V"}))
+    h.source(a.pin("5V"), 5.0, max_current_A=2.0, kind="psu")       # a 2 A-limited supply: no fuse needed
     h.net("5V", current_A=1.0, voltage_V=5.0)
     h.net("GND", current_A=1.0, voltage_V=5.0, round_trip=False)
     h.connect(a["2"], b["2"], Wire(p.gauge, "RD", p.length_mm), net="5V")
