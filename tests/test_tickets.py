@@ -548,3 +548,37 @@ def test_harness_package_refuses_a_fuse_check_not_run_until_a_person_waives_it(t
     _sources_are_structured(pkg)
     assert "F1 interrupting rating" in Path(pkg["folder"], "report.md").read_text(encoding="utf-8").split("## Acceptance criteria")[0]
     _export_sample(Path(pkg["folder"]))
+
+
+# ---------------------------------------------------------------------------------------------------- the command line, no agent
+def test_cli_only_path_from_approval_to_package(tmp_path, monkeypatch, capsys):
+    """0.8.1: a person with no agent applies an approved plan with `eitri build <model> --record --set k=v` and packages it. The
+    plan gate refuses it before approval exactly as it refuses the agent, and an unplanned parameter is flagged on page 1."""
+    from eitri.cli import main
+    p = _project(tmp_path, mech())
+    model = str(p.model_path)
+    assert main(["build", model, "--record", "--note", "as delivered"]) == 0           # no ticket yet: a recorded revision 1
+    assert "recorded revision 1" in capsys.readouterr().out
+    assert Project(p.folder).history[-1].note == "as delivered"
+    assert main(["ticket", "new", "-C", str(p.folder), "--title", "Heavier camera", "--request", "camera is 150 g",
+                 "--criterion", "tilt holds it => torque joint tilt*"]) == 0
+    T.set_plan(p, "T-0001", PLAN)
+    before = p.model_path.read_text(encoding="utf-8")
+    capsys.readouterr()
+    assert main(["build", model, "--record", "--set", "camera_g=150"]) == 1           # awaiting approval: refused
+    err = capsys.readouterr().err
+    assert "refused" in err and "eitri ticket approve T-0001" in err
+    assert p.model_path.read_text(encoding="utf-8") == before                        # nothing written
+    assert main(["build", model, "--record"]) == 1                                    # a plain recorded build is gated too
+    tty = _FakeTTY()
+    monkeypatch.setattr(T.store, "_open_tty", lambda: tty)
+    assert main(["ticket", "approve", "T-0001", "-C", str(p.folder), "--by", "Pat Person"]) == 0
+    capsys.readouterr()
+    assert main(["build", model, "--record", "--set", "camera_g=150", "--set", "arm_mm=36", "--note", "T-0001 plan"]) == 0
+    out = capsys.readouterr().out
+    assert "recorded revision 2" in out and "camera_g=150" in Project(p.folder).read_model().replace(" ", "")
+    assert main(["build", model, "--record", "--set", "nope=1"]) == 2                 # an unknown parameter changes nothing
+    assert main(["package", "T-0001", "-C", str(p.folder)]) == 0
+    pkg = json.loads(next((p.folder / "tickets" / "T-0001").glob("T-0001-tilt-rev-B/package.json")).read_text(encoding="utf-8"))
+    assert {r["name"]: r["change"] for r in pkg["parameters"]}["camera_g"] == "changed"
+    assert pkg["unplanned_changes"] == ["arm_mm"]                                   # the same flag the agent's changes get

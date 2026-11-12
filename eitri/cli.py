@@ -515,6 +515,47 @@ def bom_main(args) -> int:
 
 # ----------------------------------------------------------------------------- main
 
+def build_record(args) -> int:
+    """`eitri build <model.py> --record [--set k=v] [--config c] [--note ...]`: change PARAMS (when asked) and build a recorded
+    revision of the project the model file sits in, through the same Project methods the agent's tools use (Project.set_params ->
+    write_model, Project.build, reported by eitri.agent.tools.Tools), so the ticket plan gate refuses it exactly as it refuses the
+    agent, and a package sees the revision (its unplanned-parameter flag included)."""
+    from .agent.tools import Tools
+    from .project import STATE_FILE, Project
+    from .tickets.store import ChangeRefused
+    model = Path(args.model).resolve()
+    if not model.is_file():
+        print(f"no such model file: {model}", file=sys.stderr)
+        return 2
+    if args.out:
+        print("--record builds into the project's own out/ folder; drop --out", file=sys.stderr)
+        return 2
+    new_project = not (model.parent / STATE_FILE).is_file()
+    pr = Project(model.parent)
+    if pr.model_path.name != model.name:
+        pr.set_model_file(model.name)
+    tools = Tools(pr)
+    params = dict(kv.split("=", 1) for kv in args.set)
+    what = (f"config {args.config}" if args.config else "") + (", ".join(f"{k}={v}" for k, v in params.items()))
+    try:
+        if args.config:
+            pr.apply_config(args.config)              # Project.set_params -> write_model: the plan gate
+        if params:
+            pr.set_params(params)
+        res = tools._build_and_report(args.note or (f"eitri build --record: {what}" if what else "eitri build --record"))   # the gate again
+    except ChangeRefused as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 1
+    except KeyError as exc:
+        print(f"not changed: {exc.args[0] if exc.args else exc}", file=sys.stderr)
+        return 2
+    print(res.text)
+    if new_project:
+        print(f"(started project records in {model.parent / STATE_FILE})")
+    print(f"recorded revision {pr.revision} of {model.name}" if not res.is_error else "BUILD FAILED: no good revision recorded")
+    return 1 if res.is_error else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="eitri", description="An AI agent for parametric CAD: describe a part, eitri models and checks it.",
                                  epilog="With no command, eitri opens the local website in your browser "
@@ -542,6 +583,10 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--formats", default="step,glb")
     b.add_argument("--out", default=None)
     b.add_argument("--open", action="store_true", help="open the review image")
+    b.add_argument("--record", action="store_true",
+                   help="build the model as a recorded project revision (the model file's folder is the project), through the same "
+                        "path as the agent's tools: the ticket plan gate applies, and --set / --config are WRITTEN into PARAMS")
+    b.add_argument("--note", default="", help="with --record: the revision's note")
 
     bm = sub.add_parser("bom", help="the bill of materials of a wire-harness or pneumatic project (a mechanism: its mass rollup), no LLM")
     bm.add_argument("project", nargs="?", default=".", help="project folder or harness model file (default: current directory)")
@@ -693,6 +738,8 @@ def main(argv: list[str] | None = None) -> int:
         from .setup_firmware import run_setup_firmware
         return run_setup_firmware(esp32=args.esp32, dry_run=args.dry_run, yes=args.yes, servo=not args.no_servo)
 
+    if args.cmd == "build" and args.record:
+        return build_record(args)
     if args.cmd == "build":
         from .kernel import build_model
         model = Path(args.model)

@@ -71,7 +71,9 @@ Nets. `net("VBAT", current_A=44.5, voltage_V=14.8, max_drop_pct=3)`: current_A i
 default for every wire of the net; give a branch its own `current_A=` when it carries less. `round_trip=True` (default)
 counts the return conductor: drop = 2*K*I*L/CM; make the return net `round_trip=False` so it is not counted twice.
 A splice may only join wires of ONE net, so a trunk and its branches are all on the same net, with
-`current_A=` on the branches. Wires without a net are not graded for current or drop (a warning).
+`current_A=` on the branches. Wires without a net are not graded for current or drop (a warning). A branch or a cable's return core that carries less than the whole net needs its own `current_A` (`connect(..., current_A=)`,
+or `links[i].current_A = ...` on what `connect_cable` returns); without it the wire is graded at the whole net's current, and a thin
+return core then fails "one gauge per net" (the message names the wire).
 
 ## Connector catalog
 

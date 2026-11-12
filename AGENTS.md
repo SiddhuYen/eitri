@@ -156,6 +156,7 @@ off on eitri.io/account. Then they restart their agent and ask it for a design. 
 
 ```sh
 eitri build path/to/model.py            # build a model file and print its geometry report
+eitri build path/to/model.py --record --set name=value   # change PARAMS and record a project revision (the ticket plan gate applies)
 eitri print path/to/project             # 3D-print export: parts, orientations, plates, STL + 3MF + zip
 eitri bom path/to/project               # harness or pneumatics: bill of materials (--cutlist for harnesses, --csv)
 eitri reference add path/to/project customer_part.step   # a customer's STEP file as a read-only reference part (the person runs it: it asks for a one-time code, like eitri ticket approve)

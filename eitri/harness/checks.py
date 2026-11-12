@@ -372,6 +372,16 @@ def _drops(h: Harness, stats: dict[str, NetInfo]) -> list[HCheck]:
     return out
 
 
+def _inherited(l, h: Harness) -> str:
+    """What to declare when a wire has no current of its own: it is then graded at its whole net's current, which is wrong for
+    a branch or a return core (a cable's 0 V core carries only its own load's return)."""
+    if l.current_A is not None:
+        return ""
+    where = f"links[{l.core - 1}].current_A = ... on the list connect_cable() returns" if l.cable else "connect(..., current_A=...)"
+    return (f" ({l.id} has no current_A of its own, so it takes the whole net's; if it is a branch or a return core"
+            f"{' of cable ' + l.cable if l.cable else ''}, give it its own current: {where})")
+
+
 def _consistency(h: Harness) -> list[HCheck]:
     out: list[HCheck] = []
     fails, warns, refs_f, refs_w = [], [], [], []
@@ -386,14 +396,17 @@ def _consistency(h: Harness) -> list[HCheck]:
                     continue
                 thin, thick = a, b                          # a is the thinner wire
                 it, ik = h.wire_current(thin), h.wire_current(thick)
+                why = _inherited(thin, h)
                 if it is not None and ik is not None and it > ik * 1.0001:
-                    fails.append(f"{name}: {thin.id} ({thin.gauge.label}) carries {_fmt_a(it)}, more than {thick.id} ({thick.gauge.label}, {_fmt_a(ik)})")
+                    fails.append(f"{name}: {thin.id} ({thin.gauge.label}) carries {_fmt_a(it)}, more than {thick.id} ({thick.gauge.label}, "
+                                 f"{_fmt_a(ik)}){why}")
                     refs_f += [thin.id, thick.id]
                 elif it == ik:
-                    warns.append(f"{name}: {thin.id} is {thin.gauge.label} but {thick.id} is {thick.gauge.label} at the same current")
+                    warns.append(f"{name}: {thin.id} is {thin.gauge.label} but {thick.id} is {thick.gauge.label} at the same current{why}")
                     refs_w += [thin.id, thick.id]
     if fails:
-        out.append(_check("consistency", "one gauge per net", "fail", "; ".join(fails[:5]), "a thinner wire carries no more than a thicker one of its net", refs_f))
+        out.append(_check("consistency", "one gauge per net", "fail", "; ".join(fails[:5]),
+                          "a thinner wire carries no more than a thicker one of its net (each branch and return core with its own current_A)", refs_f))
     elif warns:
         out.append(_check("consistency", "one gauge per net", "warn", "; ".join(warns[:5]), "one gauge per net, or a lower current on the thinner wire", refs_w))
     else:

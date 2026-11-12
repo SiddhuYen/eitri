@@ -21,6 +21,14 @@ annotated tags (`git show v0.4.0`).
   push-in feed-through terminal: 20 A, 600 V per UL 1059, the lower of its UL and IEC figures; 0.25-4 mm²). New checks: "connector
   voltage" (a catalogue connector's DC rating against its nets' voltage) and a mm² wire-range "wires fit the ... terminals".
   Mirrored in `data/components/connectors.jsonl`.
+- **`eitri build <model.py> --record [--set k=v] [--config c] [--note ...]`**: the command-line path from an approved ticket to a
+  package. It writes the values into PARAMS and records a project revision through the same Project methods as the agent's tools:
+  the plan gate refuses it before approval, and the package flags unplanned parameters as it does for the agent.
+
+### Fixed
+
+- "one gauge per net" on a thin wire with no `current_A` of its own (a cable's return core) now names the wire and says how to
+  give it its own current; the check itself is unchanged.
 
 ## 0.8.0: tickets and checked change packages, a source on every check, fuses, pneumatic catalogue parts, reference parts
 

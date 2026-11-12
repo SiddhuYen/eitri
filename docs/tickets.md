@@ -55,8 +55,16 @@ eitri ticket plan ID plan.yaml -C <project>     # the agent normally does this w
 eitri ticket approve ID -C <project> [--by NAME] [--note "..."] [--despite-changes]
 eitri ticket waive ID "<check name>" --reason "..." -C <project>
 eitri ticket close ID -C <project> [--cancel]
+eitri build <project>/<model.py> --record [--set name=value ...] [--config NAME] [--note "..."]   # apply the plan yourself
 eitri package [ID] -C <project> [--json]
 ```
+
+**Without an agent.** After `eitri ticket approve`, a person applies the plan with `eitri build <model.py> --record --set
+wp_x=95 --note "T-0001: wp_x 80 -> 95"`: it writes the values into PARAMS and builds a recorded project revision through the same
+Project methods the agent's tools use, so the plan gate refuses it before approval exactly as it refuses the agent, and the
+package flags a parameter the plan did not list on page 1. (A plain `eitri build` without `--record` records nothing: its
+`--set` is a one-off override, and a package cannot use it.) A code change made by hand in the model file is recorded with
+`eitri build <model.py> --record --note "..."`.
 
 A criterion's check is a check name as the report gives it, or a glob such as `torque joint tilt*` (useful when the
 check name carries a part name that the change replaces). `ticket show` and the agent's `ticket_new` list the check

@@ -61,3 +61,26 @@ def test_cutlist_says_how_each_end_is_terminated():
     rows = cutlist(_h())
     text = " ".join(str(r) for r in rows)
     assert "moulded into B1" in text and "push-in into X1" in text
+
+
+def test_a_return_core_without_its_own_current_says_what_to_declare():
+    """The sample's first failure: a thin 0 V cable core with no current_A takes the whole 0 V net's current and fails "one gauge
+    per net". The check still fails (the design is what is wrong); its text now says which wire and how to declare its current."""
+    def build(own):
+        h = Harness("ret")
+        g1 = h.add(Connector("G1", "BARE", pins=["+", "-"]))
+        b1 = h.add(Connector("B1", "M8-3", pins=["1", "3", "4"]))
+        s0 = h.splice("S0V", kind="terminal")
+        h.net("P24", current_A=0.03, voltage_V=24)
+        h.net("0V", current_A=0.115, voltage_V=24, round_trip=False)
+        h.connect(s0, g1["-"], Wire("0.75mm2", "BU", 150), net="0V", current_A=0.1)   # the trunk: its own (lower) current
+        cord = Cable("CB1", [Wire("0.25mm2", "BN"), Wire("0.25mm2", "BU")], length_mm=5000)
+        links = h.connect_cable(cord, [g1["+"], b1["3"]], [b1["1"], s0], net=["P24", "0V"])
+        if own:
+            links[1].current_A = 0.03
+        h.nc(b1["4"])
+        return h
+    bad = _chk(build(False), "one gauge per net")[0]
+    assert bad.severity == "fail" and "has no current_A of its own" in bad.measured and "links[1].current_A" in bad.measured
+    assert "cable CB1" in bad.measured
+    assert _chk(build(True), "one gauge per net")[0].severity == "pass"
