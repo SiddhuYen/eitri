@@ -38,7 +38,7 @@ def _desc(comp) -> str:
     if k == "silencer":
         return "exhaust silencer"
     if k == "node":
-        return "tee / manifold junction"
+        return "union tee / junction (push-in)"
     return k
 
 
@@ -48,11 +48,19 @@ def bom(c: Circuit) -> list[dict]:
     def add(category, description, qty, unit="pc", part_number="", notes=""):
         rows.append({"category": category, "description": description, "qty": qty, "unit": unit, "part_number": part_number, "notes": notes})
 
+    from .catalog import UNION_TEES
     groups: OrderedDict[tuple, list] = OrderedDict()
     for comp in c.components.values():
         if comp.kind == "supply":
             continue
-        groups.setdefault((comp.kind, _desc(comp), comp.part_number), []).append(comp.name)
+        pn, desc = comp.part_number, _desc(comp)
+        if comp.kind == "node" and not pn:
+            ends = c.connections_at(comp.port("N"))
+            ods = {t.od_mm for kind, t, _o in ends if kind == "tube" and t is not None}
+            if len(ends) == 3 and len(ods) == 1 and None not in ods and int(next(iter(ods))) in UNION_TEES:
+                od = next(iter(ods))
+                pn, desc = UNION_TEES[int(od)], f"union tee, push-in, 3 x {od:g} mm tube"
+        groups.setdefault((comp.kind, desc, pn), []).append(comp.name)
     for (kind, desc, pn), names in groups.items():
         add(kind, desc, len(names), part_number=pn, notes=", ".join(names))
     sens: OrderedDict[tuple, list] = OrderedDict()
@@ -60,18 +68,53 @@ def bom(c: Circuit) -> list[dict]:
         sens.setdefault((f"position sensor, {s.output}" + (f", {s.V_min:g}-{s.V_max:g} V" if s.V_min is not None and s.V_max is not None else ""), s.part_number), []).append(f"{s.name} ({s.cylinder} {s.position})")
     for (desc, pn), names in sens.items():
         add("sensor", desc, len(names), part_number=pn, notes=", ".join(names))
-    tubes: OrderedDict[float, list] = OrderedDict()
+    tubes: OrderedDict[tuple, list] = OrderedDict()
     for t in c.tubes:
-        tubes.setdefault(t.id_mm, []).append(t)
-    for bore, ts in tubes.items():
+        if not t.direct:
+            tubes.setdefault((t.id_mm, t.part_number), []).append(t)
+    for (bore, pn), ts in tubes.items():
         total = sum(t.length_m for t in ts)
-        add("tube", f"pneumatic tube, {bore:g} mm bore (ID)", round(total * (1 + SERVICE_LOOP), 2), "m", part_number=ts[0].part_number, notes=f"{len(ts)} run(s), {total:g} m cut + {int(SERVICE_LOOP * 100)}% service loop")
-        n_fit = sum(t.fittings for t in ts)
-        if n_fit:
-            add("fitting", f"push-in fitting for the {bore:g} mm-bore tube (fittings are sized by the tube's OD)", n_fit, notes="one per tube end (and inline fittings as declared)")
+        od = f" x {ts[0].od_mm:g} mm OD" if ts[0].od_mm else ""
+        add("tube", f"pneumatic tube, {bore:g} mm bore (ID){od}", round(total * (1 + SERVICE_LOOP), 2), "m", part_number=pn, notes=f"{len(ts)} run(s), {total:g} m cut + {int(SERVICE_LOOP * 100)}% service loop")
+    for desc, pn, qty, notes in fittings(c):
+        add("fitting", desc, qty, part_number=pn, notes=notes)
     for i, r in enumerate(rows, 1):
         r["item"] = i
     return rows
+
+
+def fittings(c: Circuit) -> list[tuple[str, str, int, str]]:
+    """The fittings the tube ends need, counted once each: (description, part number, qty, notes).
+
+    A tube end on a built-in push-in port ("push-in 6": an SY...-C6 valve's A/B, a speed controller's tube side) needs nothing; on a
+    tee (a Node, itself the BOM's union tee) nothing; on a female thread one male connector for the tube's OD and that thread; on a
+    port with no connection data one generic push-in fitting (as before). A screwed-in joint (c.screw_in) has no tube and no fitting.
+    Inline fittings declared beyond the two ends (Tube.fittings > 2) are added."""
+    from .catalog import male_connector
+    groups: OrderedDict[tuple, list] = OrderedDict()
+    for t in c.tubes:
+        if t.direct:
+            continue
+        od = t.od_mm
+        size = f"{od:g} mm OD tube" if od else f"the {t.id_mm:g} mm-bore tube"
+        for end in (t.a, t.b):
+            comp = c.components[end.component]
+            if comp.kind == "node":
+                continue
+            conn = (comp.connections or {}).get(end.port, "")
+            if conn.lower().startswith("push-in"):
+                continue
+            if conn and not conn.lower().endswith("male"):
+                pn = male_connector(od, conn)
+                desc = f"male connector (push-in), {size} x {conn}" + ("" if pn or not conn.upper().startswith("G") else " (parallel G thread: G-thread fitting with seal)")
+            elif conn:
+                pn, desc = "", f"female connector (push-in), {size} x {conn.replace(' male', '')}"
+            else:
+                pn, desc = "", f"push-in fitting for {size} (port thread not given)"
+            groups.setdefault((desc, pn), []).append(f"{t.name} at {end}")
+        if t.fittings > 2:
+            groups.setdefault((f"inline push-in fitting for {size}", ""), []).extend([f"{t.name} inline"] * (t.fittings - 2))
+    return [(d, pn, len(ends), ", ".join(ends)) for (d, pn), ends in groups.items()]
 
 
 _COLS = ["item", "category", "description", "qty", "unit", "part_number", "notes"]

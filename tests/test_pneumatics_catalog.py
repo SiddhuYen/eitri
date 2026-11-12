@@ -134,7 +134,7 @@ def test_speed_range_and_end_of_stroke_energy():
     rep = analyze(station(fc=False, mass=8.0))
     e = one(rep, "end-of-stroke energy C1 extend")
     assert e.severity == "fail" and "no speed controller" in e.measured
-    assert one(analyze(station(fc=True, mass=8.0)), "end-of-stroke energy C1 extend").severity == "pass"   # 1/2 x 8 x 0.1^2 = 0.04 J
+    assert one(analyze(station(fc=True, mass=8.0)), "end-of-stroke energy C1 extend").severity == "pass"   # 1/2 x 8 x (2 x 0.1)^2 = 0.16 J
     off = one(analyze(station(mass=None)), "end-of-stroke energy C1 extend")
     assert off.severity == "warn" and off.not_run == ["C1.load_mass_kg"]
 
@@ -187,3 +187,79 @@ def test_example_writes_the_io_list(tmp_path):
     c = load_model(EXAMPLE).build()
     paths, _ = write_outputs(c, analyze(c), tmp_path, "fixture", render=False)
     assert Path(paths["io_csv"]).read_text().startswith("tag,io,signal") and "CLAMP_CLOSE" in Path(paths["io_md"]).read_text()
+
+
+# ---------------------------------------------------------------------------- item 1: correctness
+
+
+def test_end_of_stroke_energy_uses_twice_the_mean_speed():
+    from eitri.pneumatics.checks import IMPACT_FACTOR
+    assert IMPACT_FACTOR == 2.0                                                  # SMC RB_EU p.5 Note 1: collision speed = 2 x average
+    rep = analyze(station(fc=True, mass=8.0, speed=100.0))
+    e = one(rep, "end-of-stroke energy C1 extend")
+    # 1/2 x 8 kg x (2 x 0.1 m/s)^2 = 0.16 J against the CQ2-32 bumper's 0.29 J: pass (0.8 x 0.29 = 0.232)
+    assert e.severity == "pass" and "0.160 J" in e.measured and "2 x the mean speed" in e.measured
+    # at the mean speed it would have been 0.04 J; at 150 mm/s, 2x gives 0.36 J > 0.29 J: a fail the old rule passed (0.09 J)
+    assert one(analyze(station(fc=True, mass=8.0, speed=150.0)), "end-of-stroke energy C1 extend").severity == "fail"
+
+
+def test_bom_counts_each_fitting_once():
+    from eitri.model import load_model
+    c = load_model(EXAMPLE).build()
+    rows = outputs.bom(c)
+    fits = {r["description"]: r for r in rows if r["category"] == "fitting"}
+    # the SY3000-C6 valves' A/B and the AS2201F tube sides are built-in push-in; the AS2201F are screwed into the cylinders;
+    # the tee is its own BOM line: only the valves' M5 P ports and the FRL (port not given) need fittings
+    m5 = next(r for d, r in fits.items() if "M5" in d)
+    assert m5["qty"] == 2 and m5["part_number"] == "KQ2H06-M5"
+    assert sum(r["qty"] for r in fits.values()) == 2 + 2 + 1          # 2 x M5 at V1/V2 P; T0 at AIR and FRL, T1 at FRL (ports not given)
+    tee = next(r for r in rows if r["category"] == "node")
+    assert tee["part_number"] == "KQ2T06-00" and tee["qty"] == 1
+    tube = next(r for r in rows if r["category"] == "tube" and r["part_number"] == "SMC TU0604")
+    assert "6 mm OD" in tube["description"] and tube["qty"] == pytest.approx((0.5 + 0.2 + 0.2 + 1.2 + 1.2 + 1.0 + 1.0) * 1.1, abs=0.01)
+
+
+def _two_valve_circuit(cls="5/2", returns="spring", center="closed", acting="double", **cyl):
+    c = Circuit("fs")
+    air = c.supply("AIR", pressure_bar=6, flow_l_min=100)
+    v = c.valve("V1", cls, returns=returns, center=center, C=1, b=0.3)
+    cy = c.cylinder("C1", 32, 12, 50, acting=acting, spring_N=40 if acting == "single" else None, **cyl)
+    c.tube("T1", air["OUT"], v["P"])
+    c.tube("T2", v["A"], cy["CAP"])
+    if acting == "double":
+        c.tube("T3", v["B"], cy["ROD"])
+        c.silencer(v["S"])
+    c.silencer(v["R"])
+    return c
+
+
+def test_failsafe_states_per_valve_function():
+    from eitri.pneumatics import failsafe
+    cases = [  # (valve, cylinder, power loss, air loss)
+        (dict(cls="5/2", returns="spring"), {}, "extend", "release"),         # rest: P-A, A feeds CAP
+        (dict(cls="5/2", returns="solenoid"), {}, "hold", "release"),         # double solenoid keeps its last position
+        (dict(cls="5/3", center="closed"), {}, "trapped", "trapped"),
+        (dict(cls="5/3", center="exhaust"), {}, "release", "release"),
+        (dict(cls="5/3", center="pressure"), {}, "extend", "release"),
+        (dict(cls="3/2", returns="spring"), dict(acting="single"), "retract", "retract"),
+    ]
+    for v, cyl, power, air in cases:
+        c = _two_valve_circuit(**v, **cyl)
+        assert failsafe.outcome(c, c.get("C1"), "power")[0] == power, (v, cyl)
+        assert failsafe.outcome(c, c.get("C1"), "air")[0] == air, (v, cyl)
+
+
+def test_failsafe_check_grades_the_declaration():
+    rep = analyze(_two_valve_circuit())
+    off = one(rep, "on loss of electrical power C1")
+    assert off.severity == "warn" and off.not_run == ["C1.on_power_loss"] and "they give: extend" in off.measured
+    c = _two_valve_circuit(on_power_loss="hold", on_air_loss="release")
+    rep = analyze(c)
+    assert one(rep, "on loss of electrical power C1").severity == "fail"          # single solenoid spring return extends
+    assert one(rep, "on loss of air C1").severity == "pass"
+    ok = analyze(_two_valve_circuit(returns="solenoid", on_power_loss="hold", on_air_loss="release"))
+    assert one(ok, "on loss of electrical power C1").severity == "pass"
+    trapped = analyze(_two_valve_circuit(cls="5/3", on_power_loss="hold", on_air_loss="hold"))
+    assert one(trapped, "on loss of electrical power C1").severity == "warn" and "may not hold" in one(trapped, "on loss of air C1").measured
+    with pytest.raises(PneumaticsError, match="on_power_loss"):
+        _two_valve_circuit(on_power_loss="stop")

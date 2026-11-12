@@ -36,10 +36,12 @@ def build(p):
     v1 = c.valve("V1", part="SMC SY3120-5LZ-C6", signal="PUSHER_EXTEND", terminal="")
     v2 = c.valve("V2", part="SMC SY3220-5LZ-C6", signal="CLAMP_CLOSE", signal_12="CLAMP_OPEN")
     c1 = c.cylinder("C1", part="FESTO DSNU-20-50-P-A", load_N=p.push_N, load_retract_N=10, speed_mm_s=p.push_speed,
-                    cycles_per_min=p.cycles_per_min, load_mass_kg=p.part_kg + p.pusher_head_kg, duty="moving", magnet=True)
+                    cycles_per_min=p.cycles_per_min, load_mass_kg=p.part_kg + p.pusher_head_kg, duty="moving", magnet=True,
+                    on_power_loss="retract", on_air_loss="release")          # pusher: back off when anything is lost
     c2 = c.cylinder("C2", part="SMC CDQ2B32-20DZ", load_N=p.clamp_N, load_retract_N=20, speed_mm_s=p.clamp_speed,
-                    cycles_per_min=p.cycles_per_min, load_mass_kg=p.clamp_pad_kg, duty="static")
-    # meter-out speed control on both lines of both cylinders, screwed into the cylinder ports
+                    cycles_per_min=p.cycles_per_min, load_mass_kg=p.clamp_pad_kg, duty="static",
+                    on_power_loss="hold", on_air_loss="release")             # clamp: keep the part on a power cut; no air = no clamp
+    # meter-out speed control on both lines of both cylinders, screwed straight into the cylinder ports (no tube, no fitting)
     fc = {k: c.flow_control(k, meter="out", part="SMC AS2201F-01-06") for k in ("FC1A", "FC1B", "FC2A", "FC2B")}
 
     c.tube("T0", air["OUT"], frl["IN"], id_mm=6.5, length_m=3.0, part_number="SMC TU1065")    # 10 x 6.5 drop from the shop main
@@ -47,13 +49,13 @@ def build(p):
     c.tube("T2", tee["N"], v1["P"], part="SMC TU0604", length_m=0.2)
     c.tube("T3", tee["N"], v2["P"], part="SMC TU0604", length_m=0.2)
     c.tube("T4", v1["A"], fc["FC1B"]["A"], part="SMC TU0604", length_m=1.2)      # V1 position 1 (rest) feeds A: the pusher's ROD side
-    c.tube("T5", fc["FC1B"]["B"], c1["ROD"], part="SMC TU0604", length_m=0.05)
+    c.screw_in(fc["FC1B"]["B"], c1["ROD"], name="J5")
     c.tube("T6", v1["B"], fc["FC1A"]["A"], part="SMC TU0604", length_m=1.2)
-    c.tube("T7", fc["FC1A"]["B"], c1["CAP"], part="SMC TU0604", length_m=0.05)
+    c.screw_in(fc["FC1A"]["B"], c1["CAP"], name="J7")
     c.tube("T8", v2["A"], fc["FC2B"]["A"], part="SMC TU0604", length_m=1.0)
-    c.tube("T9", fc["FC2B"]["B"], c2["ROD"], part="SMC TU0604", length_m=0.05)
+    c.screw_in(fc["FC2B"]["B"], c2["ROD"], name="J9")
     c.tube("T10", v2["B"], fc["FC2A"]["A"], part="SMC TU0604", length_m=1.0)
-    c.tube("T11", fc["FC2A"]["B"], c2["CAP"], part="SMC TU0604", length_m=0.05)
+    c.screw_in(fc["FC2A"]["B"], c2["CAP"], name="J11")
     for v in (v1, v2):
         c.silencer(v["R"], part="SMC AN05-M5")
         c.silencer(v["S"], part="SMC AN05-M5")

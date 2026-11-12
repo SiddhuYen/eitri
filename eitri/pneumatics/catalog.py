@@ -109,13 +109,13 @@ class Series:
 SERIES: list[Series] = [
     # ---------------------------------------------------------------- cylinders
     Series("cylinder", r"(?:FESTO\s+)?DSNU-20-(?P<stroke>\d+)-P-A",
-           dict(bore_mm=20.0, rod_mm=8.0, acting="double", min_bar=1.0, max_bar=10.0, port="G1/8", magnet=True, cushion="elastic rings",
+           dict(bore_mm=20.0, rod_mm=8.0, acting="double", min_bar=1.0, max_bar=10.0, port="G1/8", connections={"CAP": "G1/8", "ROD": "G1/8"}, magnet=True, cushion="elastic rings",
                 allowable_ke_J=0.2, piston_mass_kg=0.044, piston_mass_per_mm_kg=0.0004, manufacturer="Festo",
                 description="Festo DSNU round cylinder ISO 6432, Ø20, elastic cushioning, magnetic piston"),
            ("festo-dsnu-20-50-p-a", "festo-dsnu-cat"), stroke_range=(1, 320),
            figures={"force_extend_N": (188.5, 6.0), "force_retract_N": (158.3, 6.0)}),
     Series("cylinder", r"(?:SMC\s+)?C(?P<magnet>D?)Q2B32-(?P<stroke>\d+)DZ",
-           dict(bore_mm=32.0, rod_mm=16.0, acting="double", min_bar=0.5, max_bar=10.0, port="Rc1/8", cushion="rubber bumper",
+           dict(bore_mm=32.0, rod_mm=16.0, acting="double", min_bar=0.5, max_bar=10.0, port="Rc1/8", connections={"CAP": "Rc1/8", "ROD": "Rc1/8"}, cushion="rubber bumper",
                 allowable_ke_J=0.29, speed_min_mm_s=50.0, speed_max_mm_s=500.0, manufacturer="SMC",
                 description="SMC CQ2 compact cylinder, Ø32, through-hole, rubber bumper"),
            ("smc-cq2-z", "smc-cq2"), strokes=(5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 75, 100),
@@ -124,25 +124,27 @@ SERIES: list[Series] = [
     Series("valve", r"(?:SMC\s+)?SY3120-5L(?P<light>Z?)-C6",
            dict(cls="5/2", actuation="solenoid", returns="spring", C=0.76, b=0.30, C_exhaust=0.65, b_exhaust=0.39, min_bar=1.5, max_bar=7.0,
                 coil_V=24.0, coil_W=0.4, connector="L plug connector (lead wire 300 mm)", port="P, EA, EB M5 x 0.8; A, B one-touch 6 mm",
+                connections={"P": "M5", "R": "M5", "S": "M5", "A": "push-in 6", "B": "push-in 6"},
                 max_hz=10.0, manufacturer="SMC", description="SMC SY3000 5/2 single-solenoid valve, body ported, 24 VDC"),
            ("smc-sy",)),
     Series("valve", r"(?:SMC\s+)?SY3220-5L(?P<light>Z?)-C6",
            dict(cls="5/2", actuation="solenoid", returns="solenoid", C=0.76, b=0.30, C_exhaust=0.65, b_exhaust=0.39, min_bar=1.0, max_bar=7.0,
                 coil_V=24.0, coil_W=0.4, connector="L plug connector x 2 (lead wire 300 mm)", port="P, EA, EB M5 x 0.8; A, B one-touch 6 mm",
+                connections={"P": "M5", "R": "M5", "S": "M5", "A": "push-in 6", "B": "push-in 6"},
                 max_hz=10.0, manufacturer="SMC", description="SMC SY3000 5/2 double-solenoid valve (holds its position unpowered), 24 VDC"),
            ("smc-sy",)),
     Series("valve", r"(?:SMC\s+)?SY5120-5L(?P<light>Z?)-01",
            dict(cls="5/2", actuation="solenoid", returns="spring", C=1.9, b=0.35, C_exhaust=2.4, b_exhaust=0.39, min_bar=1.5, max_bar=7.0,
-                coil_V=24.0, coil_W=0.4, connector="L plug connector (lead wire 300 mm)", port="all ports Rc1/8", max_hz=5.0,
+                coil_V=24.0, coil_W=0.4, connector="L plug connector (lead wire 300 mm)", port="all ports Rc1/8", connections={k: "Rc1/8" for k in ("P", "A", "B", "R", "S")}, max_hz=5.0,
                 manufacturer="SMC", description="SMC SY5000 5/2 single-solenoid valve, body ported, 24 VDC"),
            ("smc-sy",)),
     # ---------------------------------------------------------------- tube, flow controls, silencers
     Series("tube", r"(?:SMC\s+)?TU0604", dict(id_mm=4.0, od_mm=6.0, max_bar=8.0, material="polyurethane",
                                                description="SMC TU polyurethane tube 6 x 4 mm"), ("smc-tu",)),
-    Series("flow_control", r"(?:SMC\s+)?AS2201F-01-06", dict(C=0.7, b=0.30, max_bar=10.0, port="R1/8, tube 6 mm",
+    Series("flow_control", r"(?:SMC\s+)?AS2201F-01-06", dict(C=0.7, b=0.30, max_bar=10.0, port="R1/8, tube 6 mm", connections={"A": "push-in 6", "B": "R1/8 male"},
                                                          description="SMC AS speed controller, elbow, R1/8 x 6 mm"), ("smc-as",)),
-    Series("silencer", r"(?:SMC\s+)?AN05-M5", dict(C=1.0, b=0.30, max_bar=10.0, port="M5", description="SMC AN silencer, M5"), ("smc-an",)),
-    # ---------------------------------------------------------------- position sensors
+    Series("silencer", r"(?:SMC\s+)?AN05-M5", dict(C=1.0, b=0.30, max_bar=10.0, port="M5", connections={"IN": "M5 male"}, description="SMC AN silencer, M5"), ("smc-an",)),
+    # ---------------------------------------------------------------- position sensors (see also MALE_CONNECTORS below)
     Series("sensor", r"(?:SMC\s+)?D-M9B", dict(output="2-wire", V_min=10.0, V_max=28.0, load_mA_min=2.5, load_mA_max=40.0, drop_V=4.0,
                                                 leakage_mA=0.8, connector="grommet, 2 cores 0.15 mm2 (brown +, blue -), 0.5 m lead",
                                                 fits=("CQ2", "CDQ2"), description="SMC D-M9B solid-state auto switch, 2-wire"), ("smc-d-m9",)),
@@ -211,3 +213,27 @@ def sources_table() -> str:
     for s in _S:
         rows.append(f"| {s.id} | {s.doc} | {s.url} | {s.where.replace('|', '/')} | {s.fetched} |")
     return "\n".join(rows)
+
+
+# SMC KQ2H male connectors (R taper thread, fits an Rc or M female port) by (tube OD mm, thread): KQ2 catalogue
+# https://static.smc.eu/pdf/KQ2_EU.pdf p.5 "Male connector: KQ2H" table (fetched 2026-11-12). A G (parallel) port takes a G-thread
+# fitting, which is not in this table: the BOM names the size and leaves the part number blank.
+MALE_CONNECTORS = {
+    (4, "M5"): "KQ2H04-M5", (4, "1/8"): "KQ2H04-01S", (4, "1/4"): "KQ2H04-02S",
+    (6, "M5"): "KQ2H06-M5", (6, "1/8"): "KQ2H06-01S", (6, "1/4"): "KQ2H06-02S", (6, "3/8"): "KQ2H06-03S",
+    (8, "1/8"): "KQ2H08-01S", (8, "1/4"): "KQ2H08-02S", (8, "3/8"): "KQ2H08-03S",
+    (10, "1/8"): "KQ2H10-01S", (10, "1/4"): "KQ2H10-02S", (10, "3/8"): "KQ2H10-03S", (10, "1/2"): "KQ2H10-04S",
+    (12, "1/4"): "KQ2H12-02S", (12, "3/8"): "KQ2H12-03S", (12, "1/2"): "KQ2H12-04S",
+}
+UNION_TEES = {4: "KQ2T04-00", 6: "KQ2T06-00", 8: "KQ2T08-00", 10: "KQ2T10-00", 12: "KQ2T12-00"}   # KQ2_EU.pdf union tee table
+
+
+def male_connector(od_mm: float | None, female: str) -> str:
+    """The KQ2H part for a tube OD into a female port ("M5", "Rc1/8"; "" for G ports or an unknown size)."""
+    if od_mm is None or not female:
+        return ""
+    f = female.strip()
+    if f.upper().startswith("G"):
+        return ""
+    size = "M5" if f.upper().startswith("M5") else f.upper().lstrip("RC").lstrip("R").strip()
+    return MALE_CONNECTORS.get((int(round(od_mm)), size), "")

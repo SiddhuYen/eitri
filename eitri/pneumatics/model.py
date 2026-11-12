@@ -105,6 +105,8 @@ class Component:
     max_bar: float | None = None         # maximum working pressure from the part's datasheet (default: PRESSURE_RATINGS by kind)
     min_bar: float | None = None         # minimum operating pressure from the part's datasheet (None: not graded)
     catalog: dict = field(default_factory=dict)   # filled from a catalogue part (part=): sources, catalogue figures, extra facts
+    connections: dict = field(default_factory=dict)  # port -> its connection: "push-in 6" (a built-in fitting for 6 mm tube),
+                                                     # a female thread "M5" / "Rc1/8" / "G1/8", or a male thread "R1/8 male"
 
     def __post_init__(self) -> None:
         if not self.name or any(ch in str(self.name) for ch in ". \t\n"):
@@ -259,6 +261,8 @@ class Cylinder(Component):
     speed_min_mm_s: float | None = None  # the catalogue's piston speed range
     speed_max_mm_s: float | None = None
     magnet: bool | None = None           # a magnetic piston (needed by reed / magnetic position sensors); None: not stated
+    on_power_loss: str | None = None     # what it must do when the electrical power is lost: hold | extend | retract | release
+    on_air_loss: str | None = None       # ... and when the air supply is lost (failsafe.py grades both against the valves)
 
     def __post_init__(self) -> None:
         self.kind, self.ports = "cylinder", (["CAP", "ROD"] if self.acting == "double" else ["CAP"])
@@ -278,6 +282,13 @@ class Cylinder(Component):
         if self.load_retract_N is None:
             self.load_retract_N = 0.0 if self.acting == "single" else self.load_N
         self.load_retract_N = float(self.load_retract_N)
+        for k in ("on_power_loss", "on_air_loss"):
+            v = getattr(self, k)
+            if v is not None:
+                v = str(v).strip().lower()
+                if v not in ("hold", "extend", "retract", "release"):
+                    raise PneumaticsError(f"cylinder {self.name}: {k} must be hold, extend, retract or release, got {v!r}")
+                setattr(self, k, v)
         for k in ("speed_mm_s", "speed_retract_mm_s", "spring_N", "load_mass_kg", "allowable_ke_J", "speed_min_mm_s", "speed_max_mm_s"):
             if getattr(self, k) is not None:
                 setattr(self, k, _pos(getattr(self, k), f"{self.name} {k}"))
@@ -344,12 +355,18 @@ class Tube:
     notes: str = ""
     max_bar: float | None = None         # the tube's maximum working pressure (graded with the components it carries air to)
     catalog: dict = field(default_factory=dict)
+    od_mm: float | None = None           # outside diameter (push-in fittings are sized by it)
+    direct: bool = False                 # no tube: the two ports are screwed straight together (a speed controller in a cylinder port)
 
     def __post_init__(self) -> None:
         if not self.name or any(ch in str(self.name) for ch in ". \t\n"):
             raise PneumaticsError(f"tube name {self.name!r} must be non-empty and contain no dots or spaces")
         if self.max_bar is not None:
             self.max_bar = _pos(self.max_bar, f"tube {self.name} max_bar")
+        if self.od_mm is not None:
+            self.od_mm = _pos(self.od_mm, f"tube {self.name} od_mm")
+            if self.od_mm <= self.id_mm:
+                raise PneumaticsError(f"tube {self.name}: od_mm must be larger than id_mm")
         self.id_mm, self.length_m = _pos(self.id_mm, f"tube {self.name} id_mm"), _pos(self.length_m, f"tube {self.name} length_m")
         self.fittings = int(self.fittings)
         if self.fittings < 0:
@@ -544,6 +561,12 @@ class Circuit:
         t = Tube(name, ra, rb, length_m=length_m, **{k: v for k, v in kw.items() if v is not None})
         self.tubes.append(t)
         return t
+
+    def screw_in(self, a, b, name: str | None = None) -> Tube:
+        """Two ports screwed straight together, with no tube (a speed controller or a fitting in a cylinder port): a joint with a
+        tiny length for the flow estimate, no tube and no fitting in the BOM."""
+        ra, rb = self._port(a), self._port(b)
+        return self.tube(name or f"J_{ra.component}_{ra.port}", ra, rb, id_mm=4.0, length_m=0.01, fittings=0, direct=True)
 
     def _port(self, x) -> PortRef:
         if isinstance(x, PortRef):

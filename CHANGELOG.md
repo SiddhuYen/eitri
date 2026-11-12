@@ -21,6 +21,11 @@ is used (the lower for a limit, the higher for a draw).
 - **I/O list** (`<name>.io.md` / `.io.csv`): every solenoid coil a DO, every `c.sensor(...)` a DI, with signal name,
   function, part, voltage, current, connector and terminal, for the PLC programmer. `c.control_voltage(24)`.
 - `examples/pneumatic-clamp-fixture/`: a pusher + clamp fixture built from these parts.
+- **Pneumatics fail-safe check**: per cylinder, the state its valves give on a loss of electrical power and on a loss of air
+  (5/2 spring return: rest position; 5/2 double solenoid: holds; 5/3: its centre; SMC M-E03-3-02) against the declared
+  `on_power_loss=` / `on_air_loss=` (hold | extend | retract | release); "not run" when undeclared.
+- `c.screw_in(a, b)` (a speed controller screwed into a cylinder port) and per-port `connections=`: the BOM counts a fitting
+  only where a threaded port needs one (KQ2H part numbers from the KQ2 catalogue), a tee once (KQ2T).
 
 ### Changed
 
@@ -38,6 +43,9 @@ is used (the lower for a limit, the higher for a draw).
 - **Pneumatics, air consumption**: the lines between valve and cylinder are refilled from atmospheric, so they take
   V x p_gauge / p_atm per stroke, not x p_abs / p_atm (SMC Best Pneumatics technical data, Data 2: 2 m of 6 mm bore at
   0.5 MPa is 0.56 L ANR per cycle; eitri gave 0.67). The swept-volume and required-flow formulas already matched SMC.
+- **Pneumatics, end-of-stroke energy**: the impact speed is 2 x the mean speed (SMC RB catalogue p.5: "collision speed
+  = 2 x average speed" when the speed comes from the stroke time); it was the mean speed.
+- **Pneumatics, BOM fittings**: no more fitting per tube end on built-in push-in ports and tees (they were double-counted).
 - **Pneumatics, default valve C**: 0.6, b 0.29 (the smallest body-ported SMC SY3000, CAT.EUS11-83 p.3); the old 1.0 came
   from the series' best-case cover figure.
 - **Servos**: SG90 draws 2 A at stall (the higher of TowerPro's "0.5A - 2A"). STS3215 16.5 kg·cm stall, 4 rated at

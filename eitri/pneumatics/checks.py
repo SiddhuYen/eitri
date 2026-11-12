@@ -26,6 +26,12 @@ from ..checks import Check, check as _check, level, switched_off
 from .flow import DEFAULT_C, consumption_per_cycle_l, cylinder_forces, drop_for_flow, flow_l_s, required_flow_l_s, series, tube_data
 from .model import EXHAUST_PORTS, LOAD_RATIOS, pressure_rating, P_ATM, Circuit, Cylinder, FlowControl, Node, PortRef, Regulator, Silencer, Supply, Tube, Valve
 
+# The speed at the end of the stroke is higher than the mean speed (stroke / stroke time) a speed controller is set to. SMC Shock
+# Absorber Series RB catalogue (https://static.smc.eu/pdf/RB_EU.pdf, p.5 Model Selection, Note 1, fetched 2026-11-12): "The collision
+# speed is v = 2va when the speed (average speed va) is calculated from the air cylinder's stroke time." SMC's MY2 rodless cylinder
+# manual uses 1.4 x average for its stopper check (seen in a search result only, not opened): the higher, 2, is used.
+IMPACT_FACTOR = 2.0
+IMPACT_SOURCE = "SMC RB_EU.pdf p.5 Note 1: collision speed = 2 x average speed; E = 1/2 m v^2"
 LOAD_RATIO_WARN = LOAD_RATIOS["moving"]   # SMC: dynamic operation, the load moved vertically or horizontally (model.LOAD_RATIOS)
 SUPPLY_WARN = 0.8
 DROP_WARN_BAR = 0.3
@@ -124,9 +130,10 @@ def _comp_step(comp, from_port: str, to_port: str) -> Step | None:
     return None
 
 
-def find_path(c: Circuit, start: PortRef, goal: str) -> PathInfo:
+def find_path(c: Circuit, start: PortRef, goal: str, positions: dict[str, int] | None = None) -> PathInfo:
     """DFS from a cylinder port outward to a supply ("supply") or to the atmosphere ("exhaust"), using one position per valve.
-    Steps come back in flow order (supply -> cylinder for a supply path, cylinder -> air for an exhaust path)."""
+    Steps come back in flow order (supply -> cylinder for a supply path, cylinder -> air for an exhaust path). `positions`
+    fixes some valves' positions (valve name -> position index), as after a loss of power or air (failsafe.py)."""
     best: PathInfo | None = None
 
     def done(ref: PortRef, comp) -> bool:
@@ -194,7 +201,7 @@ def find_path(c: Circuit, start: PortRef, goal: str) -> PathInfo:
                 return r
         return None
 
-    r = _leave(c, start, {start}, {}, [], 0, dfs)
+    r = _leave(c, start, {start}, dict(positions or {}), [], 0, dfs)
     if r is None:
         return PathInfo(False)
     if goal == "supply":
@@ -465,6 +472,7 @@ def run_checks(c: Circuit) -> tuple[list[Check], list[CylinderInfo], list[Supply
         checks.append(_check("circuit", "no dead-headed lines", "pass", f"{len(c.tubes)} tube(s), every line leads somewhere"))
     checks += _pressure_ratings(c)
     checks += _catalog_checks(c, infos)
+    checks += _failsafe_checks(c)
     if estimated:
         checks.append(_check("flow data", "flow data estimated", "warn",
                              "no C, b from a datasheet for " + ", ".join(f"{k} ({v})" for k, v in list(estimated.items())[:8]) + ("..." if len(estimated) > 8 else "") + ": graded with conservative estimates",
@@ -530,11 +538,12 @@ def _catalog_checks(c: Circuit, infos: list[CylinderInfo]) -> list[Check]:
                                                    "speed_mm_s=", [cyl.name]), f"{cyl.name}.speed_mm_s"))
                     continue
                 m = cyl.load_mass_kg + (cyl.piston_mass_kg or 0.0)
-                e = 0.5 * m * (v / 1000.0) ** 2
+                v_hit = IMPACT_FACTOR * v
+                e = 0.5 * m * (v_hit / 1000.0) ** 2
                 sev = level(e, cyl.allowable_ke_J, 0.8)
                 out.append(_check("cushioning", name, sev,
-                                  f"{e:.3f} J = 1/2 x {m:.3f} kg x ({v:.0f} mm/s)^2, at {how}; the cushioning absorbs {cyl.allowable_ke_J:g} J{src} "
-                                  "[SMC: E = 1/2 m V^2, V the max piston speed]",
+                                  f"{e:.3f} J = 1/2 x {m:.3f} kg x ({v_hit:.0f} mm/s)^2: impact speed {IMPACT_FACTOR:g} x the mean speed ({v:.0f} mm/s, {how}); "
+                                  f"the cushioning absorbs {cyl.allowable_ke_J:g} J{src} [{IMPACT_SOURCE}]",
                                   f"<= {cyl.allowable_ke_J:g} J (a slower stroke, a speed controller, a bigger bore or an external stop)", [cyl.name]))
     for v in [x for x in c.components.values() if isinstance(x, Valve)]:
         src = f" [{v.part_number} datasheet]" if v.part_number else ""
@@ -567,6 +576,30 @@ def _catalog_checks(c: Circuit, infos: list[CylinderInfo]) -> list[Check]:
             sev = "pass" if lo <= c.control_V <= hi else "fail"
             out.append(_check("electrical", f"sensor {s.name} voltage", sev, f"{c.control_V:g} V DC control supply; the sensor runs on {lo:g}-{hi:g} V{src}",
                               f"{lo:g}-{hi:g} V", [s.cylinder]))
+    return out
+
+
+def _failsafe_checks(c: Circuit) -> list[Check]:
+    """Each cylinder's state after a loss of electrical power and after a loss of air against what the design declares."""
+    from . import failsafe
+    out: list[Check] = []
+    for cyl in c.cylinders:
+        for event, attr, label in (("power", "on_power_loss", "loss of electrical power"), ("air", "on_air_loss", "loss of air")):
+            name = f"on {label} {cyl.name}"
+            req = getattr(cyl, attr)
+            got, how = failsafe.outcome(c, cyl, event)
+            if req is None:
+                out.append(switched_off(_check("fail-safe", name, "warn",
+                                               f"what {cyl.name} must do on a {label} is not declared, so the valves' behaviour is not graded "
+                                               f"(they give: {got}; {how})", f"{attr}= hold | extend | retract | release", [cyl.name]),
+                                        f"{cyl.name}.{attr}"))
+                continue
+            sev = failsafe.grade(req, got)
+            note = (" (air trapped behind a closed centre: SMC says it may not hold for an extended period; add pilot check valves "
+                    "or a mechanical lock for a guaranteed hold)") if got == "trapped" else ""
+            out.append(_check("fail-safe", name, sev, f"{cyl.name} must {req}; its valves give: {got} ({how}){note} [{failsafe.SOURCE}]",
+                              f"{req}: a valve whose de-energised / no-air state gives it (5/2 spring return: its rest position; 5/2 double "
+                              "solenoid: holds on power loss; 5/3: its centre)", [cyl.name] + [v.name for v in failsafe._valves_of(c, cyl)]))
     return out
 
 
