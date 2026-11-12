@@ -5,6 +5,8 @@
     ampacity      wire gauge against the wire's current (chassis-wiring table), connector pins against their rating
     voltage drop  V = 2*K*I*L/CM along every source-to-load path of a net, against the net's max_drop_pct
     consistency   one gauge and one colour per net, shielded cables terminated
+    protection    fuses / PTCs / breakers: every branch from a declared source protected, rating vs wire, continuous load,
+                  voltage, interrupting rating, placement (eitri.harness.protection)
     power         a board's 5V / 3V3 pin against what it can supply (eitri.power, sourced limits); everything that takes a
                   signal from a board's I/O pin shares the board's ground
 
@@ -20,7 +22,8 @@ from ..checks import switched_off, Check, check
 from ..model import CheckResult  # noqa: F401
 from .. import power
 from .catalog import BOARD_TYPES, circuit_column, nearest_awg, voltage_drop, wire_rating
-from .model import Endpoint, Harness, Link, PinRef, SpliceRef
+from .model import Endpoint, Fuse, Harness, Link, PinRef, SpliceRef
+from .protection import protection_checks
 
 WARN_FRACTION = 0.8          # within 20 % of the limit: a warning
 
@@ -125,6 +128,7 @@ def run_checks(h: Harness) -> tuple[list[HCheck], dict[str, NetInfo]]:
     checks += _drops(h, stats)
     checks += _consistency(h)
     checks += _power(h)
+    checks += protection_checks(h)
     return checks, stats
 
 
@@ -224,8 +228,10 @@ def _ampacity(h: Harness) -> list[HCheck]:
         out.append(_check("ampacity", f"ampacity {l.id} {l.a}->{l.b} {l.gauge.label}{net}", sev,
                           f"{_fmt_a(i)} of {_fmt_a(amp)} ({frac * 100:.0f}%)", f"<= {_fmt_a(amp)}" + (" (within 20% of the limit)" if sev == "warn" else ""),
                           [l.id]))
-    # connector pins against their rating
+    # connector pins against their rating (a protective device is graded by eitri.harness.protection instead)
     for c in h.connectors.values():
+        if isinstance(c, Fuse):
+            continue
         rating = c.rating
         by_wire = c.rating_a is None and c.spec is not None and c.spec.by_wire
         loads = []

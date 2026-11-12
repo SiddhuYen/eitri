@@ -73,7 +73,7 @@ def _layers(h: Harness, names: list[str]) -> dict[str, int]:
 
 
 def _conn_size(h: Harness, c, shield_pins: set) -> tuple[float, float, list[tuple[str, str]]]:
-    title = f"{c.name} · {c.type}"
+    title = f"{c.name} · {getattr(c, 'title', c.type)}"
     sub = f"{c.pins}-pin" + (f" {c.gender}" if c.gender else "") + (f" · {c.part_number}" if c.part_number else "")
     rows = []
     for p in c.pin_names:
@@ -196,7 +196,7 @@ def build_scene(h: Harness, status: dict[str, str] | None = None, footer: list[t
             border = FAIL if st == "fail" else WARN if st == "warn" else BORDER
             items.append({"t": "rect", "x": x0, "y": y0, "w": w, "h": ht, "rx": 4, "fill": BOX, "stroke": border, "sw": 2 if st else 1.2, "g": g, "cls": "box"})
             items.append({"t": "rect", "x": x0, "y": y0, "w": w, "h": HEAD - 4, "rx": 4, "fill": HEADER, "stroke": "none", "sw": 0, "g": g, "cls": "head"})
-            items.append({"t": "text", "x": x0 + PAD, "y": y0 + 16, "s": f"{c.name} · {c.type}", "size": FONT + 1, "weight": "700", "fill": INK, "g": g})
+            items.append({"t": "text", "x": x0 + PAD, "y": y0 + 16, "s": f"{c.name} · {getattr(c, 'title', c.type)}", "size": FONT + 1, "weight": "700", "fill": INK, "g": g})
             sub = f"{c.pins}-pin" + (f" {c.gender}" if c.gender else "") + (f" · {c.part_number}" if c.part_number else "")
             items.append({"t": "text", "x": x0 + PAD, "y": y0 + 30, "s": sub, "size": FONT - 1, "fill": MUTED, "g": g})
             items.append({"t": "line", "x1": x0, "y1": y0 + HEAD - 4, "x2": x0 + w, "y2": y0 + HEAD - 4, "stroke": border, "sw": 1, "g": g})

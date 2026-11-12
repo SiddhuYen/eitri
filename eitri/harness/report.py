@@ -106,7 +106,12 @@ def harness_data(h: Harness) -> dict[str, Any]:
         "wires": [{"id": l.id, "a": endpoint_to_json(l.a), "b": endpoint_to_json(l.b), "gauge": l.gauge.to_json(), "gauge_label": l.gauge.label,
                    "color": l.color, "length_mm": l.length_mm, "net": l.net, "current_A": h.wire_current(l), "cable": l.cable,
                    "core": l.core, "label": l.label} for l in h.links],
-        "nets": [{"name": n.name, "current_A": n.current_A, "voltage_V": n.voltage_V, "max_drop_pct": n.max_drop_pct} for n in h.nets.values()],
+        "nets": [{"name": n.name, "current_A": n.current_A, "voltage_V": n.voltage_V, "max_drop_pct": n.max_drop_pct, "signal": n.signal}
+                 for n in h.nets.values()],
+        "sources": [{"pin": str(s.pin), "voltage_V": s.voltage_V, "kind": s.kind, "max_current_A": s.max_current_A,
+                     "short_circuit_A": s.short_circuit_A, "part": s.part} for s in h.sources.values()],
+        "fuses": [{"name": f.name, **f.device.to_json()} for f in h.fuses.values()],
+        "ambient_C": h.ambient_C,
         "cables": [{"name": c.name, "shield": c.shield, "shield_ends": [str(p) for p in c.shield_ends], "jacket_color": c.jacket_color} for c in h.cables.values()],
         "layout": {k: list(v) for k, v in h.layout.items()},
         "catalog": sorted(CATALOG),

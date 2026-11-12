@@ -43,6 +43,19 @@ h.connect(a, b, wire, net=None, current_A=None, length_mm=None, name=None, label
 h.connect_cable(cable, a_pins, b_pins, net=[one net per core], shield_a=pin, shield_b=pin)
     core i runs a_pins[i] -> b_pins[i]; shield_a / shield_b: where the cable shield is terminated at each end
 h.nc("J1.3", J2[4])                                 declare pins not connected
+h.source(pin, voltage_V, max_current_A=None, short_circuit_A=None, kind="dc", part="")   a DC power source (its + pin)
+    kind       psu | battery | board | dc;  voltage_V the highest it reaches (a battery at full charge)
+    max_current_A    the most it pushes into a fault: a supply's current limit or the top of its overload-protection range
+    short_circuit_A  its prospective short-circuit current, from its datasheet (runs the interrupting-rating check)
+    Leave both None when the datasheet gives neither: the source then counts as unlimited (protection required).
+    DC up to 60 V only: ac=True or a higher voltage is refused (mains wiring is out of scope).
+Fuse(name, type, rating_A)    a protective device in a wire: two terminals, LINE (source side) and LOAD
+    Fuse("F1", "ATO", 5)  Fuse("F2", "MINI", 3)  Fuse("F3", "MF-R110")   catalog parts (table below): their figures are fixed
+    Fuse("F4", "FUSE", 3, voltage_rating_V=, interrupt_A=, continuous_fraction=, part_number=)   your own part, its datasheet's figures
+    Breaker("CB1", 10, voltage_rating_V=, interrupt_A=, continuous_fraction=, part_number=)       a DC breaker
+    wire it in line: h.connect(src["+"], f["LINE"], ...), h.connect(f["LOAD"], <the branch>, ...)
+Harness(name, description="", ambient_C=None)   ambient_C: the air around the fuses (default 40 C, said in the report)
+h.net(..., signal=True)    a net driven by a logic output (an MCU pin), not a supply: graded as a signal (<= 20 mA)
 h.link("W3")  h.links  h.wire_current(link)         read back what was built (for verify)
 ```
 
@@ -63,6 +76,19 @@ minute only); past it, it fails. Spade terminals are rated by the wire crimped i
 so is Micro-Fit 3.0, which also derates with the number of powered circuits in the housing (Molex PS-43045, wire-to-wire:
 18 AWG 7 A at 2 circuits, 6 A at 6, 5.5 A at 12; 20 AWG 6.5 / 5 / 4.5 A; 22 AWG 5.5 / 4 / 3.5 A; 24 AWG 5 / 4 / 3 A; 26-30 AWG
 4 A or less): a thicker wire or fewer powered pins raises the rating, and the BOM names the terminal for each wire's size.
+
+## Protective devices (fuses, PTCs, breakers)
+
+{{FUSES}}
+
+Every branch fed from a declared source that can deliver more than its thinnest wire's ampacity needs a protective device
+before it reaches a load. Put one fuse right at the source (within 175 mm) for the whole rail when one rating fits both the
+thinnest wire and the steady load; otherwise a main fuse at the source plus a branch fuse per thinner branch. The fuse protects
+the wire, not the load: choose the rating from the wire (at most its ampacity) and check the load fits under it.
+Opening times, for judging a load's inrush (Littelfuse datasheets): ATO and MINI hold 110 % for at least 100 h and open in
+0.75-600 s at 135 %, 0.15-5 s at 200 %; the 5x20 time-lag 477 holds 150 % for 60 min (30 min from 8 A) and opens in
+0.75-80 s at 275 %. A PTC holds its hold current for 30 min and trips at twice it (Bourns MF-R). Every figure's source is
+in `eitri/harness/fuses.py` (`FUSE_SOURCES`).
 
 ## The checks every build runs
 
@@ -86,6 +112,19 @@ so is Micro-Fit 3.0, which also derates with the number of powered circuits in t
   Shared ground (FAIL): every connector that takes a signal from a board's D/A pin must reach the board's GND through some wire.
   Name the board's pins as printed on it: `5V`, `3V3`, `GND`, `VIN`, `D0`..`D13`, `A0`..`A5`; give each power net its loads'
   worst-case current (a servo's stall current from its datasheet).
+- protection (DC up to 60 V; starts from every `h.source(...)`):
+  - every branch from a source: FAIL if a wire thinner than what the source can deliver reaches a load with no device between.
+  - rating within the wire: a device's rating (a PTC: its trip current, 2 x hold) at most the ampacity of the thinnest wire
+    it protects (FAIL above).
+  - continuous load: the steady current through it at most the maker's continuous fraction of the rating, rerated for
+    `ambient_C` (FAIL above: it would open on a normal load).
+  - voltage rating: its DC rating at least the system voltage (FAIL). Interrupting rating: the source's `short_circuit_A` at
+    most the device's interrupting rating (a PTC: Imax) (FAIL).
+  - at the source end: at most 175 mm of unprotected wire from the source to the device (ABYC E-11), unless every wire on that
+    lead is rated for all the source can deliver; a device fed through another device passes.
+  - a supply net no declared source reaches, a device on no branch from a source, and any figure left unset (a source's
+    short-circuit current, your own part's voltage or interrupting rating) are WARN "not run: ...", listed under
+    "Not run" in the report. They never pass: give the figure. A `signal=True` net above 20 mA fails (it is a supply).
 - your own `verify(h, p, c)`: `c.at_most(name, value, limit)`, `c.equal`, `c.between`, `c.at_least`, `c.true`, `c.count`,
   `c.note`. Helpers: `net_stats(h)` ({net: .drop_pct, .drop_V, .current_A, .length_mm, .wires}), `h.link("W1")`,
   `h.wire_current(link)`, `voltage_drop(I, length_mm, Gauge.parse(14))`, `awg_ampacity(14)`.
@@ -117,9 +156,10 @@ def build(p):
     h = Harness("Servo extension", "3-wire servo lead, JST-XH to Dupont")
     a = h.add(Connector("J1", "JST-XH", pins={"1": "GND", "2": "5V", "3": "SIG"}, gender="female"))
     b = h.add(Connector("J2", "DUPONT-2.54", pins={"1": "GND", "2": "5V", "3": "SIG"}, gender="male"))
+    h.source(a["2"], 5, max_current_A=3, kind="psu", part="receiver BEC, 3 A current limit (its datasheet)")   # 3 A < 22 AWG's 7 A: no fuse needed
     h.net("5V", current_A=1.5, voltage_V=5)
     h.net("GND", current_A=1.5, voltage_V=5, round_trip=False)        # the return: counted once
-    h.net("SIG", current_A=0.02, voltage_V=5)
+    h.net("SIG", current_A=0.02, voltage_V=5, signal=True)            # driven by the receiver's logic output
     h.connect(a["2"], b["2"], Wire(p.gauge, "RD", p.length_mm), net="5V")
     h.connect(a["1"], b["1"], Wire(p.gauge, "BK", p.length_mm), net="GND")
     h.connect(a["3"], b["3"], Wire(p.gauge, "YE", p.length_mm), net="SIG")
@@ -140,24 +180,29 @@ PARAMS = dict(trunk_mm=600, pump_mm=400, fan_mm=350, led_mm=250)
 
 
 def build(p):
-    h = Harness("12 V accessories")
+    h = Harness("12 V accessories", ambient_C=40)
     batt = h.add(Connector("BATT", "XT60", pins=["+", "-"]))
     pump = h.add(Connector("PUMP", "XT30", pins=["+", "-"]))          # 6 A: over 80 % of a 2-circuit Micro-Fit's 7 A (18 AWG, Molex)
     fan = h.add(Connector("FAN", "MOLEX-MICROFIT-3.0", pins=["+", "-"]))
     led = h.add(Connector("LED", "JST-XH", pins=["+", "-"]))
     bus_p, bus_n = h.splice("BUS_P"), h.splice("BUS_N")
-    h.net("V12", current_A=9, voltage_V=12)                           # the trunk's current: 6 + 2 + 1
-    h.net("GND", current_A=9, voltage_V=12, round_trip=False)
-    # the supply: battery -> splice -> each load (source toward load); branch wires carry less than the trunk
-    h.connect(batt["+"], bus_p, Wire(14, "RD", p.trunk_mm), net="V12")
-    h.connect(bus_p, pump["+"], Wire(18, "RD", p.pump_mm), net="V12", current_A=6)
-    h.connect(bus_p, fan["+"], Wire(20, "RD", p.fan_mm), net="V12", current_A=2)
-    h.connect(bus_p, led["+"], Wire(22, "RD", p.led_mm), net="V12", current_A=1)
-    # the return: load -> splice -> battery
+    # the battery: 14.6 V at full charge; short_circuit_A from YOUR battery's datasheet (400 A here is an example figure)
+    h.source(batt["+"], 14.6, short_circuit_A=400, kind="battery")
+    main = h.add(Fuse("F1", "ATO", 15))                               # protects the 14 AWG trunk; 9 A steady
+    f_pump, f_fan, f_led = h.add(Fuse("F2", "ATO", 10), Fuse("F3", "MINI", 5), Fuse("F4", "MINI", 3))
+    h.net("V12", current_A=9, voltage_V=14.6)                         # the trunk's current: 6 + 2 + 1
+    h.net("GND", current_A=9, voltage_V=14.6, round_trip=False)
+    # the supply: battery -> main fuse (at the battery) -> splice -> a fuse per branch -> each load; source toward load
+    h.connect(batt["+"], main["LINE"], Wire(14, "RD", 80), net="V12")
+    h.connect(main["LOAD"], bus_p, Wire(14, "RD", p.trunk_mm), net="V12")
+    for f, load, gauge, mm, amps in ((f_pump, pump, 18, p.pump_mm, 6), (f_fan, fan, 20, p.fan_mm, 2), (f_led, led, 22, p.led_mm, 1)):
+        h.connect(bus_p, f["LINE"], Wire(14, "RD", 50), net="V12")       # the fuse block's feed: short, trunk gauge (F1 protects it)
+        h.connect(f["LOAD"], load["+"], Wire(gauge, "RD", mm), net="V12", current_A=amps)
+    # the return: load -> splice -> battery (unfused: the fuses sit in the + side)
     h.connect(pump["-"], bus_n, Wire(18, "BK", p.pump_mm), net="GND", current_A=6)
     h.connect(fan["-"], bus_n, Wire(20, "BK", p.fan_mm), net="GND", current_A=2)
     h.connect(led["-"], bus_n, Wire(22, "BK", p.led_mm), net="GND", current_A=1)
-    h.connect(bus_n, batt["-"], Wire(14, "BK", p.trunk_mm), net="GND")
+    h.connect(bus_n, batt["-"], Wire(14, "BK", p.trunk_mm + 80), net="GND")
     return h
 
 
@@ -178,9 +223,10 @@ def build(p):
     h = Harness("Pressure sensor cable")
     ecu = h.add(Connector("ECU", "MOLEX-MICROFIT-3.0", pins={"1": "5V", "2": "GND", "3": "SIG", "4": "SHLD"}, gender="male"))
     sns = h.add(Connector("SNS", "JST-PH", pins={"1": "5V", "2": "GND", "3": "SIG"}, gender="female"))
+    h.source(ecu["1"], 5, max_current_A=0.2, kind="board", part="ECU sensor supply, 200 mA limit (its datasheet)")
     h.net("5V", current_A=0.05, voltage_V=5)
     h.net("GND", current_A=0.05, voltage_V=5, round_trip=False)
-    h.net("SIG", current_A=0.001, voltage_V=5)
+    h.net("SIG", current_A=0.001, voltage_V=5, signal=True)
     cable = Cable("SENSOR", [Wire(24, "RD"), Wire(24, "BK"), Wire(24, "GN")], shield=True, jacket_color="GY", length_mm=p.length_mm)
     h.connect_cable(cable, [ecu["1"], ecu["2"], ecu["3"]], [sns["1"], sns["2"], sns["3"]], net=["5V", "GND", "SIG"],
                     shield_a=ecu["4"])                                # shield grounded at the ECU end only

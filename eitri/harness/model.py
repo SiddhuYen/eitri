@@ -257,6 +257,50 @@ class Splice:
         return SpliceRef(self.name)
 
 
+class Fuse(Connector):
+    """A protective device in a wire: a fuse in its holder, a resettable PTC fuse or a DC circuit breaker. It is a two-terminal
+    part, LINE (toward the source) and LOAD; wire it like a connector: source -> F1["LINE"], F1["LOAD"] -> the loads.
+
+        Fuse("F1", "ATO", 5)            a catalog part (eitri.harness.fuses.FUSES): its ratings come from its datasheet
+        Fuse("F2", "MF-R110")           a PTC: the part number is the type (rating = its hold current)
+        Fuse("F3", "FUSE", 3, voltage_rating_V=32, interrupt_A=1000, continuous_fraction=0.75, part_number="...")
+        Breaker("CB1", 10, voltage_rating_V=48, interrupt_A=5000, continuous_fraction=0.8, part_number="...")
+
+    A part not in the catalog ("FUSE", "PTC", "BREAKER" or your own) takes its numbers from you; whatever is left unset makes
+    the checks that need it report "not run" (never a silent pass)."""
+
+    def __init__(self, name: str, type: str = "FUSE", rating_A: float | None = None, *, kind: str | None = None,
+                 voltage_rating_V: float | None = None, interrupt_A: float | None = None, trip_A: float | None = None,
+                 continuous_fraction: float | None = None, part_number: str = "", notes: str = ""):
+        from .fuses import resolve                         # the catalog imports nothing from here
+        dev = resolve(type, rating_A, kind=kind, voltage_rating_V=voltage_rating_V, interrupt_A=interrupt_A, trip_A=trip_A,
+                      continuous_fraction=continuous_fraction, part_number=part_number)
+        self.device = dev
+        super().__init__(name, dev.type, pins={"LINE": "", "LOAD": ""}, part_number=dev.part_number, notes=notes)
+
+    kind = property(lambda self: self.device.kind)
+    rating_A = property(lambda self: self.device.rating_A)
+    termination = property(lambda self: self.device.termination)       # how its leads are joined (the cut list / BOM)
+
+    @property
+    def title(self) -> str:
+        return self.device.title
+
+    def add_pin(self, name: str, label: str = "") -> None:
+        raise HarnessError(f"{self.name} is a protective device: it has two terminals, LINE and LOAD")
+
+    def remove_pin(self, name: str) -> None:
+        raise HarnessError(f"{self.name} is a protective device: it has two terminals, LINE and LOAD")
+
+    def rename_pin(self, old: str, new: str) -> None:
+        raise HarnessError(f"{self.name} is a protective device: its terminals are LINE and LOAD")
+
+
+def Breaker(name: str, rating_A: float | None = None, **kw) -> Fuse:
+    """A DC circuit breaker (thermal or magnetic): Fuse(name, "BREAKER", rating_A, ...) with kind="breaker"."""
+    return Fuse(name, kw.pop("type", "BREAKER"), rating_A, kind="breaker", **kw)
+
+
 @dataclass(eq=False)
 class Net:
     """Electrical intent of a group of connections: what the checks grade them against.
@@ -271,6 +315,37 @@ class Net:
     max_drop_pct: float = 3.0
     round_trip: bool = True
     notes: str = ""
+    signal: bool = False                    # fed by a logic output (an MCU pin), not a supply: graded as a signal (eitri.harness.protection)
+
+
+# DC only, up to this voltage: the overcurrent checks (eitri.harness.protection) are written for low-voltage DC. Mains / AC is
+# refused, not graded: its protection rules (IEC 60364, NFPA 70) and its parts are a different design problem.
+MAX_DC_V = 60.0
+_SOURCE_KINDS = ("psu", "battery", "board", "dc")
+
+
+@dataclass(eq=False)
+class Source:
+    """A power source feeding the harness at one connector pin (its + terminal): what the overcurrent checks start from.
+
+    voltage_V: the source's highest voltage (a battery at full charge). max_current_A: the most it can deliver into a fault for
+    as long as a wire takes to overheat: a supply's current limit, or its overcurrent-protection point (the higher end of a
+    datasheet's range). short_circuit_A: its prospective short-circuit current from its datasheet. Leave both None when the
+    datasheet gives neither: the source is then treated as able to deliver more than any wire can carry (protection required),
+    and the interrupting-rating check reports "not run"."""
+    pin: PinRef
+    voltage_V: float | None
+    kind: str = "dc"
+    max_current_A: float | None = None
+    short_circuit_A: float | None = None
+    part: str = ""
+    notes: str = ""
+
+    @property
+    def deliverable_A(self) -> float | None:
+        """The most it can push into a fault (None: unknown, treated as unlimited)."""
+        known = [x for x in (self.max_current_A, self.short_circuit_A) if x is not None]
+        return max(known) if known else None
 
 
 @dataclass(eq=False)
@@ -302,14 +377,16 @@ class Link:
 
 
 class Harness:
-    def __init__(self, name: str = "harness", description: str = ""):
+    def __init__(self, name: str = "harness", description: str = "", ambient_C: float | None = None):
         self.name = name
         self.description = description
+        self.ambient_C = None if ambient_C is None else float(ambient_C)   # the air around the fuses (None: the catalog's default, said in the report)
         self.connectors: dict[str, Connector] = {}
         self.splices: dict[str, Splice] = {}
         self.nets: dict[str, Net] = {}
         self.cables: dict[str, Cable] = {}
         self.links: list[Link] = []
+        self.sources: dict[PinRef, Source] = {}
         self.layout: dict[str, list[float]] = {}
         self._next = 1
 
@@ -348,6 +425,42 @@ class Harness:
     def net(self, name: str, current_A: float | None = None, voltage_V: float | None = None, max_drop_pct: float = 3.0,
             round_trip: bool = True, **kw) -> Net:
         return self.add(Net(name, current_A, voltage_V, max_drop_pct, round_trip, **kw))
+
+    def source(self, pin, voltage_V: float | None, max_current_A: float | None = None, short_circuit_A: float | None = None,
+               kind: str = "dc", part: str = "", notes: str = "", ac: bool = False) -> Source:
+        """Declare a DC power source at a connector pin (its + terminal), e.g. h.source(psu["+"], 5, max_current_A=15,
+        kind="psu", part="Mean Well LRS-50-5"). The overcurrent checks start from every declared source. DC up to 60 V only:
+        ac=True or a higher voltage is refused (mains wiring is out of scope)."""
+        self._auto_add(pin)
+        ref = self._pin(pin)
+        if ac:
+            raise HarnessError(f"source {ref}: AC / mains supplies are out of scope. eitri's overcurrent checks cover DC up to "
+                               f"{MAX_DC_V:g} V; mains wiring follows IEC 60364 / NFPA 70 and needs a qualified electrician's design")
+        if voltage_V is not None:
+            if isinstance(voltage_V, bool) or not isinstance(voltage_V, (int, float)) or voltage_V <= 0:
+                raise HarnessError(f"source {ref}: voltage_V must be a positive number of volts, got {voltage_V!r}")
+            if voltage_V > MAX_DC_V:
+                raise HarnessError(f"source {ref}: {voltage_V:g} V is above the {MAX_DC_V:g} V DC that eitri's overcurrent checks "
+                                   f"cover; higher-voltage and mains wiring is out of scope (not graded)")
+        for k, v in (("max_current_A", max_current_A), ("short_circuit_A", short_circuit_A)):
+            if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float)) or v <= 0):
+                raise HarnessError(f"source {ref}: {k} must be a positive number of amperes, got {v!r}")
+        kind = str(kind or "dc").lower()
+        if kind not in _SOURCE_KINDS:
+            raise HarnessError(f"source {ref}: kind must be one of {', '.join(_SOURCE_KINDS)}, not {kind!r}")
+        if ref in self.sources:
+            raise HarnessError(f"{ref} is already declared as a source")
+        if isinstance(self.connectors[ref.connector], Fuse):
+            raise HarnessError(f"{ref} is a terminal of a protective device, not a source")
+        src = Source(ref, None if voltage_V is None else float(voltage_V), kind,
+                     None if max_current_A is None else float(max_current_A),
+                     None if short_circuit_A is None else float(short_circuit_A), part, notes)
+        self.sources[ref] = src
+        return src
+
+    @property
+    def fuses(self) -> dict[str, "Fuse"]:
+        return {n: c for n, c in self.connectors.items() if isinstance(c, Fuse)}
 
     def nc(self, *pins) -> None:
         """Declare pins not connected (they pass the unconnected-pin check)."""
@@ -517,6 +630,9 @@ class Harness:
                 l.b = PinRef(new, l.b.pin)
         for cab in self.cables.values():
             cab.shield_ends = [PinRef(new, p.pin) if p.connector == old else p for p in cab.shield_ends]
+        self.sources = {(PinRef(new, r.pin) if r.connector == old else r): s for r, s in self.sources.items()}
+        for r, s in self.sources.items():
+            s.pin = r
         if old in self.layout:
             self.layout[new] = self.layout.pop(old)
 
@@ -530,9 +646,14 @@ class Harness:
                 l.b = PinRef(connector, new)
         for cab in self.cables.values():
             cab.shield_ends = [PinRef(connector, new) if p == PinRef(connector, old) else p for p in cab.shield_ends]
+        self.sources = {(PinRef(connector, new) if r == PinRef(connector, old) else r): s for r, s in self.sources.items()}
+        for r, s in self.sources.items():
+            s.pin = r
 
     def remove_pin(self, connector: str, pin: str) -> None:
         ref = PinRef(connector, pin)
+        if ref in self.sources:
+            raise HarnessError(f"{ref} is a declared source; remove its h.source(...) first")
         if self.links_at(ref):
             raise HarnessError(f"{ref} still has wires ({', '.join(l.id for l in self.links_at(ref))}); remove or move them first")
         self.connectors[connector].remove_pin(pin)

@@ -15,6 +15,7 @@ For follow-up requests, edit the existing model (read it with `read_model` if yo
 
 - `verify()` and the built-in checks are the specification. When a check fails, fix the harness (a thicker gauge, a shorter run, a splice, a better connector); never delete, loosen or replace a check so that it passes. If you are convinced a check measures the wrong thing, keep it, add the right one, and say so in the final reply.
 - Use the numbers: do not guess a gauge, compute it. The ampacity table is for a single conductor in free air; the voltage drop is the round trip. A warning (within 20% of a limit) is a decision: fix it or say why it is acceptable.
+- Declare every power source with `h.source(...)` (its voltage, and the current limit and short-circuit current from its datasheet) and protect every branch it feeds with a fuse at the source end: rate the fuse from the thinnest wire it protects, then check the steady load fits under its derating. Mark nets driven by a logic pin `signal=True`. A "not run" warning means a figure is missing: find it (the datasheet), never leave it to look like a pass. Mains / AC and anything above 60 V DC is out of scope: say so, do not design it.
 - Connect from the source toward the load. A splice may join wires of one net only; give the branches their own `current_A=`. Declare unused pins `nc`.
 - Use standard colour codes (RD supply, BK ground, one colour per net) and catalog connectors; an unknown connector needs an explicit `rating_a`.
 - A real harness has lengths: leave slack for routing; state the lengths as parameters.

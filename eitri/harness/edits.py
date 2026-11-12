@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from .catalog import Gauge, normalize_color, normalize_type
-from .model import Connector, Harness, HarnessError, PinRef, Wire
+from .model import Connector, Fuse, Harness, HarnessError, PinRef, Wire
 
 HARNESS_OPS = frozenset({"set_wire", "set_connector", "rename_pin", "add_pin", "remove_pin", "add_wire", "remove_wire",
                          "set_net", "nc"})
@@ -89,6 +89,8 @@ def _apply_one(h: Harness, e: dict) -> str:
         if name not in h.connectors:
             raise HarnessError(f"no connector {name!r}")
         c = h.connectors[name]
+        if isinstance(c, Fuse) and ("type" in e or "rating_a" in e):
+            raise HarnessError(f"{name} is a protective device: change its type or rating in the model file (Fuse(...)), not here")
         if "type" in e:
             c.type = normalize_type(e["type"])
         for k in ("part_number", "gender", "notes"):

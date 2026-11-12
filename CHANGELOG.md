@@ -35,6 +35,20 @@ is used (the lower for a limit, the higher for a draw).
   a load with no voltage range and the like. The check is a warning whose text starts "not run:", the summary has a
   "Not run" line, and the build's `result.json` report lists them under `checks_not_run`.
   `Actuator(continuous=True)` declares an actuator that turns without end.
+- **Harness overcurrent protection** (DC up to 60 V). `h.source(pin, voltage_V, max_current_A=, short_circuit_A=)`
+  declares a supply or battery; `Fuse(name, type, rating_A)` and `Breaker(...)` are two-terminal parts (LINE, LOAD) wired
+  in line. Catalog: Littelfuse ATO and MINI blade fuses, 5x20 mm cartridge fuses with DC ratings and Bourns MF-R PTCs,
+  each figure with its datasheet; any other part takes its figures from the model file. New checks: every branch fed from
+  a source that can deliver more than its thinnest wire's ampacity has a device before its loads; the device's rating (a
+  PTC's trip current) is at most the thinnest wire it protects; the steady load is within the maker's continuous-load
+  derating at `Harness(ambient_C=)` (default 40 °C, said in the report); the DC voltage rating covers the system
+  voltage; the source's short-circuit current is within the interrupting rating; the device is within 175 mm of the
+  source (ABYC E-11). A missing figure (a source with no short-circuit current, a supply net with no declared source) is
+  "not run", never a pass. AC sources and sources above 60 V are refused; a net above 60 V fails as out of scope.
+  `h.net(..., signal=True)` marks a net driven by a logic pin (20 mA at most). New example:
+  `eitri/demos/servo-arm/servo_arm_harness.py` (one ATO 5 A fuse at a Mean Well 5 V supply).
+  Existing harnesses that declare no source now show one "not run" warning for their supply nets (`quad-power`: 28
+  pass, 6 warn).
 
 ## 0.7.0: eitri as a plugin in your own agent
 
