@@ -12,7 +12,7 @@ and what lies beyond its far terminal is the branch it protects.
     interrupting      the source's short-circuit current is within the device's interrupting rating
     placement         the device sits at the source end: the unprotected lead from the source is within the length limit
     sources declared  every supply net is fed by a declared source (otherwise its protection is "not run")
-    signal nets       a net declared signal=True carries no more than a logic output's rating
+    signal nets       a net declared signal=True carries no more than the devices at its ends allow (eitri.harness.signals)
     scope             DC up to 60 V; a net above it fails (out of scope, not graded); AC sources are refused at h.source()
 
 A missing input never passes silently: the check reports "not run: ..." and the build report lists it under checks_not_run
@@ -362,16 +362,112 @@ def _undeclared(h: Harness, reached: set[str]) -> list[Check]:
         links = [l for l in h.links if l.net == n.name]
         if any(l.id in reached for l in links):
             continue                                       # a declared source feeds it: graded as a supply above
-        cur = [h.wire_current(l) for l in links]
-        name = f"signal net {n.name}"
-        if any(c is None for c in cur):
-            out.append(switched_off(check(CAT, name, "warn", f"{n.name} is declared a signal but has no current, so it is not graded",
-                                          f"h.net({n.name!r}, current_A=..., signal=True)", [l.id for l in links]), f"{n.name}.current_A"))
-            continue
-        worst = max(cur)
-        sev = "fail" if worst > F.SIGNAL_MAX_A + 1e-12 else "pass"
+        out += _signal_checks(h, n, links)
+    return out
+
+
+def _signal_ends(h: Harness, links) -> list[tuple[str, str, float | None, str]]:
+    """The devices at the pins of a signal net: (what, kind, the current limit it puts on the net in A, its short citation)."""
+    from .. import power
+    from .catalog import BOARD_TYPES
+    from .signals import IEC_SOURCE_SHORT, IEC_TYPES
+    pins = list(dict.fromkeys(e for l in links for e in (l.a, l.b) if isinstance(e, PinRef)))
+    ends = []
+    for ref in pins:
+        dev = h.signal_ends.get(ref)
+        con = h.connectors.get(ref.connector)
+        board = dev.board if dev is not None and dev.kind == "mcu_pin" else BOARD_TYPES.get(con.type) if con is not None and dev is None else None
+        if board:
+            lim = power.io_pin_limit(board)
+            short = power.POWER_DOCS[lim.source].text if lim.source in power.POWER_DOCS else "no per-pin rating recorded"
+            ends.append((f"{power.BOARDS.get(board, board)} I/O pin {ref}", "mcu", lim.limit_A, short))
+        elif dev is not None and dev.kind == "plc_input":
+            t = IEC_TYPES[dev.iec_type]
+            ends.append((dev.label, "plc_input", t.on_mA_max / 1000.0, IEC_SOURCE_SHORT))
+        elif dev is not None:
+            ends.append((dev.label, "sensor_output", dev.max_output_A,
+                         dev.source if dev.source != "the model file" else "the model file (sensor_output max_output_A)"))
+    return ends
+
+
+def _signal_checks(h: Harness, n, links) -> list[Check]:
+    """A signal net graded against the devices at its ends (eitri.harness.signals): the binding current limit of every declared
+    end, and a PLC input's IEC 61131-2 ON voltage (with a 2-wire sensor's drop) and OFF current (its leakage)."""
+    from .signals import IEC_SOURCE_SHORT, IEC_TYPES
+    out: list[Check] = []
+    refs = [l.id for l in links]
+    name = f"signal net {n.name}"
+    ends = _signal_ends(h, links)
+    cur = [h.wire_current(l) for l in links]
+    if not ends:
+        out.append(switched_off(check(CAT, name, "warn",
+                                      f"no device is declared at either end of {n.name}, so its current is not graded against any device's "
+                                      "limit (a microcontroller pin, a PLC input and a sensor output have different limits)",
+                                      "a board connector (ARDUINO-UNO / ARDUINO-NANO), h.plc_input(pin, iec_type=1|2|3) or "
+                                      "h.sensor_output(pin, part=...) at an end of the net", refs), f"{n.name}.ends"))
+        return out
+    if any(c is None for c in cur):
+        out.append(switched_off(check(CAT, name, "warn", f"{n.name} is declared a signal but has no current, so it is not graded",
+                                      f"h.net({n.name!r}, current_A=..., signal=True)", refs), f"{n.name}.current_A"))
+        return out
+    worst = max(cur)
+    unknown = [w for w, _k, lim, _s in ends if lim is None]
+    known = [(lim, w, s) for w, _k, lim, s in ends if lim is not None]
+    if not known:
+        out.append(switched_off(check(CAT, name, "warn", f"{_a(worst)} on {n.name}; {', '.join(unknown)} gives no output current rating, "
+                                      "so the net is not graded", "h.sensor_output(..., max_output_A=<from its data sheet>)", refs),
+                                *[f"{w}.max_output_A" for w in unknown]))
+    else:
+        lim, who, src = min(known)
+        sev = "fail" if worst > lim + 1e-12 else "pass"
+        each = "; ".join(f"{w} {_a(l)}" for l, w, _s in known)
+        cites = "; ".join(dict.fromkeys(s for _l, _w, s in known))
         out.append(check(CAT, name, sev,
-                         f"{_a(worst)} on a net driven by a logic output (limit {_a(F.SIGNAL_MAX_A)})"
-                         + (": that is a supply, not a signal; declare its source with h.source(...)" if sev == "fail" else "")
-                         + f" [source: {F.SIGNAL_SOURCE}]", f"<= {_a(F.SIGNAL_MAX_A)}", [l.id for l in links]))
+                         f"{_a(worst)} on {n.name}; the lowest limit of its ends is {_a(lim)} ({who}). Ends: {each}"
+                         + (f"; not graded: {', '.join(unknown)} (no rating)" if unknown else "")
+                         + (": more than a device at its end allows; a signal that carries this is a supply (declare it with h.source)"
+                            if sev == "fail" else "") + f" [source: {cites}]", f"<= {_a(lim)}", refs))
+    # a PLC input: the IEC 61131-2 ON voltage and, behind a 2-wire sensor, its OFF current
+    for ref, dev in h.signal_ends.items():
+        if dev.kind != "plc_input" or not any(ref in (l.a, l.b) for l in links):
+            continue
+        t = IEC_TYPES[dev.iec_type]
+        iname = f"signal net {n.name} input {ref}"
+        sensors = [d for r, d in h.signal_ends.items() if d.kind == "sensor_output" and any(r in (l.a, l.b) for l in links)]
+        two = [d for d in sensors if d.wires == 2]
+        if n.voltage_V is None:
+            out.append(switched_off(check(CAT, iname, "warn", f"{n.name} has no voltage_V, so the voltage at {dev.label} is not graded "
+                                          f"against type {t.iec_type}'s {t.on_V_min:g}-{t.on_V_max:g} V", f"h.net({n.name!r}, voltage_V=...)",
+                                          refs), f"{n.name}.voltage_V"))
+            continue
+        problems, notes, unset = [], [], []
+        v_in = n.voltage_V
+        for d in two:
+            if d.drop_V is None:
+                unset.append(f"{d.pin}.drop_V")
+            else:
+                v_in -= d.drop_V
+                notes.append(f"{d.part or d.pin} drops {d.drop_V:g} V")
+            if d.leakage_A is None:
+                unset.append(f"{d.pin}.leakage_A")
+            elif d.leakage_A * 1000 > t.off_mA_max + 1e-9:
+                problems.append(f"{d.part or d.pin} leaks {d.leakage_A * 1000:g} mA when OFF, above the {t.off_mA_max:g} mA a type "
+                                f"{t.iec_type} input is sure to read as signal 0 (use a type {3 if t.iec_type == 1 else t.iec_type} input or a "
+                                "3-wire sensor)")
+            else:
+                notes.append(f"OFF leakage {d.leakage_A * 1000:g} mA <= {t.off_mA_max:g} mA")
+        if v_in < t.on_V_min - 1e-9:
+            problems.append(f"{v_in:g} V at the input is below type {t.iec_type}'s {t.on_V_min:g} V ON threshold")
+        if n.voltage_V > t.on_V_max + 1e-9:
+            problems.append(f"{n.voltage_V:g} V is above type {t.iec_type}'s {t.on_V_max:g} V")
+        if unset and not problems:
+            out.append(switched_off(check(CAT, iname, "warn", f"the 2-wire sensor's {', '.join(unset)} is not given, so {dev.label} is not "
+                                          "fully graded", "h.sensor_output(..., drop_V=..., leakage_A=...) from its data sheet", refs), *unset))
+            continue
+        sev = "fail" if problems else "pass"
+        out.append(check(CAT, iname, sev,
+                         (f"{'; '.join(problems)}" if problems else
+                          f"{v_in:g} V at {dev.label} within type {t.iec_type}'s {t.on_V_min:g}-{t.on_V_max:g} V ON range")
+                         + (f" ({'; '.join(notes)})" if notes else "") + f" [source: {IEC_SOURCE_SHORT}]",
+                         f"ON {t.on_V_min:g}-{t.on_V_max:g} V; OFF current <= {t.off_mA_max:g} mA (type {t.iec_type})", refs))
     return out

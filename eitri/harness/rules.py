@@ -119,6 +119,11 @@ def _all_fuse_docs():
 
 
 GIVEN = "as given in the model file (not from eitri's catalog)"
+IEC_INPUT_TYPES = doc("IEC 61131-2 input types 1/2/3 (ON 15.2 / 11.2-30 V, 2-15 / 6-30 mA; OFF current 0.4 / 1.9 / 1.3 mA), as drawn by TI in "
+                      "the ISO1228 data sheet, Figure 8-1 p.27 (graph-read; the standard itself not read)",
+                      "https://www.ti.com/lit/ds/symlink/iso1228.pdf", "TI SLLSFN5B (June 2023, revised September 2025), Figure 8-1, page 27")
+SIGNAL_DECLARE = rule("a signal net is graded against the devices declared at its ends (a microcontroller board pin, h.plc_input, "
+                      "h.sensor_output); with none it does not run")
 OVERCURRENT = rule("a branch from a declared source passes an overcurrent device before any wire thinner than what the source can deliver")
 DECLARED = rule("every supply net is fed by a declared source (h.source) or marked a signal net")
 SCOPE = rule("eitri's overcurrent checks cover DC up to 60 V; mains and high voltage are out of scope (IEC 60364, NFPA 70)")
@@ -172,6 +177,33 @@ def _both(*fns):
     return lambda c, h: [x for f in fns for x in (f(c, h) if callable(f) else f)]
 
 
+def _signal(c, h):
+    """A signal net's sources: the documents of the devices at its ends (eitri.harness.signals)."""
+    from .signals import IEC_SOURCE_SHORT, IEC_SOURCE_URL, IEC_SOURCE_REV
+    from .catalog import BOARD_TYPES
+    from .model import PinRef
+    links = [l for l in h.links if l.id in set(c.refs)]
+    pins = list(dict.fromkeys(e for l in links for e in (l.a, l.b) if isinstance(e, PinRef)))
+    out = []
+    for ref in pins:
+        dev = h.signal_ends.get(ref)
+        con = h.connectors.get(ref.connector)
+        board = dev.board if dev is not None and dev.kind == "mcu_pin" else BOARD_TYPES.get(con.type) if con is not None and dev is None else None
+        if board:
+            out += power.power_sources(power.io_pin_limit(board).source)
+        elif dev is not None and dev.kind == "plc_input":
+            out.append(IEC_INPUT_TYPES)
+        elif dev is not None:
+            out.append(doc(dev.source, dev.url, dev.rev) if dev.url else model_file(f"{ref} sensor_output figures"))
+    if not out:
+        return [SIGNAL_DECLARE]
+    if " input " in c.name:
+        out = [x for x in out if x is not IEC_INPUT_TYPES] + [IEC_INPUT_TYPES, model_file("net voltage_V")]
+    else:
+        out.append(requirement("current_A"))
+    return out or [SIGNAL_DECLARE]
+
+
 def _source_figures(c, h):
     return [model_file("h.source max_current_A / short_circuit_A"), CHASSIS_AMPACITY]
 
@@ -212,7 +244,8 @@ RULES = [
          _protection(lambda c, h: [] if _cited(c) else [CHASSIS_AMPACITY])),
     Rule(R + "fuse-on-a-branch", "protection", r".+ on a branch from a declared source$", (DECLARED,)),
     Rule(R + "supply-nets-declared", "protection", r"every supply net fed by a declared source$", (DECLARED,)),
-    Rule(R + "signal-net", "protection", r"signal net ", _fuse_docs("Arduino UNO R3 pinout: 20 mA per I/O pin") + (requirement("current_A"),),
-         _protection([requirement("current_A")])),
+    Rule(R + "signal-net-input", "protection", r"signal net .+ input ", (IEC_INPUT_TYPES, model_file("net voltage_V"), SIGNAL_DECLARE), _signal),
+    Rule(R + "signal-net", "protection", r"signal net ", tuple(dict.fromkeys(power.POWER_DOCS[k] for k in (power.SRC_UNO_IO, power.SRC_NANO_IO)))
+         + (IEC_INPUT_TYPES, requirement("current_A"), model_file("sensor_output max_output_A"), SIGNAL_DECLARE), _signal),
     Rule(R + "in-scope", "protection", r"in scope: net ", (SCOPE,)),
 ]

@@ -113,6 +113,7 @@ def harness_data(h: Harness) -> dict[str, Any]:
         "sources": [{"pin": str(s.pin), "voltage_V": s.voltage_V, "kind": s.kind, "max_current_A": s.max_current_A,
                      "short_circuit_A": s.short_circuit_A, "part": s.part} for s in h.sources.values()],
         "fuses": [{"name": f.name, **f.device.to_json()} for f in h.fuses.values()],
+        "signal_ends": [e.to_json() for e in getattr(h, "signal_ends", {}).values()],
         "ambient_C": h.ambient_C,
         "cables": [{"name": c.name, "shield": c.shield, "shield_ends": [str(p) for p in c.shield_ends], "jacket_color": c.jacket_color} for c in h.cables.values()],
         "layout": {k: list(v) for k, v in h.layout.items()},

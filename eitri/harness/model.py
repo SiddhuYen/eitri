@@ -387,6 +387,7 @@ class Harness:
         self.cables: dict[str, Cable] = {}
         self.links: list[Link] = []
         self.sources: dict[PinRef, Source] = {}
+        self.signal_ends: dict[PinRef, Any] = {}       # devices declared at signal-net pins (eitri.harness.signals.SignalEnd)
         self.layout: dict[str, list[float]] = {}
         self._next = 1
 
@@ -457,6 +458,72 @@ class Harness:
                      None if short_circuit_A is None else float(short_circuit_A), part, notes)
         self.sources[ref] = src
         return src
+
+    def mcu_pin(self, pin, board: str):
+        """Declare `pin` wired to a microcontroller board's I/O pin (board "uno" / "nano", eitri.power) when the harness reaches
+        it through another connector (a Dupont header): the signal net on it is graded against that pin's rating."""
+        from .. import power
+        from .signals import SignalEnd
+        self._auto_add(pin)
+        ref = self._pin(pin)
+        key = power.board_key(board)
+        if key is None:
+            raise HarnessError(f"mcu_pin {ref}: unknown board {board!r}; known: {', '.join(power.BOARDS)} (another board: give the signal "
+                               "net's limit through h.sensor_output(..., max_output_A=) from its data sheet)")
+        self._new_signal_end(ref)
+        end = SignalEnd(ref, "mcu_pin", board=key)
+        self.signal_ends[ref] = end
+        return end
+
+    def plc_input(self, pin, iec_type: int, part: str = "", notes: str = ""):
+        """Declare `pin` a PLC digital input of IEC 61131-2 type 1, 2 or 3 (24 V DC, current sinking): the signal net on it is
+        graded against that type's ON current and voltage (eitri.harness.signals)."""
+        from .signals import SignalEnd
+        self._auto_add(pin)
+        ref = self._pin(pin)
+        if isinstance(iec_type, bool) or iec_type not in (1, 2, 3):
+            raise HarnessError(f"plc_input {ref}: iec_type must be 1, 2 or 3 (IEC 61131-2 input type, from the PLC's data sheet), "
+                               f"got {iec_type!r}")
+        self._new_signal_end(ref)
+        end = SignalEnd(ref, "plc_input", iec_type=int(iec_type), part=str(part or ""))
+        self.signal_ends[ref] = end
+        return end
+
+    def sensor_output(self, pin, part: str = "", max_output_A: float | None = None, wires: int | None = None,
+                      drop_V: float | None = None, leakage_A: float | None = None, notes: str = ""):
+        """Declare `pin` the switching output of a sensor. A catalogue part (part="Festo SMT-8M-A-PS-24V-E-0,3-M8D", "SMC D-M9B")
+        brings its datasheet figures, and the model may not override them; any other sensor takes them from the model file
+        (max_output_A from its data sheet; wires=3 for PNP / NPN, 2 for a 2-wire switch)."""
+        from .signals import SignalEnd, sensor_from_catalog
+        self._auto_add(pin)
+        ref = self._pin(pin)
+        self._new_signal_end(ref)
+        cat = sensor_from_catalog(part) if part else None
+        given = {"max_output_A": max_output_A, "wires": wires, "drop_V": drop_V, "leakage_A": leakage_A}
+        if cat is not None:
+            for k, v in given.items():
+                if v is not None and abs(float(v) - float(cat[k] or 0)) > 1e-9:
+                    raise HarnessError(f"sensor_output {ref}: {part} has {k}={cat[k]!r} (its datasheet) but the model gives {v!r}; "
+                                       "drop the argument or name the part that matches")
+            end = SignalEnd(ref, "sensor_output", part=str(part), **{k: cat[k] for k in given}, source=cat["source"],
+                            url=cat["url"], rev=cat["rev"])
+        else:
+            for k in ("max_output_A", "drop_V", "leakage_A"):
+                v = given[k]
+                if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float)) or v < 0):
+                    raise HarnessError(f"sensor_output {ref}: {k} must be a non-negative number, got {v!r}")
+            if wires not in (None, 2, 3):
+                raise HarnessError(f"sensor_output {ref}: wires must be 3 (PNP / NPN) or 2 (2-wire switch), got {wires!r}")
+            end = SignalEnd(ref, "sensor_output", part=str(part or ""), max_output_A=max_output_A, wires=wires or 3, drop_V=drop_V,
+                            leakage_A=leakage_A, source="the model file")
+        self.signal_ends[ref] = end
+        return end
+
+    def _new_signal_end(self, ref: "PinRef") -> None:
+        if ref in self.signal_ends:
+            raise HarnessError(f"{ref} already has a device declared ({self.signal_ends[ref].kind})")
+        if ref in self.sources:
+            raise HarnessError(f"{ref} is a declared power source; a signal end is a PLC input or a sensor output")
 
     @property
     def fuses(self) -> dict[str, "Fuse"]:
@@ -633,6 +700,9 @@ class Harness:
         self.sources = {(PinRef(new, r.pin) if r.connector == old else r): s for r, s in self.sources.items()}
         for r, s in self.sources.items():
             s.pin = r
+        self.signal_ends = {(PinRef(new, r.pin) if r.connector == old else r): e for r, e in self.signal_ends.items()}
+        for r, e in self.signal_ends.items():
+            e.pin = r
         if old in self.layout:
             self.layout[new] = self.layout.pop(old)
 
@@ -649,11 +719,16 @@ class Harness:
         self.sources = {(PinRef(connector, new) if r == PinRef(connector, old) else r): s for r, s in self.sources.items()}
         for r, s in self.sources.items():
             s.pin = r
+        self.signal_ends = {(PinRef(connector, new) if r == PinRef(connector, old) else r): e for r, e in self.signal_ends.items()}
+        for r, e in self.signal_ends.items():
+            e.pin = r
 
     def remove_pin(self, connector: str, pin: str) -> None:
         ref = PinRef(connector, pin)
         if ref in self.sources:
             raise HarnessError(f"{ref} is a declared source; remove its h.source(...) first")
+        if ref in self.signal_ends:
+            raise HarnessError(f"{ref} has a declared device ({self.signal_ends[ref].kind}); remove that declaration first")
         if self.links_at(ref):
             raise HarnessError(f"{ref} still has wires ({', '.join(l.id for l in self.links_at(ref))}); remove or move them first")
         self.connectors[connector].remove_pin(pin)

@@ -3,6 +3,17 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
+## Unreleased (0.8.1): PLC signal inputs, sourced industrial connectors, a command-line path from approval to package
+
+### Changed
+
+- **Signal nets are graded against the devices at their ends**, not the Arduino 20 mA pin figure for every `signal=True` net.
+  Declare them: `h.mcu_pin(pin, board="uno")` (or a board connector type), `h.plc_input(pin, iec_type=1|2|3)` (IEC 61131-2:
+  ON current and voltage, and a 2-wire sensor's OFF leakage, as drawn in TI's ISO1228 data sheet SLLSFN5B Figure 8-1, graph-read),
+  `h.sensor_output(pin, part=...)` (the Festo SMT-8M-A and SMC D-M9B catalogue figures) or with the sensor's own `max_output_A=`.
+  A signal net with no declared end is "not run" (it was a pass on the wrong limit). New check "signal net N input <pin>".
+  The servo-arm demo and the harness reference examples declare their Uno / Nano pins.
+
 ## 0.8.0: tickets and checked change packages, a source on every check, fuses, pneumatic catalogue parts, reference parts
 
 eitri for a shop that takes a ticket and hands back a checked change package. A ticket holds the customer's request and

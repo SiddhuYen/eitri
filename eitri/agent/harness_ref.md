@@ -55,7 +55,15 @@ Fuse(name, type, rating_A)    a protective device in a wire: two terminals, LINE
     Breaker("CB1", 10, voltage_rating_V=, interrupt_A=, continuous_fraction=, part_number=)       a DC breaker
     wire it in line: h.connect(src["+"], f["LINE"], ...), h.connect(f["LOAD"], <the branch>, ...)
 Harness(name, description="", ambient_C=None)   ambient_C: the air around the fuses (default 40 C, said in the report)
-h.net(..., signal=True)    a net driven by a logic output (an MCU pin), not a supply: graded as a signal (<= 20 mA)
+h.net(..., signal=True)    a net driven by a logic or sensor output, not a supply: graded against the devices declared at its ends
+h.mcu_pin(pin, board="uno"|"nano")           that pin is a microcontroller board's I/O pin (20 mA, Arduino's pinout); a connector of
+                                             type ARDUINO-UNO / ARDUINO-NANO declares its own pins
+h.plc_input(pin, iec_type=1|2|3, part="")    a PLC digital input of IEC 61131-2 type 1, 2 or 3 (24 V DC): ON 15.2-30 V (type 1) or
+                                             11.2-30 V (types 2, 3) at up to 15 / 30 / 15 mA; a 2-wire sensor must leak under
+                                             0.4 / 1.9 / 1.3 mA (graph-read from TI's ISO1228 data sheet, Figure 8-1)
+h.sensor_output(pin, part="Festo SMT-8M-A-PS-24V-E-0,3-M8D" | "SMC D-M9B")   a catalogue sensor's switching output (its data
+                                             sheet's output current, drop, leakage); another sensor: max_output_A=, wires=3|2,
+                                             drop_V=, leakage_A= from its data sheet
 h.link("W3")  h.links  h.wire_current(link)         read back what was built (for verify)
 ```
 
@@ -124,7 +132,11 @@ in `eitri/harness/fuses.py` (`FUSE_SOURCES`).
     lead is rated for all the source can deliver; a device fed through another device passes.
   - a supply net no declared source reaches, a device on no branch from a source, and any figure left unset (a source's
     short-circuit current, your own part's voltage or interrupting rating) are WARN "not run: ...", listed under
-    "Not run" in the report. They never pass: give the figure. A `signal=True` net above 20 mA fails (it is a supply).
+    "Not run" in the report. They never pass: give the figure.
+  - signal nets (`signal=True`): the net's current at most the lowest limit of the devices declared at its ends (an MCU pin
+    20 mA, a PLC input's type maximum, a sensor's output rating) (FAIL above: it is a supply). A PLC input also gets "signal
+    net N input <pin>": the net voltage (less a 2-wire sensor's drop) within the type's ON range, and a 2-wire sensor's OFF
+    leakage within the type's OFF current (FAIL). No device declared at either end: "not run" (declare one; never guess).
 - your own `verify(h, p, c)`: `c.at_most(name, value, limit)`, `c.equal`, `c.between`, `c.at_least`, `c.true`, `c.count`,
   `c.note`. Helpers: `net_stats(h)` ({net: .drop_pct, .drop_V, .current_A, .length_mm, .wires}), `h.link("W1")`,
   `h.wire_current(link)`, `voltage_drop(I, length_mm, Gauge.parse(14))`, `awg_ampacity(14)`.
@@ -159,10 +171,11 @@ def build(p):
     h.source(a["2"], 5, max_current_A=3, kind="psu", part="receiver BEC, 3 A current limit (its datasheet)")   # 3 A < 22 AWG's 7 A: no fuse needed
     h.net("5V", current_A=1.5, voltage_V=5)
     h.net("GND", current_A=1.5, voltage_V=5, round_trip=False)        # the return: counted once
-    h.net("SIG", current_A=0.02, voltage_V=5, signal=True)            # driven by the receiver's logic output
+    h.net("SIG", current_A=0.02, voltage_V=5, signal=True)            # the servo pulse from an Arduino Uno pin wired to J1.3
     h.connect(a["2"], b["2"], Wire(p.gauge, "RD", p.length_mm), net="5V")
     h.connect(a["1"], b["1"], Wire(p.gauge, "BK", p.length_mm), net="GND")
     h.connect(a["3"], b["3"], Wire(p.gauge, "YE", p.length_mm), net="SIG")
+    h.mcu_pin(a["3"], board="uno")                                    # the device at the signal's end: its 20 mA limit grades SIG
     return h
 
 
@@ -226,7 +239,8 @@ def build(p):
     h.source(ecu["1"], 5, max_current_A=0.2, kind="board", part="ECU sensor supply, 200 mA limit (its datasheet)")
     h.net("5V", current_A=0.05, voltage_V=5)
     h.net("GND", current_A=0.05, voltage_V=5, round_trip=False)
-    h.net("SIG", current_A=0.001, voltage_V=5, signal=True)
+    h.net("SIG", current_A=0.001, voltage_V=5, signal=True)            # into the controller's analog pin (an Arduino Nano A0)
+    h.mcu_pin(ecu["3"], board="nano")
     cable = Cable("SENSOR", [Wire(24, "RD"), Wire(24, "BK"), Wire(24, "GN")], shield=True, jacket_color="GY", length_mm=p.length_mm)
     h.connect_cable(cable, [ecu["1"], ecu["2"], ecu["3"]], [sns["1"], sns["2"], sns["3"]], net=["5V", "GND", "SIG"],
                     shield_a=ecu["4"])                                # shield grounded at the ECU end only

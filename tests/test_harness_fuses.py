@@ -266,14 +266,19 @@ def test_a_harness_with_no_fuse_and_no_source_does_not_pass_clean():
 
 
 def test_signal_net_within_a_logic_pin_passes_and_a_supply_marked_signal_fails():
-    def h_(cur):
+    def h_(cur, declared=True):
         h = Harness("sig")
         a, b = h.add(Connector("MCU", "BARE", pins=["D9"])), h.add(Connector("SV", "BARE", pins=["SIG"]))
         h.net("SIG", current_A=cur, voltage_V=5, signal=True)
         h.connect(a["D9"], b["SIG"], Wire(22, "OG", 200), net="SIG")
+        if declared:
+            h.mcu_pin(a["D9"], board="uno")          # 0.8.1: the limit comes from the device declared at an end
         return h
     assert sev(h_(0.001), "signal net SIG") == "pass"
     assert sev(h_(1.0), "signal net SIG") == "fail"
+    # nothing declared at either end: not graded on a figure for some other device, and says so
+    c = next(c for c in analyze(h_(0.001, declared=False)).checks if c.name == "signal net SIG")
+    assert c.status == "not_run" and c.not_run == ["SIG.ends"] and "no device is declared" in c.measured
 
 
 # --------------------------------------------------------------------------- the catalog and the API

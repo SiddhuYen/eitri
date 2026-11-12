@@ -39,7 +39,7 @@ def build(p):
     h.net("V5", current_A=3 * p.servo_a, voltage_V=5.0)
     h.net("GND_PWR", current_A=3 * p.servo_a, voltage_V=5.0, round_trip=False)
     for tag in ("YAW", "SH", "EL"):
-        h.net(f"SIG_{tag}", current_A=0.001, voltage_V=5.0, signal=True)       # driven by the Uno's pins
+        h.net(f"SIG_{tag}", current_A=0.001, voltage_V=5.0, signal=True)       # driven by the Uno's pin
 
     h.connect(psu["+"], fuse["LINE"], Wire(18, "RD", p.fuse_lead_mm), net="V5", name="PWR_F")
     h.connect(fuse["LOAD"], v5, Wire(18, "RD", 150), net="V5", name="PWR_V")
@@ -50,6 +50,7 @@ def build(p):
         h.connect(v5, sv["V+"], Wire(22, "RD", length), net="V5", current_A=p.servo_a, name=f"{tag}_V")
         h.connect(sv["GND"], gnd, Wire(22, "BK", length), net="GND_PWR", current_A=p.servo_a, name=f"{tag}_GND")
         h.connect(uno[pin], sv["SIG"], Wire(22, "OG", length), net=f"SIG_{tag}", name=f"{tag}_SIG")
+        h.mcu_pin(uno[pin], board="uno")     # the Uno's I/O pin drives the signal: its 20 mA rating grades the net
     return h
 
 
