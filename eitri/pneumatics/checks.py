@@ -475,6 +475,7 @@ def run_checks(c: Circuit) -> tuple[list[Check], list[CylinderInfo], list[Supply
     checks += _catalog_checks(c, infos)
     checks += _failsafe_checks(c)
     checks += _manifold_checks(c, infos)
+    checks += _sequence_checks(c, infos)
     if estimated:
         checks.append(_check("flow data", "flow data estimated", "warn",
                              "no C, b from a datasheet for " + ", ".join(f"{k} ({v})" for k, v in list(estimated.items())[:8]) + ("..." if len(estimated) > 8 else "") + ": graded with conservative estimates",
@@ -639,6 +640,60 @@ def _manifold_checks(c: Circuit, infos: list[CylinderInfo]) -> list[Check]:
             sev = "warn" if dp > max(DROP_WARN_BAR, 0.05 * path.pressure_bar) else "pass"
             meas = f"{q:.2f} L/s ANR drawn at once ({users}; {how}) drops {dp:.2f} bar from {' -> '.join(path.names)} (C_eff {path.C_eff:.2f}){est}"
         out.append(_check("manifold", cname, sev, meas, f"<= {DROP_WARN_BAR:g} bar drop at the simultaneous demand", [m.name] + path.names))
+    return out
+
+
+def _sequence_checks(c: Circuit, infos: list[CylinderInfo]) -> list[Check]:
+    """The declared step sequence (sequence.py): every step ends on a sensor that exists at the end its move reaches; no step commands
+    a state its valves cannot give; the cycle closes; the ESTIMATED cycle time against the cylinders' cycles_per_min. A circuit run by
+    a controller (a control voltage or position sensors) with no sequence gets one not-run notice."""
+    from . import sequence as seq
+    out: list[Check] = []
+    p = seq.plan(c, infos)
+    if p is None:
+        if c.control_V is not None or c.sensors:
+            out.append(switched_off(_check("sequence", "sequence declared", "warn",
+                                           "the circuit is controller-run (control voltage or sensors) but no step sequence is declared, so the steps' "
+                                           "sensors, valve commands and cycle time are not graded", "c.step(name, 'C1+', until='B2') per step", []),
+                                    "c.step"))
+        return out
+    for sp in p.steps:
+        k, st = sp.index, sp.step
+        refs = [m.cylinder for m in sp.moves] + [m.valve for m in sp.moves if m.valve]
+        sev = "fail" if any(e.severity == "fail" for e in sp.ends) else "warn" if any(e.severity == "warn" for e in sp.ends) else "pass"
+        what = "; ".join(e.why for e in sp.ends) or (f"ends after its {st.dwell_s:g} s dwell" if st.dwell_s else "")
+        out.append(_check("sequence", f"step {k} {st.name} ends on a sensor", sev, what,
+                          "every step with a move ends on a sensor that exists, at the end the move reaches", refs + list(st.until)))
+        if sp.moves:
+            bad = [m for m in sp.moves if m.problem]
+            idle = [m for m in sp.moves if m.already and not m.problem]
+            sev = "fail" if bad else "warn" if idle else "pass"
+            text = "; ".join([m.problem for m in bad] + [f"{m.cylinder} is {'extended' if m.motion == 'extend' else 'retracted'} already: the move does nothing"
+                                                          for m in idle] + [f"{m.cylinder}{'+' if m.motion == 'extend' else '-'}: {m.command}" for m in sp.moves if m.command])
+            out.append(_check("sequence", f"step {k} {st.name} valve commands", sev, text,
+                              "every move is a position its valve can be switched to by the controller (a solenoid valve; one position per valve per step)", refs))
+    if p.end != p.start:
+        diff = ", ".join(f"{k} ends {p.end[k]} (starts {p.start[k]})" for k in p.start if p.end.get(k) != p.start[k])
+        out.append(_check("sequence", "sequence returns to its start", "warn", f"{diff}: the next cycle does not start where this one did",
+                          "every cylinder back at its start position after the last step", [k for k in p.start if p.end.get(k) != p.start[k]]))
+    else:
+        out.append(_check("sequence", "sequence returns to its start", "pass", f"{len(p.steps)} steps; every cylinder ends where it started", ""))
+    rates = [cy.cycles_per_min for cy in c.cylinders if cy.cycles_per_min]
+    if p.cycle_s is None:
+        out.append(switched_off(_check("cycle time", "cycle time estimate", "warn", "the cycle time cannot be estimated: " + "; ".join(p.unknown),
+                                       "speed_mm_s= on the moves, response_ms= on the valves", [m.split(":")[0] for m in p.unknown]),
+                                *[u.split(" (")[0] for u in p.unknown]))
+    elif not rates:
+        out.append(switched_off(_check("cycle time", "cycle time estimate", "warn",
+                                       f"ESTIMATE {p.cycle_s:.2f} s per cycle; no cylinder gives cycles_per_min, so it is not graded", "cycles_per_min=", []),
+                                "cycles_per_min"))
+    else:
+        target = 60.0 / max(rates)
+        sev = level(p.cycle_s, target, 0.8)
+        out.append(_check("cycle time", "cycle time estimate", sev,
+                          f"ESTIMATE {p.cycle_s:.2f} s per cycle (a lower bound: " + "; ".join(seq.ASSUMPTIONS[1:3]) + f") against {target:.2f} s for "
+                          f"{max(rates):g} cycles/min", f"<= {target:.2f} s (within 80 % passes; the estimate leaves out pressure build-up)",
+                          [cy.name for cy in c.cylinders]))
     return out
 
 

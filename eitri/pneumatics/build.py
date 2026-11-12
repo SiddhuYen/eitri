@@ -34,6 +34,9 @@ def write_outputs(c: Circuit, rep: CircuitReport, out_dir: Path, stem: str, rend
         paths[key] = str(f)
     from .drawing import write_drawing
     paths.update(write_drawing(c, rep, out_dir, stem))
+    from . import sequence as _seq
+    from .drawing import tags as _tags
+    paths.update(_seq.write_sequence(c, _seq.plan(c, rep.cylinders), out_dir, stem, _tags(c)))
     return paths, scene
 
 

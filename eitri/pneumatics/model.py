@@ -186,6 +186,7 @@ class Valve(Component):
     manifold: str = ""                   # the manifold it is mounted on (Circuit.mount) and its station
     station: int | None = None
     series: str = ""                     # its catalogue series (SY3000 ...), to match a manifold
+    response_ms: float | None = None     # the datasheet's response time (switching), for the cycle-time estimate
     signal: str = ""                     # the control signal name for the coil (14 side); "" -> <name>_14
     signal_12: str = ""                  # the 12-side coil of a double-solenoid valve; "" -> <name>_12
     terminal: str = ""                   # where the coil lands (terminal / PLC output address), free text for the I/O list
@@ -345,6 +346,20 @@ class Node(Component):
 
 
 @dataclass(eq=False)
+class SeqStep:
+    """One step of the machine's sequence: the cylinder motions it commands ("C1+" extend, "C1-" retract) and what ends it: a
+    position sensor (until=) or, for a step without motion (machining, loading), a dwell time."""
+    name: str
+    moves: list[tuple[str, str]] = field(default_factory=list)      # (cylinder, "extend" | "retract")
+    until: list[str] = field(default_factory=list)                   # the sensors that end the step (all of them)
+    dwell_s: float = 0.0
+    note: str = ""
+
+    def cylinders(self) -> list[str]:
+        return [c for c, _m in self.moves]
+
+
+@dataclass(eq=False)
 class Manifold(Component):
     """A valve manifold base (SMC SS5Y...): common supply P and exhausts R (EA) and S (EB) shared by the valves mounted on its
     stations (Circuit.mount). Its C, b are the catalogue's figures for a valve mounted on it (they replace the valve's own)."""
@@ -427,6 +442,7 @@ class Sensor:
     part_number: str = ""
     notes: str = ""
     fits: tuple = ()                     # cylinder series the sensor mounts on (from the catalogue)
+    response_ms: float | None = None     # switch-on time from the datasheet (the cycle-time estimate)
     catalog: dict = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -486,6 +502,8 @@ class Circuit:
         self.layout: dict[str, list[float]] = {}
         self.sensors: dict[str, Sensor] = {}
         self.mounts: dict[str, tuple[str, int]] = {}     # valve name -> (manifold name, station)
+        self.sequence: list[SeqStep] = []                # the declared step sequence (step())
+        self.start_state: dict[str, str] = {}            # cylinder -> "retracted" | "extended" at the start of the cycle
         self.control_V: float | None = None          # the control voltage (DC) the coils and sensors run on (the I/O list's)
         self.meta: dict[str, str] = {}               # the drawing's title block (drawing_info)
 
@@ -549,6 +567,37 @@ class Circuit:
         (left blank for the customer's signature unless given)."""
         self.meta.update({k: str(v) for k, v in dict(project=project, ticket=ticket, revision=revision, title=title, drawn_by=drawn_by,
                                                       approved_by=approved_by).items() if v})
+
+    def step(self, name: str, *moves: str, until=None, dwell_s: float = 0.0, note: str = "") -> SeqStep:
+        """A step of the sequence, in order: moves in the usual notation, "C1+" (extend) and "C1-" (retract); until= the sensor (or
+        list of sensors) that ends it; a step with no moves waits dwell_s (loading, machining). Checks: every step ends on a sensor
+        that exists, at the end its move reaches; no step commands a state its valves cannot give; the estimated cycle time against
+        the cylinders' cycles_per_min."""
+        parsed = []
+        for m in moves:
+            m = str(m).strip()
+            if len(m) < 2 or m[-1] not in "+-":
+                raise PneumaticsError(f"step {name}: move {m!r} must be a cylinder name and + (extend) or - (retract), e.g. 'C1+'")
+            cyl = m[:-1]
+            if cyl not in self.components or self.components[cyl].kind != "cylinder":
+                raise PneumaticsError(f"step {name}: {cyl!r} is not a cylinder of this circuit")
+            parsed.append((cyl, "extend" if m[-1] == "+" else "retract"))
+        if any(s.name == name for s in self.sequence):
+            raise PneumaticsError(f"step {name!r} is already defined")
+        u = [] if until is None else [until] if isinstance(until, str) else [str(x) for x in until]
+        dwell_s = float(dwell_s)
+        if dwell_s < 0:
+            raise PneumaticsError(f"step {name}: dwell_s must not be negative")
+        st = SeqStep(str(name), parsed, u, dwell_s, note)
+        self.sequence.append(st)
+        return st
+
+    def start(self, **states: str) -> None:
+        """The cylinders' positions at the start of the cycle (default: every cylinder retracted)."""
+        for k, v in states.items():
+            if v not in ("retracted", "extended"):
+                raise PneumaticsError(f"start: {k} must be 'retracted' or 'extended'")
+            self.start_state[k] = v
 
     def control_voltage(self, volts: float) -> None:
         """The DC control voltage the valve coils and sensors are switched with (usually the PLC's 24 V)."""

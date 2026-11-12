@@ -32,6 +32,13 @@ c.silencer(valve["R"])                                           a silencer scre
 c.sensor(name, cylinder, "extended"|"retracted", part=None, signal="", terminal="")   a position switch on a cylinder: a PLC input
 c.control_voltage(24)                                            the DC control voltage the coils and sensors run on
 c.drawing_info(project="", ticket="", revision="", title="", drawn_by="", approved_by="")   the circuit drawing's title block
+c.step(name, "C1+", "C2-", until="B2", dwell_s=0)                one step of the machine's sequence, in order: moves ("C1+" extend,
+    "C1-" retract), the sensor(s) that end it; a step with no move waits dwell_s (machining, loading). c.start(C1="extended") sets
+    a start position (default retracted). Checks: every step ends on a sensor that exists, at the end its move reaches; no step
+    commands a state its valves cannot give (a hand valve, one valve in two positions); the cycle returns to its start; the
+    ESTIMATED cycle time (valve response + stroke / mean speed + sensor + dwell: a lower bound) against cycles_per_min. A circuit
+    with a control voltage or sensors and no sequence gets a "not run" notice. Outputs <name>.sequence.pdf/.svg (the
+    displacement-step diagram with the coil signals) and <name>.sequence.md (the step table with times and assumptions).
 m = c.manifold("M1", part="SMC SS5Y3-20-04-Q")                    a valve manifold base: ports P (common supply), R, S (common exhausts)
 c.mount(valve, m, station=None)                                  mount a valve on the next free station: its P, R, S are the manifold's
     (no tubes or silencers on them; silence the manifold's R and S); it takes the catalogue's valve-on-manifold C, b. Checks: valves

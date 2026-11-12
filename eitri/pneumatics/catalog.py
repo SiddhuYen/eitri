@@ -57,7 +57,9 @@ _S = [
            'power consumption DC (per coil) "Standard 0.35 (With indicator light: 0.4 DIN terminal with indicator light: 0.45)", "With power saving circuit '
            '0.1 (With indicator light only)"; electrical entry L plug connector (L); p.3 Flow characteristics (ISO 6358), 2 position single: '
            'SY3[ ]20-[ ]-C6 (one row for single and double) 1->4/2 (P->A/B) C 0.76 b 0.30 Cv 0.19, 4/2->5/3 (A/B->EA/EB) C 0.65 b 0.39 Cv 0.17, ports 1, 5, 3 M5 x 0.8; '
-           'SY5[ ]20-[ ]-01 P->A/B C 1.9 b 0.35 Cv 0.49, A/B->EA/EB C 2.4 b 0.39 Cv 0.61, all ports 1/8'),
+           'SY5[ ]20-[ ]-01 P->A/B C 1.9 b 0.35 Cv 0.49, A/B->EA/EB C 2.4 b 0.39 Cv 0.61, all ports 1/8; p.2 Response Time (ms, at 0.5 MPa, '
+           'JIS B 8375-1981): SY3000 2 position single 12 or less without light/surge suppressor, 15 Type S, Z, 12 Type R, U; 2 position double '
+           '10 / 13 / 10; SY5000 single 19 / 26 / 19, double 18 / 22 / 18'),
     Source("smc-d-m9", "SMC Europe, Solid State Auto Switch D-M9 series (D-M9_EU.pdf, KV printing)",
            "https://static.smc.eu/pdf/D-M9_EU.pdf",
            'D-M9B: "In-line", "2-wire", applicable load "24 VDC relay, PLC", load voltage "24 VDC (10 to 28 VDC)", load current "2.5 to 40 mA", '
@@ -74,7 +76,7 @@ _S = [
            'assembly SY3000-26-19A-Q, SY5000-26-1A-Q'),
     Source("festo-smt-8m-a", "Festo data sheet SMT-8M-A-PS-24V-E-0,3-M8D, part number 574334 (dated 10/8/26)",
            "https://ftp.festo.com/public/PNEUMATIC/SOFTWARE_SERVICE/DataSheet/EN_GB/574334.pdf",
-           '"Design For T-slot"; "Switching output PNP"; "N/O contact"; "Max. output current 100 mA"; "Voltage drop 1.5 V"; "Rated operational '
+           '"Design For T-slot"; "Switching output PNP"; "N/O contact"; "Switch-on time 1.3 ms"; "Switch-off time 7.3 ms"; "Max. output current 100 mA"; "Voltage drop 1.5 V"; "Rated operational '
            'voltage DC 24 V"; "Operational voltage range DC 5 V...30 V"; "Electrical connection 1, connector system M8x1, A-coded, to EN 61076-2-104"; '
            '"number of connections/cores 3"; "Cable length 0.3 m". (On a DSNU it needs the mounting kit SMBR-8-20.)'),
     Source("smc-tu", "SMC Europe, Polyurethane Tubing Series TU, TIUB (TU_TIUB_EU.pdf)", "https://static.smc.eu/pdf/TU_TIUB_EU.pdf",
@@ -136,18 +138,18 @@ SERIES: list[Series] = [
            dict(cls="5/2", actuation="solenoid", returns="spring", C=0.76, b=0.30, C_exhaust=0.65, b_exhaust=0.39, min_bar=1.5, max_bar=7.0,
                 coil_V=24.0, coil_W=0.4, connector="L plug connector (lead wire 300 mm)", port="P, EA, EB M5 x 0.8; A, B one-touch 6 mm",
                 connections={"P": "M5", "R": "M5", "S": "M5", "A": "push-in 6", "B": "push-in 6"},
-                max_hz=10.0, series="SY3000", manufacturer="SMC", description="SMC SY3000 5/2 single-solenoid valve, body ported, 24 VDC"),
+                max_hz=10.0, series="SY3000", response_ms=15.0, manufacturer="SMC", description="SMC SY3000 5/2 single-solenoid valve, body ported, 24 VDC"),
            ("smc-sy",)),
     Series("valve", r"(?:SMC\s+)?SY3220-5L(?P<light>Z?)-C6",
            dict(cls="5/2", actuation="solenoid", returns="solenoid", C=0.76, b=0.30, C_exhaust=0.65, b_exhaust=0.39, min_bar=1.0, max_bar=7.0,
                 coil_V=24.0, coil_W=0.4, connector="L plug connector x 2 (lead wire 300 mm)", port="P, EA, EB M5 x 0.8; A, B one-touch 6 mm",
                 connections={"P": "M5", "R": "M5", "S": "M5", "A": "push-in 6", "B": "push-in 6"},
-                max_hz=10.0, series="SY3000", manufacturer="SMC", description="SMC SY3000 5/2 double-solenoid valve (holds its position unpowered), 24 VDC"),
+                max_hz=10.0, series="SY3000", response_ms=13.0, manufacturer="SMC", description="SMC SY3000 5/2 double-solenoid valve (holds its position unpowered), 24 VDC"),
            ("smc-sy",)),
     Series("valve", r"(?:SMC\s+)?SY5120-5L(?P<light>Z?)-01",
            dict(cls="5/2", actuation="solenoid", returns="spring", C=1.9, b=0.35, C_exhaust=2.4, b_exhaust=0.39, min_bar=1.5, max_bar=7.0,
                 coil_V=24.0, coil_W=0.4, connector="L plug connector (lead wire 300 mm)", port="all ports Rc1/8", connections={k: "Rc1/8" for k in ("P", "A", "B", "R", "S")}, max_hz=5.0,
-                series="SY5000", manufacturer="SMC", description="SMC SY5000 5/2 single-solenoid valve, body ported, 24 VDC"),
+                series="SY5000", response_ms=26.0, manufacturer="SMC", description="SMC SY5000 5/2 single-solenoid valve, body ported, 24 VDC"),
            ("smc-sy",)),
     # ---------------------------------------------------------------- valve manifolds (Type 20, bar stock, individual wiring)
     Series("manifold", r"(?:SMC\s+)?SS5Y3-20-(?P<stations>\d\d)(?P<thread>00F|00N|00T)?(?:-Q)?",
@@ -173,7 +175,7 @@ SERIES: list[Series] = [
                                                 leakage_mA=0.8, connector="grommet, 2 cores 0.15 mm2 (brown +, blue -), 0.5 m lead",
                                                 fits=("CQ2", "CDQ2"), description="SMC D-M9B solid-state auto switch, 2-wire"), ("smc-d-m9",)),
     Series("sensor", r"(?:FESTO\s+)?SMT-8M-A-PS-24V-E-0,3-M8D", dict(output="PNP", V_min=5.0, V_max=30.0, load_mA_max=100.0, drop_V=1.5,
-                                                                    connector="M8x1 A-coded 3-pin plug on 0.3 m cable (1 +, 3 -, 4 signal)",
+                                                                    connector="M8x1 A-coded 3-pin plug on 0.3 m cable (1 +, 3 -, 4 signal)", response_ms=1.3,
                                                                     fits=("DSNU",), mounting_kit="SMBR-8-20",
                                                                     description="Festo SMT-8M-A proximity sensor, PNP N/O, T-slot"),
            ("festo-smt-8m-a",)),
@@ -220,6 +222,8 @@ def lookup(kind: str, part: str) -> tuple[dict, Series]:
             f["magnet"] = bool(g["magnet"])
         if "light" in g and not g["light"]:
             f["coil_W"] = 0.35            # without indicator light / surge suppressor: SMC "Standard 0.35"
+            if "response_ms" in f:        # and the faster "without light/surge suppressor" response time (SY catalogue p.2)
+                f["response_ms"] = {15.0: 12.0, 13.0: 10.0, 26.0: 19.0}.get(f["response_ms"], f["response_ms"])
         f.pop("piston_mass_per_mm_kg", None)
         return f, s
     known = [s.pattern for s in SERIES if s.kind == kind]

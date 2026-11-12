@@ -20,10 +20,14 @@ DOWNLOADS = {
     "cylinders": ("cylinders_csv", "text/csv", ".cylinders.csv"), "cylinders_md": ("cylinders_md", "text/markdown", ".cylinders.md"),
     "io": ("io_csv", "text/csv", ".io.csv"), "io_md": ("io_md", "text/markdown", ".io.md"),
     "drawing": ("drawing_pdf", "application/pdf", ".drawing.pdf"), "drawing_svg": ("drawing_svg", "image/svg+xml", ".drawing.svg"),
+    "sequence": ("sequence_pdf", "application/pdf", ".sequence.pdf"), "sequence_svg": ("sequence_svg", "image/svg+xml", ".sequence.svg"),
+    "sequence_md": ("sequence_md", "text/markdown", ".sequence.md"),
 }
 # the Export menu and the share page's buttons, in order (eitri.exports); every fmt is a DOWNLOADS key
 EXPORTS = (("drawing", "Circuit drawing PDF", "Circuit diagram with device tags, parts table and title block (.pdf)"),
            ("drawing_svg", "Circuit drawing SVG", "Circuit diagram with device tags, parts table and title block (.svg)"),
+           ("sequence", "Step diagram PDF", "Displacement-step diagram with coil signals and the estimated cycle time (.pdf)"),
+           ("sequence_md", "Sequence MD", "Step table: moves, coils, ending sensors, estimated times (Markdown)"),
            ("svg", "Schematic SVG", "The ISO 1219 schematic (.svg)"), ("png", "Schematic PNG", "The schematic (.png)"),
            ("bom", "BOM CSV", "Bill of materials (.csv)"), ("bom_md", "BOM MD", "Bill of materials (Markdown)"),
            ("cylinders", "Cylinders CSV", "Cylinder sizing table (.csv)"), ("cylinders_md", "Cylinders MD", "Cylinder sizing table (Markdown)"),
@@ -32,7 +36,7 @@ BOM_KEYS = {"md": "bom_md", "csv": "csv", "files": ("bom_md", "csv", "cylinders_
 REVIEW_HINT = ("The image is the schematic (ISO 1219-style symbols, supply at the bottom, cylinders at the top): components and tubes "
                "failing a check are red, warnings amber, and the failing checks are listed under it. Check it against the request before finishing.")
 ATTENTION_HINT = "Fix the design (bore, pressure, valve and tube sizes, the circuit's connections); never delete or loosen a check to make it pass."
-EXPORT_DOC = "Its outputs (schematic, circuit drawing PDF/SVG, BOM, cylinder table, I/O list) are written by every build; see `export`."
+EXPORT_DOC = "Its outputs (schematic, circuit drawing PDF/SVG, step diagram and sequence table, BOM, cylinder table, I/O list) are written by every build; see `export`."
 INSPECT_DOC = "`c` (the built Circuit), `p`, cylinders(), paths(), flow(C, b, p1, p2), tube_C(id_mm, length_m), report()"
 
 

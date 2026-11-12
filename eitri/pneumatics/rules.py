@@ -230,6 +230,18 @@ RULES = [
     Rule(P + "manifold-supply", "manifold", r"manifold .+ common supply$",
          (ISO_6358, DROP_LIMIT, rule("simultaneous demand: the declared sequence's steps, else every cylinder at once"), _cat_doc("smc-sy-manifold"),
           TUBE_ESTIMATE), _manifold_supply),
+    Rule(P + "sequence-declared", "sequence", r"sequence declared$", (requirement("c.step(...) sequence"),
+                                                                       rule("a controller-run circuit declares its step sequence"))),
+    Rule(P + "step-ends-on-sensor", "sequence", r"step .+ ends on a sensor$",
+         (requirement("the step sequence (c.step until=)"), rule("a step ends on a sensor that exists, at the end its move reaches"))),
+    Rule(P + "step-valve-commands", "sequence", r"step .+ valve commands$",
+         (requirement("the step sequence (c.step moves)"), SMC_VALVE_PRECAUTIONS, SMC_SY_SYMBOLS,
+          rule("a move is a valve position the controller can switch to; one position per valve per step"))),
+    Rule(P + "sequence-closes", "sequence", r"sequence returns to its start$", (rule("every cylinder ends the cycle where it started"),)),
+    Rule(P + "cycle-time", "cycle time", r"cycle time estimate$",
+         (requirement("cycles_per_min"), _cat_doc("smc-sy"), _cat_doc("festo-smt-8m-a"), ISO_6358,
+          assumption("cycle time is a lower bound: pressure build-up, load acceleration, controller scan and cushioning are left out; a sensor "
+                     "with no switch-on time is taken at 1.3 ms (Festo SMT-8M-A)"))),
     Rule(P + "flow-data", "flow data", r"flow data estimated$", (rule("every component graded with estimated flow data is named"),) + tuple(FLOW_DOCS.values()),
          _estimated),
 ]

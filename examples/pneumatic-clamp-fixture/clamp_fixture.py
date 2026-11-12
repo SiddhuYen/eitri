@@ -23,6 +23,7 @@ PARAMS = dict(
     clamp_pad_kg=0.30,
     clamp_speed=80.0,
     cycles_per_min=4.0,     # one part every 15 s
+    machining_s=8.0,        # the machining time the fixture waits for
     shop_air_l_min=150.0,   # the share of the compressor this station may draw
 )
 
@@ -65,6 +66,13 @@ def build(p):
     c.sensor("B2", c1, "extended", part="FESTO SMT-8M-A-PS-24V-E-0,3-M8D", signal="PART_AT_STOP")
     c.sensor("B3", c2, "retracted", part="SMC D-M9B", signal="CLAMP_OPEN_POS")
     c.sensor("B4", c2, "extended", part="SMC D-M9B", signal="CLAMP_CLOSED_POS")
+
+    # the sequence the PLC runs (the operator has loaded the part; both cylinders start retracted)
+    c.step("push", "C1+", until="B2")                   # locate the part against the stop
+    c.step("clamp", "C2+", until="B4")                  # clamp it (V2 is double solenoid: a pulse, it stays)
+    c.step("pusher back", "C1-", until="B1")            # the clamp holds the part
+    c.step("machine", dwell_s=p.machining_s)            # machining (the machine's own cycle)
+    c.step("unclamp", "C2-", until="B3")
     return c
 
 

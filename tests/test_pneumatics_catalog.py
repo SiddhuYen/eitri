@@ -392,3 +392,91 @@ def test_manifold_drawing_and_tags(tmp_path):
     paths = write_drawing(c, analyze(c), tmp_path, "m")
     svg = Path(paths["drawing_svg"]).read_text()
     assert "SS5Y3-20-04-Q" in svg and "manifold" in svg
+
+
+# ---------------------------------------------------------------------------- 0.8.1 item 3: sequence and cycle time
+
+
+def fixture_with(steps):
+    from eitri.model import load_model
+    c = load_model(EXAMPLE).build()
+    c.sequence.clear()
+    for args, kw in steps:
+        c.step(*args, **kw)
+    return c
+
+
+GOOD = [(("push", "C1+"), dict(until="B2")), (("clamp", "C2+"), dict(until="B4")), (("pusher back", "C1-"), dict(until="B1")),
+        (("machine",), dict(dwell_s=8.0)), (("unclamp", "C2-"), dict(until="B3"))]
+
+
+def test_sequence_plan_commands_and_estimate():
+    from eitri.pneumatics import sequence as S
+    c = fixture_with(GOOD)
+    rep = analyze(c)
+    assert all(ch.severity == "pass" for ch in rep.checks if ch.category in ("sequence", "cycle time")), summarize(rep)
+    p = S.plan(c, rep.cylinders)
+    s1, s2, s3, _s4, s5 = p.steps
+    assert s1.signals["PUSHER_EXTEND"] == "on" and s2.signals["PUSHER_EXTEND"] == "on" and s3.signals["PUSHER_EXTEND"] == "off"
+    assert s2.signals["CLAMP_CLOSE"] == "pulse" and s5.signals["CLAMP_OPEN"] == "pulse" and s3.signals["CLAMP_CLOSE"] == "off"
+    # push: 50 mm at the set 150 mm/s + SY3120-5LZ 15 ms (Z type) + SMT-8M-A 1.3 ms
+    assert s1.time_s == pytest.approx(50 / 150 + 0.015 + 0.0013, abs=1e-4)
+    # clamp: 20 mm at 80 mm/s + SY3220 13 ms + D-M9B (no published time: 1.3 ms assumed)
+    assert s2.time_s == pytest.approx(20 / 80 + 0.013 + 0.0013, abs=1e-4)
+    assert p.cycle_s == pytest.approx(sum(sp.time_s for sp in p.steps)) and 9.0 < p.cycle_s < 9.5
+    ct = one(rep, "cycle time estimate")
+    assert "ESTIMATE" in ct.measured and "lower bound" in ct.measured and "15.00 s" in ct.measured
+
+
+def test_sequence_step_must_end_on_a_real_sensor_at_the_right_end():
+    rep = analyze(fixture_with([(("push", "C1+"), dict(until="B9"))]))
+    assert one(rep, "step 1 push ends on a sensor").severity == "fail" and "not a sensor" in one(rep, "step 1 push ends on a sensor").measured
+    rep = analyze(fixture_with([(("push", "C1+"), dict(until="B1"))]))                      # B1 is at C1's retracted end
+    assert one(rep, "step 1 push ends on a sensor").severity == "fail"
+    rep = analyze(fixture_with([(("push", "C1+"), {})]))
+    assert one(rep, "step 1 push ends on a sensor").severity == "fail" and "no sensor" in one(rep, "step 1 push ends on a sensor").measured
+    rep = analyze(fixture_with([(("wait",), {})]))
+    assert one(rep, "step 1 wait ends on a sensor").severity == "fail"
+    rep = analyze(fixture_with([(("both", "C1+", "C2+"), dict(until="B2"))]))               # C2's move is not confirmed
+    assert one(rep, "step 1 both ends on a sensor").severity == "warn"
+
+
+def test_sequence_valve_cannot_give_the_state():
+    from eitri.pneumatics import PneumaticsError
+    rep = analyze(fixture_with([(("bad", "C1+", "C1-"), dict(until="B2"))]))                 # one valve, two positions in one step
+    assert one(rep, "step 1 bad valve commands").severity == "fail"
+    c = fixture_with([(("push", "C1+"), dict(until="B2"))])
+    c.get("V1").actuation = "manual"                                                       # a hand valve: the controller cannot switch it
+    assert "cannot switch" in one(analyze(c), "step 1 push valve commands").measured
+    rep = analyze(fixture_with([(("again", "C1-"), dict(until="B1"))]))                      # already retracted
+    assert one(rep, "step 1 again valve commands").severity == "warn"
+    assert one(rep, "step 1 again ends on a sensor").severity == "pass"
+    open_end = analyze(fixture_with([(("push", "C1+"), dict(until="B2"))]))
+    assert one(open_end, "sequence returns to its start").severity == "warn"
+    with pytest.raises(PneumaticsError, match="not a cylinder"):
+        fixture_with([(("x", "V1+"), {})])
+
+
+def test_sequence_not_declared_is_not_run_and_drives_the_manifold_demand():
+    from eitri.checks import status_of
+    from eitri.pneumatics.checks import simultaneous_groups
+    rep = analyze(fixture_with([]))
+    nr = one(rep, "sequence declared")
+    assert status_of(nr) == "not_run" and nr.not_run == ["c.step"] and nr.rule == "pneumatics.sequence-declared"
+    c = manifold_station(valves=2)
+    assert simultaneous_groups(c)[0] == [{"C1", "C2"}]
+    c.step("one", "C1+")
+    c.step("two", "C2+")
+    assert simultaneous_groups(c)[0] == [{"C1"}, {"C2"}]
+    assert "per step" in one(analyze(c), "manifold M1 common supply").measured
+
+
+def test_sequence_outputs(tmp_path):
+    from eitri.pneumatics import sequence as S
+    c = fixture_with(GOOD)
+    paths = S.write_sequence(c, S.plan(c, analyze(c).cylinders), tmp_path, "f")
+    md = Path(paths["sequence_md"]).read_text()
+    assert "Estimated cycle time" in md and "ESTIMATE" in md and "| 2 clamp | C2+ |" in md and "Assumptions:" in md
+    svg = Path(paths["sequence_svg"]).read_text()
+    assert "Displacement-step diagram" in svg and "CLAMP_CLOSE" in svg
+    assert Path(paths["sequence_pdf"]).read_bytes().startswith(b"%PDF")
