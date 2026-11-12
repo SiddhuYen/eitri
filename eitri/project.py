@@ -133,7 +133,15 @@ class Project:
         return True
 
     def write_model(self, code: str) -> None:
+        self.ticket_gate("change the model file")
         self.model_path.write_text(code, encoding="utf-8")
+
+    def ticket_gate(self, action: str) -> None:
+        """Raise eitri.tickets.ChangeRefused when the project works under a ticket that is not approved (tickets/active):
+        the plan gate, for every surface that writes or builds through Project (agent tools, editor, CLI)."""
+        if (self.folder / "tickets" / "active").is_file():
+            from .tickets.store import gate
+            gate(self, action)
 
     def set_model_file(self, filename: str) -> None:
         self.state["model"] = filename
@@ -157,6 +165,7 @@ class Project:
         viewer model, topology, review image); STEP/GLB/STL... are written when asked for (`formats`, the
         export tool, the viewer's downloads), each verified then - on a 40-part assembly that saves ~8 s
         per build."""
+        self.ticket_gate("build")
         self.last_build_stderr = ""
         result = build_model(self.model_path, self.out_dir, params=params, render=render, formats=formats,
                              timeout=timeout, guards=self.guards() or None, **kw)
@@ -304,6 +313,7 @@ class Project:
                 src = self.folder / h.model
                 if not src.exists():
                     raise FileNotFoundError(src)
+                self.ticket_gate("restore a revision")
                 shutil.copy2(src, self.model_path)
                 return h
         raise KeyError(f"no revision {number}")
@@ -502,7 +512,7 @@ class Project:
         try:
             proc = subprocess.run([sys.executable, "-c", script], cwd=str(self.folder), capture_output=True,
                                   text=True, encoding="utf-8", errors="replace", timeout=timeout,
-                                  env={**os.environ, "PYTHONIOENCODING": "utf-8"})     # domain output has · and Ø; never the locale's codec
+                                  env={**os.environ, "PYTHONIOENCODING": "utf-8", "EITRI_AGENT_PROCESS": "1"})     # domain output has · and Ø; never the locale's codec
         except subprocess.TimeoutExpired:
             return False, f"timed out after {timeout:g} s"
         out = proc.stdout

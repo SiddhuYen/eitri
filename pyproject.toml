@@ -28,6 +28,7 @@ dependencies = [
   "anthropic>=1.0",           # API-key check (and the --backend api session)
   "mcp>=1.2",                 # the tool server Claude talks to
   "claude-agent-sdk>=0.2",    # ships the Claude Code binary eitri drives (API key only)
+  "PyYAML>=6",                # ticket files (eitri.tickets): ticket.yaml is meant to be read and edited by people
 ]
 
 [project.urls]
@@ -54,6 +55,7 @@ eitri = [
   "plugin_bundle/.mcp.json", "plugin_bundle/.claude-plugin/*.json", "plugin_bundle/.claude-plugin/*.png", "plugin_bundle/bin/*",
   "plugin_bundle/assets/*",
   "plugin_bundle/skills/*/SKILL.md", "plugin_bundle/cursor/*.mdc",
+  "tickets/*.json",
 ]
 
 [tool.pytest.ini_options]

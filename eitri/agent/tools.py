@@ -17,11 +17,26 @@ from ..project import Project
 MAX_TEXT = 12000
 
 
+def _gated(fn):
+    """A tool that writes or builds the model: the ticket gate's refusal (eitri.tickets) comes back as an error result."""
+    import functools
+
+    @functools.wraps(fn)
+    def inner(self, *a, **kw):
+        from ..tickets.store import ChangeRefused
+        try:
+            return fn(self, *a, **kw)
+        except ChangeRefused as exc:
+            return ToolResult(str(exc), is_error=True, refused=True)
+    return inner
+
+
 @dataclass
 class ToolResult:
     text: str
     images: list[str] = field(default_factory=list)   # PNG paths
     is_error: bool = False
+    refused: bool = False                             # the ticket gate refused it (eitri.tickets): nothing was written or built
 
 
 class Tools:
@@ -34,6 +49,7 @@ class Tools:
         self.render_quality = render_quality
 
     # ------------------------------------------------------------------ build
+    @_gated
     def build_model(self, code: str, note: str = "") -> ToolResult:
         """Write the complete model file and build it.
 
@@ -45,6 +61,7 @@ class Tools:
         self.project.write_model(code)
         return self._build_and_report(note or "build_model")
 
+    @_gated
     def edit_model(self, old: str, new: str, note: str = "") -> ToolResult:
         """Replace one exact snippet of the current model file with new text, then rebuild.
 
@@ -69,6 +86,7 @@ class Tools:
         self.project.write_model(current.replace(old, new, 1))
         return self._build_and_report(note or "edit_model")
 
+    @_gated
     def set_params(self, params: dict[str, Any] | str | None = None, config: str | None = None) -> ToolResult:
         """Change PARAMS values in the model file (no other code change) and rebuild.
 
@@ -94,8 +112,11 @@ class Tools:
                     return ToolResult("set_params: give an object like {\"width\": 45}", is_error=True)
         if not isinstance(params, dict) or not params:
             return ToolResult("set_params: give a non-empty object like {\"width\": 45}", is_error=True)
+        from ..tickets.store import ChangeRefused
         try:
             new = self.project.set_params(params)
+        except ChangeRefused:
+            raise
         except Exception as exc:
             return ToolResult(f"set_params failed: {exc}", is_error=True)
         res = self._build_and_report("set_params " + ", ".join(f"{k}={v}" for k, v in params.items()))
@@ -195,6 +216,7 @@ class Tools:
         text = out or "(no output)"
         return ToolResult(_truncate(text), is_error=not ok)
 
+    @_gated
     def view(self, views: list[str] | None = None, section: str | None = None, exploded: bool = False,
              hide: list[str] | None = None, only: list[str] | None = None, size: int = 720, turntable: int = 0) -> ToolResult:
         """Render extra views of the current build.
@@ -245,6 +267,7 @@ class Tools:
             return ToolResult(catalog())
         return ToolResult(describe(query))
 
+    @_gated
     def export(self, formats: list[str]) -> ToolResult:
         """Export the current model to additional formats: any of step, stl, 3mf, glb. A harness, mechanism,
         pneumatic, firmware or electronics project has no geometry: every build writes its outputs (diagram, tables,
@@ -274,6 +297,7 @@ class Tools:
         lines = [f"{i + 1}. {describe(e)}\n   {json.dumps(e)}" for i, e in enumerate(edits)]
         return ToolResult(f"{len(edits)} direct edit(s):\n" + "\n".join(lines))
 
+    @_gated
     def update_edit(self, index: int, patch: dict[str, Any] | str) -> ToolResult:
         """Change one direct edit in place (1-based index) and rebuild. `patch` is a JSON
         object merged over the edit (e.g. {"distance": 4} or {"suppressed": true}); to
@@ -293,6 +317,7 @@ class Tools:
         self.project.update_edit(int(index) - 1, new)
         return self._build_and_report(f"update edit {index}: {describe(new)}")
 
+    @_gated
     def sketch_op(self, index: int, op: str, args: dict[str, Any] | str | None = None) -> ToolResult:
         """Edit the 2D sketch of a direct edit (1-based index; sketch_extrude/revolve/loft/sweep
         features) with the kernel's sketch operations, then rebuild. Ops: add {entity}, remove {ids},
@@ -334,6 +359,7 @@ class Tools:
         head = f"Sketch now: {S.summary(prof)}; solver {'ok' if st['ok'] else 'CONFLICT ' + ', '.join(st['conflicts'][:4])}; dof {st.get('dof')}\n{json.dumps(prof)[:3000]}\n\n"
         return ToolResult(head + res.text, res.images, res.is_error)
 
+    @_gated
     def remove_edit(self, index: int) -> ToolResult:
         """Remove one direct edit (1-based index) and rebuild."""
         edits = self.project.edits()
@@ -501,6 +527,92 @@ class Tools:
         self.project.design_notes_path.write_text(content.strip() + "\n", encoding="utf-8")
         return ToolResult("DESIGN.md updated.")
 
+    # ------------------------------------------------------------------ tickets (eitri.tickets)
+    def ticket_new(self, title: str, request: str, acceptance: list | str | None = None, constraints: list[str] | str | None = None,
+                   file: str = "", base: int | str | None = "latest", customer: str = "") -> ToolResult:
+        """Open a ticket: the unit of work a customer asks for. `request` is the customer's words, verbatim. `acceptance` is a
+        list of criteria, each {"text", "check": "<the named check that proves it>"} (a check name from ticket_show's list, or
+        a glob such as "torque joint tilt*") or {"text", "human_verify": true} when no check can prove it; a string
+        "text => check name" / "text => human" works too. `base`: "latest" (the last good build), a revision number, or
+        "new" for a new design. The ticket becomes the project's active one: the model may not change until you write the
+        plan (ticket_plan) and a PERSON approves it in their own terminal. You cannot approve it, and you must not say it
+        is approved until ticket_show says so."""
+        from .. import tickets as T
+        if isinstance(acceptance, str):
+            acceptance = [l for l in acceptance.splitlines() if l.strip()]
+        try:
+            t = T.new_ticket(self.project, title, request, constraints=constraints, acceptance=acceptance, file=file or None,
+                             base=base if base not in ("", None) else "latest", customer=customer, created_by="agent")
+        except T.TicketError as exc:
+            return ToolResult(str(exc), is_error=True)
+        return ToolResult(f"Opened {t.id}.\n\n" + T.store.describe(self.project, t) + _check_names(self.project, t))
+
+    def ticket_show(self, ticket: str = "") -> ToolResult:
+        """The ticket (default: the project's active one): its request, criteria, plan, status, approval, waivers and
+        package, plus the names of the checks the base build runs (to map acceptance criteria to)."""
+        from .. import tickets as T
+        try:
+            t = T.load(self.project, ticket) if ticket else T.active(self.project)
+        except T.TicketError as exc:
+            return ToolResult(str(exc), is_error=True)
+        if t is None:
+            return ToolResult("This project has no active ticket. ticket_list shows every ticket; ticket_new opens one.")
+        return ToolResult(T.store.describe(self.project, t) + _check_names(self.project, t))
+
+    def ticket_list(self) -> ToolResult:
+        """Every ticket of the project with its status."""
+        from .. import tickets as T
+        rows = T.list_tickets(self.project)
+        if not rows:
+            return ToolResult("No tickets in this project. ticket_new opens one.")
+        act = T.active(self.project)
+        return ToolResult("\n".join(f"{t.id}  {t.status:<18} {t.data.get('title')}" + ("   (active)" if act and act.id == t.id else "")
+                                    for t in rows))
+
+    def ticket_plan(self, ticket: str, summary: str, files: list[str] | None = None, parameters: list | None = None,
+                    checks_affected: list[str] | None = None, not_checked: list[str] | None = None,
+                    open_questions: list[str] | None = None, acceptance: list | None = None) -> ToolResult:
+        """Write the plan for a ticket before any design change: `summary` (what will change and why), `files` it will
+        change, `parameters` it will change ([{"name", "from", "to", "why"}]), `checks_affected` (the checks it expects to
+        change), `not_checked` (what eitri's checks will NOT verify for this request), `open_questions` for the person.
+        `acceptance` replaces the ticket's criteria (same form as ticket_new). The ticket then waits for a PERSON to approve
+        it with `eitri ticket approve <id>` in their own terminal; tell them that, show them the plan, and stop. No tool can
+        approve it. Rewriting the plan after approval voids the approval."""
+        from .. import tickets as T
+        plan = {"summary": summary, "files": files or [], "parameters": parameters or [], "checks_affected": checks_affected or [],
+                "not_checked": not_checked or [], "open_questions": open_questions or []}
+        try:
+            t = T.set_plan(self.project, ticket, plan, acceptance=acceptance, by="agent")
+        except T.TicketError as exc:
+            return ToolResult(str(exc), is_error=True)
+        return ToolResult(T.store.describe(self.project, t) + "\n\nSTOP HERE: the person must approve this plan themselves by running "
+                          f"`eitri ticket approve {t.id}` in their own terminal (it asks them to type a one-time code). Show them "
+                          "the plan and the command; do not build, edit or say it is approved until ticket_show says APPROVED.")
+
+    def package(self, ticket: str = "") -> ToolResult:
+        """Make the change package of an approved ticket (default: the active one): fresh rebuilds of the base revision and
+        the result, the before/after check table with each check's source, parameter and BOM diffs, regenerated outputs,
+        the revision table, the Not checked section and a draft change order, as a folder + zip. It refuses, listing every
+        reason, when any check fails or did not run (a person may waive a not-run check; a failed check is fixed in the
+        design), or when the approval does not cover the ticket as it is."""
+        from .. import tickets as T
+        try:
+            tid = ticket or (T.active(self.project).id if T.active(self.project) else "")
+            if not tid:
+                return ToolResult("No active ticket: name the ticket to package.", is_error=True)
+            pkg = T.make_package(self.project, tid)
+        except T.PackageRefused as exc:
+            return ToolResult("NO PACKAGE. Every reason:\n" + "\n".join(f"- {r}" for r in exc.reasons), is_error=True)
+        except T.TicketError as exc:
+            return ToolResult(str(exc), is_error=True)
+        s = pkg["checks"]["summary"]["to"]
+        fr = (pkg["revisions"]["from"] or {}).get("letter")
+        return ToolResult(f"Change package written: {pkg['folder']} (and {pkg['zip']}).\n"
+                          f"{pkg['design']['file']}: " + (f"Rev {fr} -> " if fr else "") + f"Rev {pkg['revisions']['to']['letter']}; "
+                          f"{s['total']} checks: {s['pass']} pass, {s['warn']} warn, 0 fail, {s['not_run']} not run" + (" (waived by a person)" if s["not_run"] else "") + ".\n"
+                          f"Not checked: {len(pkg['not_checked'])} item(s), listed in report.md. Give the person report.html to review; "
+                          "the change order's disposition, effectivity and sign-off are theirs to fill in.")
+
     # ------------------------------------------------------------- internals
     def _build_and_report(self, note: str) -> ToolResult:
         self.on_event("build_start", {"note": note})
@@ -567,6 +679,19 @@ class Tools:
         if proc.returncode != 0:
             return False, (proc.stderr or proc.stdout)[-2000:]
         return True, proc.stdout.strip()
+
+
+def _check_names(project: Project, t) -> str:
+    """The checks the ticket's base build ran (names to map acceptance criteria to)."""
+    from ..tickets.checks import normalise
+    rev = None
+    if t.base_revision is not None:
+        rev = next((h for h in project.revisions_of(t.target_file) if h.number == t.base_revision), None)
+    data = project.build_result(rev) if rev else None
+    if not data:
+        return ""
+    names = [r["name"] for r in normalise(data)]
+    return f"\n\nChecks the base build (revision {rev.number}) runs, by name:\n" + "\n".join(f"- {n}" for n in names[:80])
 
 
 def _normalize_code(code: str) -> str:

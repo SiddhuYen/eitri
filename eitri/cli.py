@@ -648,10 +648,12 @@ def main(argv: list[str] | None = None) -> int:
     mc.add_argument("--plugin", action="store_true", help=argparse.SUPPRESS)
     from .plugin_install import add_parser as _add_plugin_parser
     _add_plugin_parser(sub)
+    from .tickets.cli import add_parsers as _add_ticket_parsers
+    _add_ticket_parsers(sub)
 
     argv = list(sys.argv[1:] if argv is None else argv)
     commands = ("chat", "build", "bom", "view", "drawing", "serve", "web", "cam", "cut", "print-prep", "print", "doctor", "key",
-                "update", "setup", "mcp", "plugin", "-h", "--help", "-V", "--version")
+                "update", "setup", "mcp", "plugin", "ticket", "package", "-h", "--help", "-V", "--version")
     if not argv:
         argv = ["web"]                   # plain `eitri`: the website, in the browser
     elif argv[0] not in commands:
@@ -660,6 +662,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "print":
         return print_main(args)
+    if args.cmd == "ticket":
+        from .tickets.cli import ticket_main
+        return ticket_main(args)
+    if args.cmd == "package":
+        from .tickets.cli import package_main
+        return package_main(args)
     if args.cmd == "mcp":
         from .agent.mcp_server import serve_plugin
         serve_plugin()

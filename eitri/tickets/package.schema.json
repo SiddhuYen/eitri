@@ -1,0 +1,201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eitri.io/schemas/eitri.package/1",
+  "title": "eitri change package (package.json), schema eitri.package/1",
+  "description": "Written by `eitri package` / the package tool (eitri/tickets/package.py). A new major version gets a new schema id; fields are only added within a version. A package exists only when every check of the result passed or warned, or did not run and a person waived it.",
+  "type": "object",
+  "required": ["schema", "generated", "eitri_version", "ticket", "design", "revisions", "revision_table", "approval", "plan",
+               "waivers", "acceptance", "checks", "removed_checks", "unplanned_changes", "parameters", "bom", "not_checked",
+               "change_order", "outputs_missing", "files"],
+  "additionalProperties": true,
+  "$defs": {
+    "status": {"enum": ["pass", "warn", "fail", "not_run"]},
+    "str_or_null": {"type": ["string", "null"]},
+    "check_state": {
+      "type": ["object", "null"],
+      "required": ["status", "measured", "expected", "inputs_unset"],
+      "properties": {
+        "status": {"$ref": "#/$defs/status"},
+        "measured": {"type": "string"},
+        "expected": {"type": "string"},
+        "inputs_unset": {"type": "array", "items": {"type": "string"}, "description": "model inputs left unset that switched the check off"}
+      }
+    },
+    "revision": {
+      "type": "object",
+      "required": ["letter", "build"],
+      "properties": {
+        "letter": {"type": ["string", "null"], "description": "revision letter (ASME Y14.35 letters: no I, O, Q, S, X, Z); null: an unreleased base build"},
+        "build": {"type": "integer", "description": "the project's build (revision) number: revisions/NNN"},
+        "released": {"type": "boolean", "description": "from only: the base was a lettered revision before this package"},
+        "source_sha256": {"type": "string"},
+        "date": {"type": "string", "format": "date-time"}
+      }
+    },
+    "counts": {
+      "type": "object",
+      "required": ["pass", "warn", "fail", "not_run", "total"],
+      "properties": {"pass": {"type": "integer"}, "warn": {"type": "integer"}, "fail": {"type": "integer"},
+                     "not_run": {"type": "integer"}, "total": {"type": "integer"}}
+    }
+  },
+  "properties": {
+    "schema": {"const": "eitri.package/1"},
+    "generated": {"type": "string", "format": "date-time"},
+    "eitri_version": {"type": "string"},
+    "ticket": {
+      "type": "object",
+      "required": ["id", "title", "request", "constraints", "created", "created_by"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^T-\\d{4,}$"},
+        "title": {"type": "string"},
+        "customer": {"type": "string"},
+        "request": {"type": "string", "description": "the customer's words, verbatim"},
+        "constraints": {"type": "array", "items": {"type": "string"}},
+        "created": {"type": "string"},
+        "created_by": {"type": "string"}
+      }
+    },
+    "design": {
+      "type": "object",
+      "required": ["project", "file", "kind", "label", "new_design"],
+      "properties": {
+        "project": {"type": "string"},
+        "file": {"type": "string"},
+        "kind": {"enum": ["cad", "harness", "mechanism", "pneumatics", "firmware", "electronics"]},
+        "label": {"type": "string"},
+        "new_design": {"type": "boolean", "description": "true: no base revision; parameters, bom and source.diff are absent (null)"}
+      }
+    },
+    "revisions": {
+      "type": "object",
+      "required": ["from", "to"],
+      "properties": {
+        "from": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/revision"}]},
+        "to": {"$ref": "#/$defs/revision"}
+      }
+    },
+    "revision_table": {
+      "type": "array",
+      "description": "every lettered revision of this model file, oldest first, this package's last",
+      "items": {
+        "type": "object",
+        "required": ["letter", "build", "date", "ticket", "description"],
+        "properties": {"letter": {"type": "string"}, "build": {"type": "integer"}, "date": {"type": "string"},
+                       "ticket": {"$ref": "#/$defs/str_or_null"}, "description": {"type": "string"},
+                       "source_sha256": {"type": ["string", "null"]}}
+      }
+    },
+    "approval": {
+      "type": "object",
+      "required": ["by", "at", "method", "content_sha256", "verified"],
+      "properties": {
+        "by": {"type": "string"}, "at": {"type": "string"},
+        "method": {"type": "string", "description": "cli-terminal: `eitri ticket approve` with a typed one-time code"},
+        "tty": {"$ref": "#/$defs/str_or_null"}, "note": {"$ref": "#/$defs/str_or_null"},
+        "despite_changes": {"type": "boolean", "description": "the model file changed between plan and approval; the approver accepted it"},
+        "content_sha256": {"type": "string", "description": "hash of the ticket content the approval covers"},
+        "signer": {"$ref": "#/$defs/str_or_null"},
+        "verified": {"const": true}
+      }
+    },
+    "plan": {
+      "type": "object",
+      "required": ["summary"],
+      "properties": {
+        "summary": {"type": "string"},
+        "files": {"type": ["array", "null"], "items": {"type": "string"}},
+        "parameters": {"type": ["array", "null"], "items": {"type": "object", "properties": {"name": {"type": "string"}, "file": {}, "from": {}, "to": {}, "why": {}}}},
+        "checks_affected": {"type": ["array", "null"], "items": {"type": "string"}},
+        "not_checked": {"type": ["array", "null"], "items": {"type": "string"}},
+        "open_questions": {"type": ["array", "null"], "items": {"type": "string"}},
+        "written": {"$ref": "#/$defs/str_or_null"}, "written_by": {"$ref": "#/$defs/str_or_null"}
+      }
+    },
+    "waivers": {
+      "type": "array",
+      "description": "checks that did not run, waived by a person with a reason (failed checks are never waived); print on page 1",
+      "items": {"type": "object", "required": ["check", "reason", "by", "at"],
+                "properties": {"check": {"type": "string"}, "reason": {"type": "string"}, "by": {"type": "string"},
+                               "at": {"type": "string"}, "method": {"type": "string"}}}
+    },
+    "acceptance": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "text", "check", "human_verify", "matched", "status"],
+        "properties": {
+          "id": {"type": "string"}, "text": {"type": "string"},
+          "check": {"$ref": "#/$defs/str_or_null", "description": "a check name or glob; null when human_verify"},
+          "human_verify": {"type": "boolean"},
+          "matched": {"type": "array", "items": {"type": "string"}, "description": "the check names it matched in Rev B"},
+          "status": {"enum": ["pass", "pass_with_warning", "waived", "human_verify"]}
+        }
+      }
+    },
+    "checks": {
+      "type": "object",
+      "required": ["summary", "rows"],
+      "properties": {
+        "summary": {"type": "object", "required": ["from", "to"],
+                    "properties": {"from": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/counts"}]}, "to": {"$ref": "#/$defs/counts"}}},
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "category", "source", "change", "from", "to"],
+            "properties": {
+              "name": {"type": "string"},
+              "category": {"type": "string"},
+              "source": {"type": "string", "description": "the document the check's figure cites, or where its inputs come from"},
+              "change": {"enum": ["same", "value", "status", "added", "removed", "new"]},
+              "from": {"$ref": "#/$defs/check_state"},
+              "to": {"$ref": "#/$defs/check_state"}
+            }
+          }
+        }
+      }
+    },
+    "removed_checks": {"type": "array", "items": {"type": "string"}, "description": "ran on the base, absent on the result"},
+    "unplanned_changes": {"type": "array", "items": {"type": "string"}, "description": "parameters changed that the plan did not list"},
+    "parameters": {
+      "type": ["array", "null"],
+      "items": {"type": "object", "required": ["name", "from", "to", "change"],
+                "properties": {"name": {"type": "string"}, "from": {}, "to": {}, "change": {"enum": ["same", "changed", "added", "removed"]}}}
+    },
+    "bom": {
+      "type": ["array", "null"],
+      "description": "changed rows only, per table (CAD: parts and bom; a domain: its BOM CSV tables)",
+      "items": {"type": "object", "required": ["table", "key", "change", "from", "to", "fields"],
+                "properties": {"table": {"type": "string"}, "key": {"type": "string"},
+                               "change": {"enum": ["added", "removed", "changed"]},
+                               "from": {"type": ["object", "null"]}, "to": {"type": ["object", "null"]},
+                               "fields": {"type": "array", "items": {"type": "string"}}}}
+    },
+    "not_checked": {
+      "type": "array",
+      "items": {"type": "object", "required": ["kind", "what", "why"],
+                "properties": {"kind": {"enum": ["plan", "human_verify", "waived", "removed_check", "domain", "scope"]},
+                               "what": {"type": "string"}, "why": {"type": "string"}}}
+    },
+    "change_order": {
+      "type": "object",
+      "description": "a draft; number, disposition, effectivity, approved_by and approved_date are left blank for a person",
+      "required": ["number", "title", "ticket", "reason", "description", "affected_items", "from_revision", "to_revision",
+                   "originator", "date", "disposition", "effectivity", "approved_by", "approved_date"],
+      "properties": {
+        "affected_items": {"type": "array", "items": {"type": "string"}},
+        "from_revision": {"$ref": "#/$defs/str_or_null"},
+        "disposition": {"const": ""}, "effectivity": {"const": ""}, "approved_by": {"const": ""}, "approved_date": {"const": ""}
+      }
+    },
+    "outputs_missing": {"type": "array", "items": {"type": "object", "required": ["what", "why"]}},
+    "files": {
+      "type": "array",
+      "items": {"type": "object", "required": ["path", "role", "sha256", "bytes"],
+                "properties": {"path": {"type": "string"},
+                               "role": {"enum": ["report", "package", "checks", "parameters", "bom", "source_diff", "ticket", "model", "output", "image"]},
+                               "sha256": {"type": ["string", "null"]}, "bytes": {"type": ["integer", "null"]}}}
+    }
+  }
+}

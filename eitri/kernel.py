@@ -68,6 +68,7 @@ def build_model(model_path: str | Path, out_dir: str | Path, params: Mapping[str
     for k, v in (params or {}).items():
         cmd += ["--set", f"{k}={v}"]
     env = dict(os.environ)
+    env["EITRI_AGENT_PROCESS"] = "1"            # model code is never a person (eitri.tickets.require_person)
     env.setdefault("PYTHONUNBUFFERED", "1")
     t0 = time.time()
     from .executor import current as current_executor, require_local_exec

@@ -62,6 +62,23 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
     {"name": "electronics_reference", "description": Tools.electronics_reference.__doc__, "input_schema": {"type": "object", "properties": {}}},
     {"name": "design_notes", "description": Tools.design_notes.__doc__,
      "input_schema": {"type": "object", "properties": {"content": {"type": "string"}}, "required": ["content"]}},
+    # tickets (eitri.tickets): no schema approves, waives or closes one; those are a person's, in their own terminal
+    {"name": "ticket_new", "description": Tools.ticket_new.__doc__,
+     "input_schema": {"type": "object", "properties": {
+         "title": {"type": "string"}, "request": {"type": "string"}, "acceptance": {"type": "array", "items": {}},
+         "constraints": {"type": "array", "items": {"type": "string"}}, "file": {"type": "string"}, "base": {"type": "string"},
+         "customer": {"type": "string"}}, "required": ["title", "request"]}},
+    {"name": "ticket_show", "description": Tools.ticket_show.__doc__,
+     "input_schema": {"type": "object", "properties": {"ticket": {"type": "string"}}}},
+    {"name": "ticket_list", "description": Tools.ticket_list.__doc__, "input_schema": {"type": "object", "properties": {}}},
+    {"name": "ticket_plan", "description": Tools.ticket_plan.__doc__,
+     "input_schema": {"type": "object", "properties": {
+         "ticket": {"type": "string"}, "summary": {"type": "string"}, "files": {"type": "array", "items": {"type": "string"}},
+         "parameters": {"type": "array", "items": {"type": "object"}}, "checks_affected": {"type": "array", "items": {"type": "string"}},
+         "not_checked": {"type": "array", "items": {"type": "string"}}, "open_questions": {"type": "array", "items": {"type": "string"}},
+         "acceptance": {"type": "array", "items": {}}}, "required": ["ticket", "summary"]}},
+    {"name": "package", "description": Tools.package.__doc__,
+     "input_schema": {"type": "object", "properties": {"ticket": {"type": "string"}}}},
 ]
 
 

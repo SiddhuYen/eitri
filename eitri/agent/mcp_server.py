@@ -37,9 +37,11 @@ class _NoProject(Exception):
 
 
 def _content(res: ToolResult) -> list[Any]:
-    """Tool result content. Images go back as paths by default: the host's Read tool
+    """Tool result content (a ticket-gate refusal is an error the agent reads, not a report). Images go back as paths by default: the host's Read tool
     then shows them as real image blocks, whereas an inline MCP image is also
     serialised as base64 text into the model's context (tens of thousands of tokens)."""
+    if res.refused:
+        raise ToolError(res.text)
     text = res.text
     images = [Path(i) for i in res.images if Path(i).exists()]
     if images and IMAGE_MODE == "path":
@@ -105,7 +107,11 @@ def make_plugin_server(session=None) -> MCPServer:
             raise ToolError(session.no_project_text())
         if not t.project.model_path.exists():
             raise ToolError("There is no model file yet; call build_model with the complete file first.")
-        return _content(with_status(session, t._build_and_report(note or "rebuild")))
+        from ..tickets.store import ChangeRefused
+        try:
+            return _content(with_status(session, t._build_and_report(note or "rebuild")))
+        except ChangeRefused as exc:           # the ticket gate: the agent reads why
+            raise ToolError(str(exc)) from None
 
     @server.tool(description="The working guide of one local domain (cad, wires, motion, pneumatics, firmware, "
                  "electronics): how to plan, build, review and finish, and the rules its checks hold you to. The eitri "
@@ -279,9 +285,48 @@ def _register(server: MCPServer, get: Callable[[], Tools | None], wrap: Callable
     def remove_edit(index: int) -> list[Any]:
         return _content(wrap(need().remove_edit(index)))
 
+    # tickets: open, show, list, plan, package. There is deliberately NO tool that approves, waives or closes a ticket:
+    # those are a person's, in their own terminal (`eitri ticket approve|waive|close`; tests/test_tickets.py checks this)
+    def _text(res: ToolResult) -> str:
+        if res.is_error:
+            raise ToolError(res.text)
+        return res.text
+
+    @server.tool(description=Tools.ticket_new.__doc__)
+    @guard
+    def ticket_new(title: str, request: str, acceptance: list[Any] | str | None = None, constraints: list[str] | str | None = None,
+                   file: str = "", base: str = "latest", customer: str = "") -> str:
+        return _text(need().ticket_new(title, request, acceptance, constraints, file, base, customer))
+
+    @server.tool(description=Tools.ticket_show.__doc__)
+    @guard
+    def ticket_show(ticket: str = "") -> str:
+        return _text(need().ticket_show(ticket))
+
+    @server.tool(description=Tools.ticket_list.__doc__)
+    @guard
+    def ticket_list() -> str:
+        return _text(need().ticket_list())
+
+    @server.tool(description=Tools.ticket_plan.__doc__)
+    @guard
+    def ticket_plan(ticket: str, summary: str, files: list[str] | None = None, parameters: list[Any] | None = None,
+                    checks_affected: list[str] | None = None, not_checked: list[str] | None = None,
+                    open_questions: list[str] | None = None, acceptance: list[Any] | None = None) -> str:
+        return _text(need().ticket_plan(ticket, summary, files, parameters, checks_affected, not_checked, open_questions, acceptance))
+
+    @server.tool(name="package", description=Tools.package.__doc__)
+    @guard
+    def package_tool(ticket: str = "") -> str:
+        return _text(need().package(ticket))
+
+
+
+AGENT_MARKER = "EITRI_AGENT_PROCESS"     # inherited by every process this server starts: person-only actions refuse there
 
 
 def main(argv: list[str] | None = None) -> None:
+    os.environ[AGENT_MARKER] = "1"
     args = list(sys.argv[1:] if argv is None else argv)
     if "--plugin" in args or (not os.environ.get("EITRI_PROJECT") and os.environ.get("EITRI_PLUGIN")):
         serve_plugin()
@@ -299,6 +344,7 @@ def main(argv: list[str] | None = None) -> None:
 def serve_plugin() -> None:
     """`eitri mcp`: the plugin's local server on stdio. Logs go to stderr (stdout is the protocol)."""
     from .plugin import PluginSession
+    os.environ[AGENT_MARKER] = "1"
     os.environ.pop("EITRI_LAZY_IMPORT", None)   # this process started lazily (fast handshake); its builds need not
     session = PluginSession(quality=float(os.environ.get("EITRI_RENDER_QUALITY", "1.0")))
     session.adopt_startup_folder()
