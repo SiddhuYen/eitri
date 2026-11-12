@@ -112,7 +112,8 @@ def test_warnings_are_not_counted_as_passes(tmp_path):
         browser, page, errors = _open(p, url)
         st = _state(page)
         n, warns = len(st["checks"]), sum(c.get("severity") == "warn" for c in st["checks"])
-        assert warns == 2 and all(c["ok"] for c in st["checks"]), st["checks"]
+        # the two XT60s, and the overcurrent protection "not run" (the lead declares no source)
+        assert warns == 3 and all(c["ok"] for c in st["checks"]), st["checks"]
         page.wait_for_function("() => document.querySelector('#st-buildtxt').textContent.includes('warn')", timeout=20000)
         expect = f"{n - warns} of {n} checks pass, {warns} warn"
         assert page.inner_text("#checktitle") == expect and expect in page.inner_text("#st-buildtxt")
