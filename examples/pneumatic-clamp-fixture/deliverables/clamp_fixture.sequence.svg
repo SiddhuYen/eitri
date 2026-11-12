@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="810" height="340" viewBox="0 0 810 340" font-family="IBM Plex Sans, Helvetica, Arial, sans-serif" class="harness">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<g class="title">
+<text x="20.0" y="26.0" font-size="14" fill="#1b2430" font-weight="700">Displacement-step diagram: Clamp fixture</text>
+<text x="20.0" y="44.0" font-size="9" fill="#6b7686">estimated cycle 9.23 s (ESTIMATE, a lower bound: see the sequence table)</text>
+</g>
+<g class="grid">
+<line x1="170.0" y1="58.0" x2="170.0" y2="270.0" stroke="#c5ccd6" stroke-width="0.8"/>
+<text x="170.0" y="54.0" font-size="9" fill="#1b2430" text-anchor="middle" font-weight="700">1</text>
+<line x1="290.0" y1="58.0" x2="290.0" y2="270.0" stroke="#c5ccd6" stroke-width="0.8"/>
+<text x="290.0" y="54.0" font-size="9" fill="#1b2430" text-anchor="middle" font-weight="700">2</text>
+<line x1="410.0" y1="58.0" x2="410.0" y2="270.0" stroke="#c5ccd6" stroke-width="0.8"/>
+<text x="410.0" y="54.0" font-size="9" fill="#1b2430" text-anchor="middle" font-weight="700">3</text>
+<line x1="530.0" y1="58.0" x2="530.0" y2="270.0" stroke="#c5ccd6" stroke-width="0.8"/>
+<text x="530.0" y="54.0" font-size="9" fill="#1b2430" text-anchor="middle" font-weight="700">4</text>
+<line x1="650.0" y1="58.0" x2="650.0" y2="270.0" stroke="#c5ccd6" stroke-width="0.8"/>
+<text x="650.0" y="54.0" font-size="9" fill="#1b2430" text-anchor="middle" font-weight="700">5</text>
+<line x1="770.0" y1="58.0" x2="770.0" y2="270.0" stroke="#c5ccd6" stroke-width="0.8"/>
+<text x="770.0" y="54.0" font-size="9" fill="#1b2430" text-anchor="middle" font-weight="700">1</text>
+<text x="230.0" y="286.0" font-size="8" fill="#1b2430" text-anchor="middle">push</text>
+<text x="230.0" y="298.0" font-size="8" fill="#6b7686" text-anchor="middle">0.35 s</text>
+<text x="350.0" y="286.0" font-size="8" fill="#1b2430" text-anchor="middle">clamp</text>
+<text x="350.0" y="298.0" font-size="8" fill="#6b7686" text-anchor="middle">0.26 s</text>
+<text x="470.0" y="286.0" font-size="8" fill="#1b2430" text-anchor="middle">pusher back</text>
+<text x="470.0" y="298.0" font-size="8" fill="#6b7686" text-anchor="middle">0.35 s</text>
+<text x="590.0" y="286.0" font-size="8" fill="#1b2430" text-anchor="middle">machine</text>
+<text x="590.0" y="298.0" font-size="8" fill="#6b7686" text-anchor="middle">8.00 s</text>
+<text x="710.0" y="286.0" font-size="8" fill="#1b2430" text-anchor="middle">unclamp</text>
+<text x="710.0" y="298.0" font-size="8" fill="#6b7686" text-anchor="middle">0.26 s</text>
+</g>
+<g class="rows">
+<text x="20.0" y="99.0" font-size="10" fill="#1b2430" font-weight="700">-MM1 C1</text>
+<text x="162.0" y="84.0" font-size="8" fill="#6b7686" text-anchor="end">1</text>
+<text x="162.0" y="114.0" font-size="8" fill="#6b7686" text-anchor="end">0</text>
+</g>
+<g class="cyl" data-kind="cyl" data-id="C1">
+<polyline points="170.0,110.0 170.0,110.0 290.0,80.0 410.0,80.0 410.0,80.0 530.0,110.0 650.0,110.0 770.0,110.0" fill="none" stroke="#1f5fbf" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+</g>
+<g class="sensor">
+<circle cx="290.0" cy="80.0" r="3.2" fill="#1b2430" stroke="#1b2430" stroke-width="1"/>
+<text x="295.0" y="75.0" font-size="8" fill="#1b2430">-BG2</text>
+<circle cx="530.0" cy="110.0" r="3.2" fill="#1b2430" stroke="#1b2430" stroke-width="1"/>
+<text x="535.0" y="122.0" font-size="8" fill="#1b2430">-BG1</text>
+</g>
+<g class="rows">
+<text x="20.0" y="151.0" font-size="10" fill="#1b2430" font-weight="700">-MM2 C2</text>
+<text x="162.0" y="136.0" font-size="8" fill="#6b7686" text-anchor="end">1</text>
+<text x="162.0" y="166.0" font-size="8" fill="#6b7686" text-anchor="end">0</text>
+</g>
+<g class="cyl" data-kind="cyl" data-id="C2">
+<polyline points="170.0,162.0 290.0,162.0 290.0,162.0 410.0,132.0 530.0,132.0 650.0,132.0 650.0,132.0 770.0,162.0" fill="none" stroke="#1f5fbf" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+</g>
+<g class="sensor">
+<circle cx="410.0" cy="132.0" r="3.2" fill="#1b2430" stroke="#1b2430" stroke-width="1"/>
+<text x="415.0" y="127.0" font-size="8" fill="#1b2430">-BG4</text>
+<circle cx="770.0" cy="162.0" r="3.2" fill="#1b2430" stroke="#1b2430" stroke-width="1"/>
+<text x="775.0" y="174.0" font-size="8" fill="#1b2430">-BG3</text>
+</g>
+<g class="rows">
+<text x="20.0" y="196.0" font-size="9" fill="#6b7686" font-weight="700">coils</text>
+<text x="20.0" y="217.0" font-size="8.5" fill="#1b2430">PUSHER_EXTEND</text>
+</g>
+<g class="coil">
+<rect x="172.0" y="208.0" width="116.0" height="12.0" rx="0" fill="#1f5fbf" stroke="#1f5fbf" stroke-width="0.8"/>
+<rect x="292.0" y="208.0" width="116.0" height="12.0" rx="0" fill="#1f5fbf" stroke="#1f5fbf" stroke-width="0.8"/>
+</g>
+<g class="rows">
+<text x="20.0" y="239.0" font-size="8.5" fill="#1b2430">CLAMP_CLOSE</text>
+</g>
+<g class="coil">
+<rect x="292.0" y="230.0" width="18.0" height="12.0" rx="0" fill="#7aa6e0" stroke="#1f5fbf" stroke-width="0.8"/>
+</g>
+<g class="rows">
+<text x="20.0" y="261.0" font-size="8.5" fill="#1b2430">CLAMP_OPEN</text>
+</g>
+<g class="coil">
+<rect x="652.0" y="252.0" width="18.0" height="12.0" rx="0" fill="#7aa6e0" stroke="#1f5fbf" stroke-width="0.8"/>
+</g>
+<g class="notes">
+<text x="20.0" y="326.0" font-size="7.5" fill="#6b7686">1 = extended, 0 = retracted; filled bar = coil on, short bar = pulse; dots: the sensor that ends the step.</text>
+</g>
+</svg>

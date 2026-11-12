@@ -208,15 +208,15 @@ def test_bom_counts_each_fitting_once():
     c = load_model(EXAMPLE).build()
     rows = outputs.bom(c)
     fits = {r["description"]: r for r in rows if r["category"] == "fitting"}
-    # the SY3000-C6 valves' A/B and the AS2201F tube sides are built-in push-in; the AS2201F are screwed into the cylinders;
-    # the tee is its own BOM line: only the valves' M5 P ports and the FRL (port not given) need fittings
-    m5 = next(r for d, r in fits.items() if "M5" in d)
-    assert m5["qty"] == 2 and m5["part_number"] == "KQ2H06-M5"
-    assert sum(r["qty"] for r in fits.values()) == 2 + 2 + 1          # 2 x M5 at V1/V2 P; T0 at AIR and FRL, T1 at FRL (ports not given)
-    tee = next(r for r in rows if r["category"] == "node")
-    assert tee["part_number"] == "KQ2T06-00" and tee["qty"] == 1
+    # the valves sit on the manifold (no P/R/S fittings), their A/B and the AS2201F tube sides are built-in push-in, the AS2201F are
+    # screwed into the cylinders: only the manifold's Rc1/8 P (a KQ2H06-01S) and the FRL / supply ends (ports not given) need fittings
+    rc = next(r for d, r in fits.items() if "Rc1/8" in d)
+    assert rc["qty"] == 1 and rc["part_number"] == "KQ2H06-01S"
+    assert sum(r["qty"] for r in fits.values()) == 1 + 3
+    base = next(r for r in rows if r["category"] == "manifold" and "base" in r["description"])
+    assert base["part_number"] == "SMC SS5Y3-20-02-Q" and not any("blanking" in r["description"] for r in rows)   # 2 valves, 2 stations
     tube = next(r for r in rows if r["category"] == "tube" and r["part_number"] == "SMC TU0604")
-    assert "6 mm OD" in tube["description"] and tube["qty"] == pytest.approx((0.5 + 0.2 + 0.2 + 1.2 + 1.2 + 1.0 + 1.0) * 1.1, abs=0.01)
+    assert "6 mm OD" in tube["description"] and tube["qty"] == pytest.approx((0.5 + 1.2 + 1.2 + 1.0 + 1.0) * 1.1, abs=0.01)
 
 
 def _two_valve_circuit(cls="5/2", returns="spring", center="closed", acting="double", **cyl):
@@ -274,9 +274,9 @@ def test_device_tags_follow_the_festo_en81346_codes():
     c = load_model(EXAMPLE).build()
     tg = tags(c)
     assert tg["C1"] == "-MM1" and tg["C2"] == "-MM2" and tg["V1"] == "-QM1" and tg["V2"] == "-QM2"
-    assert tg["FRL"] == "-AZ1" and tg["MAN"] == "-XM1" and {tg[k] for k in ("FC1A", "FC1B")} == {"-RZ1", "-RZ2"}
+    assert tg["FRL"] == "-AZ1" and tg["M1"] == "-XM1" and {tg[k] for k in ("FC1A", "FC1B")} == {"-RZ1", "-RZ2"}
     assert [tg[s] for s in ("B1", "B2", "B3", "B4")] == ["-BG1", "-BG2", "-BG3", "-BG4"]      # retracted before extended
-    assert tg["S_V1_R"] == "-QM1:R"
+    assert tg["S_M1_R"] == "-XM1:R"
     every = [n for n, comp in c.components.items() if comp.kind != "supply"] + list(c.sensors)
     assert all(n in tg for n in every) and len(set(tg.values())) == len(tg)
 
