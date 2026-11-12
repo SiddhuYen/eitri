@@ -32,6 +32,21 @@ RATING_DOCS = {
                 "Amass XT60 datasheet V1.2; XT60-M page re-read 2026-11-07 (35 A there; the lower 30 A is used)"),
     "XT90": doc("Amass XT90E-M product page (china-amass.net): 45 A; burst 90 A from Holybro's AMASS rating table", "", "fetched 2026-10-26"),
     "SPADE-2.8": TE_FASTON, "SPADE-4.8": TE_FASTON, "SPADE-6.3": TE_FASTON,
+    "M8-3": doc("Pepperl+Fuchs V3-WM-10M-PUR data sheet p.1: 4 A, 60 V DC / 48 V AC (M8 3-pin A-coded female cordset)",
+                "https://files.pepperl-fuchs.com/selector_files/navi/productInfo/pds/116463_eng.pdf",
+                "Pepperl+Fuchs 116463_eng.pdf, release date 2026-07-29, page 1"),
+    "M8-4": doc("Pepperl+Fuchs V31-GM-6,3M-PVC data sheet: 3 A, 30 V AC/DC (M8 4-pin female cordset; V31-GMV4A-5M-PUR says 4 A: the "
+                "lower is used)", "https://files.pepperl-fuchs.com/webcat/navi/productInfo/pds/293011_eng.pdf",
+                "Pepperl+Fuchs 293011_eng.pdf, release date 2016-05-09, page 1; 201892_eng.pdf, 2026-01-02"),
+    "M12-4": doc("Pepperl+Fuchs V1-G-BK5M-PUR data sheet p.1: 4 A, 250 V AC/DC (M12 4-pin A-coded female cordset)",
+                 "https://files.pepperl-fuchs.com/selector_files/navi/productInfo/pds/70100962_eng.pdf",
+                 "Pepperl+Fuchs 70100962_eng.pdf, release date 2026-01-23, page 1"),
+    "M12-5": doc("Pepperl+Fuchs V15-G-2M-PVC data sheet p.1: 4 A, 60 V DC / 48 V AC (M12 5-pin A-coded female cordset)",
+                 "https://files.pepperl-fuchs.com/webcat/navi/productInfo/pds/035322_eng.pdf",
+                 "Pepperl+Fuchs 035322_eng.pdf, release date 2026-01-28, page 1"),
+    "WAGO-2002-1201": doc("WAGO 2002-1201 data sheet: 20 A, 600 V per UL 1059 (24 A, 800 V per IEC/EN 60664-1: the lower is used); "
+                          "wire 0.25-4 mm2", "https://cdn.gescan.com/PIM_Docs/Docs/STEP_ASSETS_PDF/376915570.pdf",
+                          "WAGO data sheet 2002-1201, version 12.05.2023 (copy at cdn.gescan.com), pages 1-2"),
 }
 AWG_DOCS = {
     "JST-XH": doc("JST XH series page (series 277): AWG #30 to #22", "", "fetched 2026-10-26"),
@@ -39,6 +54,7 @@ AWG_DOCS = {
     "DUPONT-2.54": doc("Amphenol FCI Mini-PV contacts 48235-000LF 22-26 AWG, 48237-000LF 28-32 AWG (Heilind, Farnell)", "", "fetched 2026-10-26"),
     "MOLEX-MICROFIT-3.0": doc("Molex Micro-Fit 3.0 43030 terminals: 18-30 AWG (element14, RS)", "", "fetched 2026-10-26"),
 }
+AWG_DOCS["WAGO-2002-1201"] = RATING_DOCS["WAGO-2002-1201"]
 
 # ---------------------------------------------------------------------------- resolvers: (check, harness) -> sources
 
@@ -62,6 +78,12 @@ def _connector_rating(c, h):
     if key in RATING_DOCS:
         return [RATING_DOCS[key]]
     return [rule("an unknown connector type is graded only with rating_a")]
+
+
+def _connector_voltage(c, h):
+    con = _connector(h, c)
+    key = normalize_type(con.type) if con is not None else ""
+    return [RATING_DOCS[key], model_file("net voltage_V")] if key in RATING_DOCS else [model_file("net voltage_V")]
 
 
 def _terminal_fit(c, h):
@@ -222,6 +244,8 @@ RULES = [
     Rule(R + "connector-rating", "ampacity", r"connector rating ", tuple(dict.fromkeys(RATING_DOCS.values())) + (model_file("rating_a"),),
          _connector_rating),
     Rule(R + "terminal-fit", "terminal fit", r"wires fit the ", tuple(AWG_DOCS.values()), _terminal_fit),
+    Rule(R + "connector-voltage", "voltage rating", r"connector voltage ", tuple(RATING_DOCS[k] for k in ("M8-3", "M8-4", "M12-4", "M12-5",
+         "WAGO-2002-1201")) + (model_file("net voltage_V"),), _connector_voltage),
     Rule(R + "voltage-drop", "voltage drop", r"voltage drop ", (requirement("max_drop_pct"), NEC_TABLE_8, DROP_DEFAULT), _drop),
     Rule(R + "one-gauge-per-net", "consistency", r"one gauge per net$", (rule("a thinner wire carries no more than a thicker one of its net"),)),
     Rule(R + "one-colour-per-net", "consistency", r"one colour per net$", (rule("one wire colour per net (a convention)"),)),

@@ -149,6 +149,10 @@ def _termination(h: Harness, e, gauge=None) -> tuple[str, float]:
         return f"{c.type.lower()} terminal on {c.name}" + (f" ({c.notes})" if c.notes else ""), strip
     if t == "spade":
         return f"{c.type.lower()} terminal on {c.name} {e.pin}", strip
+    if t == "moulded":
+        return f"moulded into {c.name} ({c.type} cordset) pin {e.pin}", strip
+    if t == "push-in":
+        return f"push-in into {c.name} {e.pin} (strip 10-12 mm; ferrule on fine-stranded wire)", strip
     return f"bare end to {c.name} {e.pin}", strip
 
 

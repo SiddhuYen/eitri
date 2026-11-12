@@ -18,7 +18,7 @@ class ConnectorSpec:
     family: str                  # what it is, for the BOM
     pitch_mm: float | None       # pin pitch (None: single-pin terminals)
     rating_a: float | None       # per-pin continuous rating (None: limited by the wire, not the terminal)
-    termination: str             # crimp | solder | ring | spade | bare
+    termination: str             # crimp | solder | ring | spade | bare | moulded (a cordset end) | push-in (a spring terminal)
     terminal_pn: str = ""        # the crimp terminal (contact) part number
     housing_pn: str = ""         # housing part number; {n} is the position count
     strip_mm: float = 3.0        # insulation to strip at this termination
@@ -31,6 +31,8 @@ class ConnectorSpec:
     male_housing_pn: str = ""
     male_terminal_pn: str = ""
     pn_max: int = 0              # housing_pn exists only up to this many positions (0: no limit)
+    rated_V: float | None = None # the maker's DC voltage rating (None: not recorded; the voltage check does not run for it)
+    mm2: tuple[float, float] | None = None   # a terminal's wire range in mm^2 (the thinnest, the thickest): graded in mm^2, not AWG
 
 
 CATALOG: dict[str, ConnectorSpec] = {s.key: s for s in [
@@ -52,6 +54,15 @@ CATALOG: dict[str, ConnectorSpec] = {s.key: s for s in [
     # the I/O pins carry signals, and the 5V / 3V3 supply pins are graded by the power-budget check (limits and sources: eitri/power.py)
     ConnectorSpec("ARDUINO-UNO", "Arduino Uno R3 board (female 2.54 mm headers)", 2.54, None, "crimp", "Dupont 2.54 male crimp contact", "", 2.5, 3),
     ConnectorSpec("ARDUINO-NANO", "Arduino Nano board (2.54 mm headers)", 2.54, None, "crimp", "Dupont 2.54 female crimp contact", "", 2.5, 3),
+    # industrial sensor / actuator connectors (IEC 61076-2-104 M8, IEC 61076-2-101 M12), A-coded: a moulded cordset's connector end
+    # (its cores are the cable's; nothing to crimp). Ratings: Pepperl+Fuchs cordset data sheets (RATING_SOURCES), the DC figure
+    ConnectorSpec("M8-3", "M8 3-pin A-coded sensor connector (moulded cordset end)", None, 4.0, "moulded", "", "", 0.0, 3, rated_V=60.0),
+    ConnectorSpec("M8-4", "M8 4-pin A-coded sensor connector (moulded cordset end)", None, 3.0, "moulded", "", "", 0.0, 4, rated_V=30.0),
+    ConnectorSpec("M12-4", "M12 4-pin A-coded sensor connector (moulded cordset end)", None, 4.0, "moulded", "", "", 0.0, 4, rated_V=250.0),
+    ConnectorSpec("M12-5", "M12 5-pin A-coded sensor connector (moulded cordset end)", None, 4.0, "moulded", "", "", 0.0, 5, rated_V=60.0),
+    # DIN-rail feed-through terminal, 2.5 mm^2, push-in: each pin is one terminal block (a 2-conductor block is one potential)
+    ConnectorSpec("WAGO-2002-1201", "WAGO 2002-1201 TOPJOB S 2-conductor feed-through terminal block, 2.5 mm^2, push-in", 5.2, 20.0,
+                  "push-in", "", "2002-1201 (x{n})", 10.0, 1, rated_V=600.0, mm2=(0.25, 4.0)),
 ]}
 BOARD_TYPES = {"ARDUINO-UNO": "uno", "ARDUINO-NANO": "nano"}
 
@@ -62,6 +73,8 @@ AWG_SOURCES = {
     "DUPONT-2.54": "Amphenol FCI Mini-PV receptacle contacts: 48235-000LF 22-26 AWG, 48237-000LF 28-32 AWG (Heilind, Farnell)",
     "MOLEX-MICROFIT-3.0": "Molex Micro-Fit 3.0 43030 terminals: 43030-0039 18 AWG, 43030-0001 20-24 AWG, 43030-0004 26-30 AWG "
                           "(element14, RS); housings 43645-0200 ... 43645-1200 single row, female (RS, Heilind, Octopart)",
+    "WAGO-2002-1201": "WAGO data sheet 2002-1201 (version 12.05.2023): 'Solid conductor 0.25 ... 4 mm2 / 22 ... 12 AWG', 'Fine-stranded "
+                      "conductor 0.25 ... 4 mm2'; push-in only from 0.75 mm2 (solid) / 18 AWG (with ferrule); 'Strip length 10 ... 12 mm'",
 }
 
 # Where each rating above comes from (fetched 2026-10-26). A rating lower than its source is a deliberate derating, said so.
@@ -83,6 +96,19 @@ RATING_SOURCES = {
                  "see FASTON_AMPS_BY_AWG",
     "SPADE-4.8": "TE product specification 108-106496: as SPADE-2.8",
     "SPADE-6.3": "TE product specification 108-106496: as SPADE-2.8",
+    "M8-3": "Pepperl+Fuchs data sheet V3-WM-10M-PUR (female cordset, M8, A-coded, 3-pin; file 116463_eng.pdf, release date 2026-07-29, "
+            "p.1 Electrical specifications): 'Operating voltage UB max. 48 V AC / 60 V DC', 'Operating current IB max. 4 A'",
+    "M8-4": "Pepperl+Fuchs data sheets: V31-GM-6,3M-PVC-Y293011 (female cordset, M8, 4-pin; 293011_eng.pdf, release date 2016-05-09): "
+            "'Operating voltage UB max. 30 V AC/DC', 'Operating current IB max. 3 A'; V31-GMV4A-5M-PUR (A-coded, 4-pin; 201892_eng.pdf, "
+            "release date 2026-01-02): 30 V AC/DC, 4 A. The sources disagree on current: the lower, 3 A, is used",
+    "M12-4": "Pepperl+Fuchs data sheet V1-G-BK5M-PUR-Y70100962 (female cordset, M12, A-coded, 4-pin; 70100962_eng.pdf, release date "
+             "2026-01-23): 'Operating voltage UB max. 250 V AC/DC', 'Operating current IB max. 4 A'",
+    "M12-5": "Pepperl+Fuchs data sheet V15-G-2M-PVC (female cordset, M12, A-coded, 5-pin; 035322_eng.pdf, release date 2026-01-28): "
+             "'Operating voltage UB max. 48 V AC / 60 V DC', 'Operating current IB max. 4 A' (254138_eng.pdf, 2019-07-15, the same)",
+    "WAGO-2002-1201": "WAGO data sheet 2002-1201 (version 12.05.2023, the copy at cdn.gescan.com; version 22.01.2019 at static.rapidonline.com "
+                      "has the same figures): ratings per IEC/EN 60664-1 'Rated voltage (III / 3) 800 V', 'Rated current 24 A'; per UL 1059 "
+                      "'Rated voltage UL (Use Group B) 600 V', 'Rated current UL (Use Group B) 20 A'. The sources disagree: the lower, "
+                      "20 A and 600 V, are used",
 }
 
 ALIASES = {
@@ -95,6 +121,10 @@ ALIASES = {
     "TINNED": "BARE", "WIRE": "BARE", "SOLDER-PAD": "SOLDER",
     "UNO": "ARDUINO-UNO", "ARDUINO UNO": "ARDUINO-UNO", "ARDUINO-UNO-R3": "ARDUINO-UNO", "ARDUINO UNO R3": "ARDUINO-UNO",
     "NANO": "ARDUINO-NANO", "ARDUINO NANO": "ARDUINO-NANO",
+    "M8-3 FEMALE": "M8-3", "M8-3 MALE": "M8-3", "M8 3-PIN": "M8-3", "M8-3P": "M8-3", "M8-4 FEMALE": "M8-4", "M8-4 MALE": "M8-4",
+    "M8 4-PIN": "M8-4", "M8-4P": "M8-4", "M12-4 FEMALE": "M12-4", "M12-4 MALE": "M12-4", "M12 4-PIN": "M12-4", "M12-4P": "M12-4",
+    "M12-5 FEMALE": "M12-5", "M12-5 MALE": "M12-5", "M12 5-PIN": "M12-5", "M12-5P": "M12-5", "WAGO-2002": "WAGO-2002-1201",
+    "WAGO 2002-1201": "WAGO-2002-1201", "WAGO2002": "WAGO-2002-1201",
 }
 for _s in ("M3", "M4", "M5", "M6", "M8", "M10"):
     ALIASES[f"RING-{_s}"] = "RING"
@@ -158,8 +188,9 @@ def _rating_text(s: ConnectorSpec) -> str:
 def catalog_table() -> str:
     rows = ["| type | pitch | rating / pin | termination | notes |", "|---|---|---|---|---|"]
     for s in CATALOG.values():
+        extra = (f"; {s.rated_V:g} V DC" if s.rated_V else "") + (f"; wire {s.mm2[0]:g}-{s.mm2[1]:g} mm²" if s.mm2 else "")
         rows.append(f"| {s.key} | {'' if s.pitch_mm is None else f'{s.pitch_mm:g} mm'} | "
-                    f"{_rating_text(s)} | {s.termination} | {s.family} |")
+                    f"{_rating_text(s)} | {s.termination} | {s.family}{extra} |")
     return "\n".join(rows)
 
 

@@ -14,6 +14,14 @@ annotated tags (`git show v0.4.0`).
   A signal net with no declared end is "not run" (it was a pass on the wrong limit). New check "signal net N input <pin>".
   The servo-arm demo and the harness reference examples declare their Uno / Nano pins.
 
+### Added
+
+- **Industrial connectors with sourced ratings**: `M8-3` (4 A, 60 V DC), `M8-4` (3 A, 30 V: the lower of Pepperl+Fuchs' 3 A / 4 A),
+  `M12-4` (4 A, 250 V), `M12-5` (4 A, 60 V DC), all A-coded cordset ends (Pepperl+Fuchs data sheets), and `WAGO-2002-1201` (2.5 mm²
+  push-in feed-through terminal: 20 A, 600 V per UL 1059, the lower of its UL and IEC figures; 0.25-4 mm²). New checks: "connector
+  voltage" (a catalogue connector's DC rating against its nets' voltage) and a mm² wire-range "wires fit the ... terminals".
+  Mirrored in `data/components/connectors.jsonl`.
+
 ## 0.8.0: tickets and checked change packages, a source on every check, fuses, pneumatic catalogue parts, reference parts
 
 eitri for a shop that takes a ticket and hands back a checked change package. A ticket holds the customer's request and

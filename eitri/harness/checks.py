@@ -125,6 +125,7 @@ def run_checks(h: Harness) -> tuple[list[HCheck], dict[str, NetInfo]]:
     checks += _connectivity(h)
     checks += _ampacity(h)
     checks += _terminal_fit(h)
+    checks += _connector_voltage(h)
     checks += _drops(h, stats)
     checks += _consistency(h)
     checks += _power(h)
@@ -284,6 +285,9 @@ def _terminal_fit(h: Harness) -> list[HCheck]:
     out: list[HCheck] = []
     for c in h.connectors.values():
         spec = c.spec
+        if spec is not None and spec.mm2 is not None:
+            out += _terminal_fit_mm2(h, c, spec)
+            continue
         if spec is None or spec.awg is None or c.termination != "crimp":
             continue
         thick, thin = spec.awg
@@ -305,6 +309,49 @@ def _terminal_fit(h: Harness) -> list[HCheck]:
                               [c.name] + [l.id for l, _p in bad]))
         else:
             out.append(_check("terminal fit", name, "pass", f"{len(wires)} wire(s), all within AWG {thick}-{thin}", f"AWG {thick}-{thin}", [c.name]))
+    return out
+
+
+def _terminal_fit_mm2(h: Harness, c, spec) -> list[HCheck]:
+    """A terminal rated by wire cross-section in mm^2 (a DIN-rail terminal): every wire on it within the maker's range."""
+    lo, hi = spec.mm2
+    wires = [(l, pin) for pin in c.pin_names for l in h.links_at(PinRef(c.name, pin))]
+    if not wires:
+        return []
+    name = f"wires fit the {c.name} terminals ({c.type}, {lo:g}-{hi:g} mm²)"
+    bad = [(l, pin) for l, pin in wires if not lo - 1e-9 <= l.gauge.mm2 <= hi + 1e-9]
+    if bad:
+        return [_check("terminal fit", name, "fail",
+                       "; ".join(f"{l.id} {l.gauge.label} ({l.gauge.mm2:.3g} mm²) on {c.name}.{pin}" for l, pin in bad[:8])
+                       + f": {c.type} takes {lo:g} to {hi:g} mm²", f"{lo:g}-{hi:g} mm²: another terminal size, or a wire in range",
+                       [c.name] + [l.id for l, _p in bad])]
+    return [_check("terminal fit", name, "pass", f"{len(wires)} wire(s), all within {lo:g}-{hi:g} mm²", f"{lo:g}-{hi:g} mm²", [c.name])]
+
+
+def _connector_voltage(h: Harness) -> list[HCheck]:
+    """A catalogue connector with a published voltage rating: the highest voltage of the nets on its pins at most that rating."""
+    out: list[HCheck] = []
+    for c in h.connectors.values():
+        spec = c.spec
+        if isinstance(c, Fuse) or spec is None or spec.rated_V is None:
+            continue
+        links = [l for pin in c.pin_names for l in h.links_at(PinRef(c.name, pin))]
+        if not links:
+            continue
+        name = f"connector voltage {c.name} ({c.type}, {spec.rated_V:g} V)"
+        volts = [(h.nets[l.net].voltage_V, l.net) for l in links if l.net in h.nets and h.nets[l.net].voltage_V is not None]
+        srcs = [(s.voltage_V, str(s.pin)) for s in h.sources.values() if s.pin.connector == c.name and s.voltage_V is not None]
+        allv = volts + srcs
+        if not allv:
+            out.append(switched_off(_check("voltage rating", name, "warn",
+                                           f"no net on {c.name} gives a voltage_V, so its {spec.rated_V:g} V rating is not graded",
+                                           "h.net(..., voltage_V=...) on the nets it carries", [c.name]),
+                                    *sorted({f"{l.net}.voltage_V" for l in links if l.net} or {f"{c.name}.voltage_V"})))
+            continue
+        v, where = max(allv)
+        sev = "fail" if v > spec.rated_V + 1e-9 else "pass"
+        out.append(_check("voltage rating", name, sev, f"{v:g} V ({where}) on a connector rated {spec.rated_V:g} V DC",
+                          f"<= {spec.rated_V:g} V", [c.name]))
     return out
 
 

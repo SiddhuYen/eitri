@@ -78,7 +78,10 @@ A splice may only join wires of ONE net, so a trunk and its branches are all on 
 {{CATALOG}}
 
 An unknown type is allowed (`Connector("X", "ACME-9", pins=4, rating_a=5, pitch_mm=3.5)`); without `rating_a` its pins
-are not graded and a warning says so. Crimp-type connectors need one crimp terminal per populated pin (the BOM counts them).
+are not graded and a warning says so. Industrial field wiring: `M8-3`, `M8-4`, `M12-4`, `M12-5` (A-coded; the connector end of a
+moulded cordset, so model the cordset as a `Cable` ending in that connector; Pepperl+Fuchs data sheets) and `WAGO-2002-1201` (a 2.5 mm²
+push-in DIN-rail feed-through terminal: one pin per terminal block, the harness lands on one of its two points; its wire range
+is graded in mm²). These carry a DC voltage rating: "connector voltage" checks the nets on them against it. Crimp-type connectors need one crimp terminal per populated pin (the BOM counts them).
 Ratings are continuous. Between an XT60's or XT90's continuous and its short-time rating the check warns (peaks under a
 minute only); past it, it fails. Spade terminals are rated by the wire crimped in (22 AWG 3 A ... 12 AWG 20 A, 10 AWG 24 A), and
 so is Micro-Fit 3.0, which also derates with the number of powered circuits in the housing (Molex PS-43045, wire-to-wire:
