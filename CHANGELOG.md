@@ -8,6 +8,20 @@ annotated tags (`git show v0.4.0`).
 Every changed figure cites its document, revision and page in the code. Where sources disagree the conservative figure
 is used (the lower for a limit, the higher for a draw).
 
+### Added
+
+- **Pneumatics catalogue parts** (`part=`): Festo DSNU-20-...-P-A, SMC CDQ2B32-...DZ / CQ2B32, SMC SY3120 / SY3220 /
+  SY5120 5/2 valves, SMC TU0604 tube, AS2201F-01-06 speed controller, AN05-M5 silencer, SMC D-M9B and Festo SMT-8M-A
+  position sensors; every figure cited in `eitri/pneumatics/catalog.py` (datasheet URL, revision, page).
+- **Pneumatics checks** on datasheet figures: the cylinder's computed force against the force its datasheet prints,
+  minimum operating pressure (cylinders and pilot-operated valves), piston speed range, end-of-stroke kinetic energy
+  against the cushioning (`load_mass_kg=`; "not run" without it), coil voltage, sensor target (magnetic piston, series)
+  and voltage; tubes with `max_bar=` join the pressure-rating check; valves take `C_exhaust=` / `b_exhaust=` for the
+  A/B -> R/S passage.
+- **I/O list** (`<name>.io.md` / `.io.csv`): every solenoid coil a DO, every `c.sensor(...)` a DI, with signal name,
+  function, part, voltage, current, connector and terminal, for the PLC programmer. `c.control_voltage(24)`.
+- `examples/pneumatic-clamp-fixture/`: a pusher + clamp fixture built from these parts.
+
 ### Changed
 
 - **Fasteners**: countersinks take the ISO 10642:2020 head diameter (M3 6.72, M5 11.2, M6 13.44, M8 17.92, M10 22.4,
@@ -21,6 +35,11 @@ is used (the lower for a limit, the higher for a draw).
   `"static"` 0.7 (clamping), `"guided"` 1.0 (SMC). A regulator with no rating defaults to 10 bar (SMC AR). Default
   flow estimates: silencer C 1.0 (SMC AN05), flow control C 0.3 (SMC AS M5); a speed controller's free-flow
   direction passes no more than its throttle.
+- **Pneumatics, air consumption**: the lines between valve and cylinder are refilled from atmospheric, so they take
+  V x p_gauge / p_atm per stroke, not x p_abs / p_atm (SMC Best Pneumatics technical data, Data 2: 2 m of 6 mm bore at
+  0.5 MPa is 0.56 L ANR per cycle; eitri gave 0.67). The swept-volume and required-flow formulas already matched SMC.
+- **Pneumatics, default valve C**: 0.6, b 0.29 (the smallest body-ported SMC SY3000, CAT.EUS11-83 p.3); the old 1.0 came
+  from the series' best-case cover figure.
 - **Servos**: SG90 draws 2 A at stall (the higher of TowerPro's "0.5A - 2A"). STS3215 16.5 kg·cm stall, 4 rated at
   6 V (Feetech spec sheet). An actuator with no published continuous rating is assumed at 1/5 of stall (was 1/3).
 - **Uno on VIN**: the 5 V regulator's heat uses 85 °C/W, the worst board in the SPX1117 datasheet's Table 1 (was 46,

@@ -1,0 +1,4 @@
+# eitri project state: local paths, rebuilt by `eitri build clamp_fixture.py` or the editor
+eitri.json
+revisions/
+out/

@@ -11,8 +11,9 @@ from .checks import find_path, run_checks                                       
 from .flow import (consumption_per_cycle_l, cylinder_forces, drop_for_flow, flow_l_s, required_flow_l_s, series,   # noqa: F401
                    tube_conductance)
 from .model import (P_ATM, VALVE_CLASSES, Circuit, Component, Cylinder, FlowControl, Node, PneumaticsError, PortRef,   # noqa: F401
-                    Regulator, Silencer, Supply, Tube, Valve, is_circuit)
+                    Regulator, Sensor, Silencer, Supply, Tube, Valve, is_circuit)
+from .catalog import parts_table                                                     # noqa: F401
 
-__all__ = ["Circuit", "Supply", "Regulator", "Valve", "Cylinder", "FlowControl", "Silencer", "Node", "Tube", "PortRef", "PneumaticsError",
+__all__ = ["Circuit", "Supply", "Regulator", "Valve", "Cylinder", "FlowControl", "Silencer", "Node", "Tube", "Sensor", "PortRef", "PneumaticsError",
            "P_ATM", "VALVE_CLASSES", "flow_l_s", "drop_for_flow", "series", "tube_conductance", "required_flow_l_s", "cylinder_forces",
-           "consumption_per_cycle_l", "find_path"]
+           "consumption_per_cycle_l", "find_path", "parts_table"]

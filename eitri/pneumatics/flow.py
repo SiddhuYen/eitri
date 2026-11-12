@@ -15,7 +15,11 @@ for turbulent flow in smooth tube, ESTIMATE), L_eq = the length plus 30 bore dia
 magnitude for an elbow), then C = Se / 5 (the SMC conversion S [mm^2] = 5 C [L/(s·bar)]) and b = 0.5 (typical of tubing, ESTIMATE).
 
 Cylinder force: F = p_gauge [bar] x 0.1 [N/mm^2 per bar] x A [mm^2], x (1 - friction fraction) for the usable force. Free-air
-consumption per stroke: V = A x stroke x (p_abs / P_ATM), ANR (ISO 1217 style free-air basis).
+consumption per stroke: V = A x stroke x (p_abs / P_ATM), ANR (ISO 1217 style free-air basis): the chamber grows from nothing to its
+swept volume at the working pressure. The lines between valve and cylinder have a fixed volume that is vented to atmosphere and
+refilled every stroke, so they take V_line x (p_gauge / P_ATM), not x p_abs / P_ATM (SMC Best Pneumatics technical data, Data 2:
+2 m of 6 mm bore at 0.5 MPa is 0.56 L ANR per cycle for the two lines = 2 x 56.5 cm3 x 0.5 / 0.1013; corrected 2026-11-12, the
+p_abs factor overstated line air by (p + P_ATM) / p, 20 % at 5 bar).
 """
 from __future__ import annotations
 
@@ -27,8 +31,10 @@ LAMBDA_TUBE = 0.025          # ESTIMATE: Darcy friction factor, turbulent flow i
 FITTING_EQ_DIAMETERS = 30.0  # ESTIMATE: equivalent length per fitting, in bore diameters (Crane TP-410 order of magnitude for an elbow)
 S_PER_C = 5.0                # SMC: effective area S [mm^2] = 5 x C [L/(s·bar)]
 TUBE_B = 0.5                 # ESTIMATE: critical pressure ratio of tubing
-# Defaults when a component gives no C, b (reported as estimated). The valve's is a small 5/2 valve of the SMC SY3000 size: SMC's
-# catalog gives C 1.1 dm^3/(s.bar), b 0.28-0.30 (smcworld SY series list; SY3000/5000 datasheet), rounded down to 1.0.
+# Defaults when a component gives no C, b (reported as estimated). The valve's is the smallest body-ported SMC SY3000 5/2 valve:
+# SMC catalogue CAT.EUS11-83 (https://static.smc.eu/pdf/SY_EU.pdf, p.3 Flow characteristics, re-read 2026-11-12), 2 position
+# single, P->A/B: M5 ports C 0.61 b 0.44, C4 C 0.72 b 0.29, C6 C 0.76 b 0.30; the lowest C and the lowest b are used, (0.6, 0.29).
+# (Was 1.0 / 0.30 from the series' cover figure "SY3000 C 1.1", which is the best SY3000 variant, not the body-ported one.)
 # Silencer: SMC AN series (https://content2.smcetech.com/pdf/AN.pdf, re-read 2026-11-07), sonic conductance C [dm3/(s.bar)]
 # AN05-M5 1, AN10-01 2, AN15-02 3, AN20-02 7, AN30-03 12, AN40-04 18: the default is the smallest common one, AN05 (M5), C 1.0
 # (was 3.0, which only AN15 meets). Flow control: SMC AS speed controllers (https://static.smc.eu/pdf/AS_EU.pdf, re-read
@@ -36,7 +42,7 @@ TUBE_B = 0.5                 # ESTIMATE: critical pressure ratio of tubing
 # SMC gives no C, so C = S / 5 (S_PER_C): M5 0.3, 1/8" 0.7, 1/4" 1.4, 3/8" 2.8. The default is the M5 size, C 0.3 (was 0.5).
 # b is not published for either (0.30 stays an ESTIMATE). Regulator / FRL: ESTIMATEs for 1/8" - 1/4" units, no datasheet.
 # Give C (and b) from your part's datasheet, or the size-matched figures in SMC_SILENCER_C / SMC_FLOW_CONTROL_C.
-DEFAULT_C = {"valve": (1.0, 0.30), "regulator": (1.5, 0.35), "frl": (1.5, 0.35), "flow_control": (0.3, 0.30), "silencer": (1.0, 0.30)}
+DEFAULT_C = {"valve": (0.6, 0.29), "regulator": (1.5, 0.35), "frl": (1.5, 0.35), "flow_control": (0.3, 0.30), "silencer": (1.0, 0.30)}
 SMC_SILENCER_C = {"M5": 1.0, "1/8": 2.0, "1/4": 3.0, "3/8": 12.0, "1/2": 18.0}          # AN05, AN10, AN15 (AN20 7), AN30, AN40
 SMC_FLOW_CONTROL_C = {"M5": 0.3, "1/8": 0.7, "1/4": 1.4, "3/8": 2.8, "1/2": 4.8}       # AS1201F ... AS4201F, S / 5
 NPA = 0.1                    # N/mm^2 per bar
@@ -107,6 +113,7 @@ def consumption_per_cycle_l(cyl: Cylinder, p_gauge_bar: float, dead_volume_mm3: 
     """Free air per cycle (L ANR): both strokes' swept volumes (one for a spring return) plus the dead volume of the lines
     between valve and cylinder (filled and vented each stroke), all expanded to atmospheric."""
     ratio = (p_gauge_bar + P_ATM) / P_ATM
+    line_ratio = p_gauge_bar / P_ATM                       # a fixed volume refilled from atmospheric (SMC Data 2), see the docstring
     swept = cyl.area_bore_mm2 * cyl.stroke_mm + (cyl.area_annulus_mm2 * cyl.stroke_mm if cyl.acting == "double" else 0.0)
-    return {"swept_l": swept / 1e6 * ratio, "dead_l": dead_volume_mm3 / 1e6 * ratio, "per_cycle_l": (swept + dead_volume_mm3) / 1e6 * ratio,
-            "per_minute_l": (swept + dead_volume_mm3) / 1e6 * ratio * cyl.cycles_per_min}
+    swept_l, dead_l = swept / 1e6 * ratio, dead_volume_mm3 / 1e6 * line_ratio
+    return {"swept_l": swept_l, "dead_l": dead_l, "per_cycle_l": swept_l + dead_l, "per_minute_l": (swept_l + dead_l) * cyl.cycles_per_min}

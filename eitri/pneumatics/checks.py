@@ -12,6 +12,9 @@
     pressure drop the drop across every tube of a fill path at the required flow: WARN above 0.3 bar or 5 % of the pressure, FAIL
                   when the flow cannot pass at all (choked)
     flow data     one warning naming every component or tube graded with an estimated C, b (conservative defaults)
+    catalogue     from the parts' datasheets (part= or the same figures given by hand): minimum operating pressure of cylinders and
+                  valves, the piston speed range, the end-of-stroke kinetic energy against the cushioning's allowable energy, the
+                  coil voltage against the control voltage, and each position sensor's cylinder (magnetic piston, series) and voltage
 
 Nothing here raises on a bad design: a bad design is a failed check.
 """
@@ -111,7 +114,11 @@ def _comp_step(comp, from_port: str, to_port: str) -> Step | None:
         # bypass direction passes no more than the throttle's own C (was a flat 3.0, more than any M5 to 1/4" AS passes)
         c, b = (comp.C, comp.b) if comp.has_flow_data else DEFAULT_C["flow_control"]
         return Step("component", comp.name, c, b, not comp.has_flow_data, f"free flow {from_port}->{to_port} (bypass check)")
-    if isinstance(comp, (Valve, Regulator, Silencer)):
+    if isinstance(comp, Valve):
+        cb = comp.flow_data(from_port, to_port)
+        c, b = cb if cb is not None else DEFAULT_C["valve"]
+        return Step("component", comp.name, c, b, cb is None, f"{from_port}->{to_port}")
+    if isinstance(comp, (Regulator, Silencer)):
         c, b = (comp.C, comp.b) if comp.has_flow_data else DEFAULT_C[comp.kind]
         return Step("component", comp.name, c, b, not comp.has_flow_data, f"{from_port}->{to_port}")
     return None
@@ -222,13 +229,15 @@ def _pressure_ratings(c: Circuit) -> list[Check]:
     out: list[Check] = []
     sources = [(s, s.pressure_bar) for s in c.supplies] + [(r, r.set_bar) for r in c.components.values() if r.kind in ("regulator", "frl")]
     for src, bar in sources:
-        seen_ports, reached = set(), {}
+        seen_ports, reached, tubes = set(), {}, {}
         todo = [src.port("OUT")]
         while todo:
             ref = todo.pop()
             if ref in seen_ports:
                 continue
             seen_ports.add(ref)
+            for t in c._tubes_at(ref):
+                tubes[t.name] = t
             nxt = [t.b if t.a == ref else t.a for t in c._tubes_at(ref)]
             if ref in c.attached:
                 nxt.append(c.attached[ref])
@@ -242,6 +251,7 @@ def _pressure_ratings(c: Circuit) -> list[Check]:
                                 nxt.append(comp.port(y))
             todo += [n for n in nxt if n not in seen_ports and not (c.components[n.component].kind == "valve" and n.port in EXHAUST_PORTS)]
         rated = [(pressure_rating(comp), comp) for comp in reached.values()]
+        rated = [((t.max_bar, "as given" if not t.part_number else f"{t.part_number} datasheet"), t) for t in tubes.values() if t.max_bar is not None] + rated
         rated = sorted(((r, why, comp) for (r, why), comp in rated if r is not None), key=lambda t: t[0])
         if not rated:
             continue
@@ -454,11 +464,110 @@ def run_checks(c: Circuit) -> tuple[list[Check], list[CylinderInfo], list[Supply
     elif c.tubes:
         checks.append(_check("circuit", "no dead-headed lines", "pass", f"{len(c.tubes)} tube(s), every line leads somewhere"))
     checks += _pressure_ratings(c)
+    checks += _catalog_checks(c, infos)
     if estimated:
         checks.append(_check("flow data", "flow data estimated", "warn",
                              "no C, b from a datasheet for " + ", ".join(f"{k} ({v})" for k, v in list(estimated.items())[:8]) + ("..." if len(estimated) > 8 else "") + ": graded with conservative estimates",
                              "C= and b= from the datasheet on every component and tube", list(estimated)))
     return checks, infos, sinfos
+
+
+def _throttled(path: PathInfo | None) -> bool:
+    return bool(path and path.found and any(s.kind == "component" and "throttle" in s.note for s in path.steps))
+
+
+def _catalog_checks(c: Circuit, infos: list[CylinderInfo]) -> list[Check]:
+    """Checks on figures a part's datasheet gives (catalogue parts, or the same fields given by hand); a check whose figure is not
+    given does not run."""
+    out: list[Check] = []
+    by_name = {i.name: i for i in infos}
+    for cyl in c.cylinders:
+        info = by_name.get(cyl.name)
+        p = info.pressure_bar if info else None
+        src = f" [{cyl.part_number} datasheet]" if cyl.part_number else ""
+        figs = (cyl.catalog or {}).get("figures") or {}
+        for key, stroke in (("force_extend_N", "extend"), ("force_retract_N", "retract")):
+            if key not in figs:
+                continue
+            want, at_bar = figs[key]
+            got = cylinder_forces(cyl, at_bar)[f"{stroke}_theoretical_N"]
+            sev = "pass" if abs(got - want) <= 0.01 * want + 0.5 else "fail"
+            out.append(_check("force", f"datasheet force {cyl.name} {stroke}", sev,
+                              f"eitri computes {got:.1f} N at {at_bar:g} bar; the {cyl.part_number} datasheet prints {want:g} N",
+                              "within 1 % (the bore, rod and force formula agree with the catalogue)", [cyl.name]))
+        if cyl.min_bar is not None and p is not None:
+            sev = "fail" if p < cyl.min_bar else "pass"
+            out.append(_check("pressure", f"minimum pressure {cyl.name}", sev, f"{p:g} bar at the cylinder; it needs at least {cyl.min_bar:g} bar to move{src}",
+                              f">= {cyl.min_bar:g} bar", [cyl.name]))
+        for si in (info.strokes if info else []):
+            v_req = si.speed_required
+            if v_req is not None and (cyl.speed_max_mm_s is not None or cyl.speed_min_mm_s is not None):
+                lo, hi = cyl.speed_min_mm_s, cyl.speed_max_mm_s
+                if hi is not None and v_req > hi:
+                    sev, why = "fail", f"above the {hi:g} mm/s the cylinder is rated for"
+                elif lo is not None and v_req < lo:
+                    sev, why = "warn", f"below the {lo:g} mm/s minimum (stick-slip: a low-speed cylinder runs slower)"
+                else:
+                    sev, why = "pass", "within the catalogue piston speed range"
+                out.append(_check("speed", f"piston speed range {cyl.name} {si.name}", sev, f"{v_req:g} mm/s: {why}{src}",
+                                  f"{lo if lo is not None else 0:g}-{hi if hi is not None else float('inf'):g} mm/s", [cyl.name]))
+            if cyl.allowable_ke_J is not None:
+                name = f"end-of-stroke energy {cyl.name} {si.name}"
+                if cyl.load_mass_kg is None:
+                    out.append(switched_off(_check("cushioning", name, "warn", f"the moving load's mass is not given, so the kinetic energy at the end of "
+                                                   f"the stroke is not graded against the cushioning's {cyl.allowable_ke_J:g} J{src}", "load_mass_kg=", [cyl.name]),
+                                            f"{cyl.name}.load_mass_kg"))
+                    continue
+                throttled = _throttled(si.exhaust) or _throttled(si.fill)
+                if v_req is not None and throttled:
+                    v, how = v_req, "the required speed (a speed controller on the stroke is set to it)"
+                elif si.speed_available is not None:
+                    v, how = max(si.speed_available, v_req or 0.0), "what the open paths pass (no speed controller limits this stroke)"
+                elif v_req is not None:
+                    v, how = v_req, "the required speed"
+                else:
+                    out.append(switched_off(_check("cushioning", name, "warn", "no speed is given for the stroke, so its kinetic energy is not graded",
+                                                   "speed_mm_s=", [cyl.name]), f"{cyl.name}.speed_mm_s"))
+                    continue
+                m = cyl.load_mass_kg + (cyl.piston_mass_kg or 0.0)
+                e = 0.5 * m * (v / 1000.0) ** 2
+                sev = level(e, cyl.allowable_ke_J, 0.8)
+                out.append(_check("cushioning", name, sev,
+                                  f"{e:.3f} J = 1/2 x {m:.3f} kg x ({v:.0f} mm/s)^2, at {how}; the cushioning absorbs {cyl.allowable_ke_J:g} J{src} "
+                                  "[SMC: E = 1/2 m V^2, V the max piston speed]",
+                                  f"<= {cyl.allowable_ke_J:g} J (a slower stroke, a speed controller, a bigger bore or an external stop)", [cyl.name]))
+    for v in [x for x in c.components.values() if isinstance(x, Valve)]:
+        src = f" [{v.part_number} datasheet]" if v.part_number else ""
+        if v.min_bar is not None:
+            path = find_path(c, v.port("P"), "supply")
+            if path.found and path.pressure_bar is not None:
+                sev = "fail" if path.pressure_bar < v.min_bar else "pass"
+                out.append(_check("pressure", f"minimum pressure {v.name}", sev, f"{path.pressure_bar:g} bar at P; the internal pilot needs at least {v.min_bar:g} bar to shift{src}",
+                                  f">= {v.min_bar:g} bar", [v.name]))
+        if v.coils and v.coil_V is not None and c.control_V is not None:
+            sev = "pass" if abs(v.coil_V - c.control_V) < 1e-6 else "fail"
+            out.append(_check("electrical", f"coil voltage {v.name}", sev, f"{v.coil_V:g} V DC coil on the {c.control_V:g} V DC control supply{src}",
+                              f"{c.control_V:g} V coil", [v.name]))
+    for s in c.sensors.values():
+        cyl = c.components.get(s.cylinder)
+        src = f" [{s.part_number} datasheet]" if s.part_number else ""
+        if isinstance(cyl, Cylinder):
+            if cyl.magnet is False:
+                out.append(_check("sensors", f"sensor {s.name} target", "fail", f"{cyl.name} ({cyl.part_number or 'cylinder'}) has no magnetic piston: {s.name} cannot see it",
+                                  "a cylinder with a built-in magnet (SMC CDQ2..., Festo ...-A)", [cyl.name]))
+            elif cyl.magnet is None:
+                out.append(_check("sensors", f"sensor {s.name} target", "warn", f"{cyl.name} does not say whether its piston is magnetic", "magnet=True from the datasheet", [cyl.name]))
+            else:
+                ok = not s.fits or any(f.upper() in (cyl.part_number or "").upper() for f in s.fits)
+                out.append(_check("sensors", f"sensor {s.name} target", "pass" if ok else "warn",
+                                  f"{s.part_number or s.name} on {cyl.name} ({cyl.part_number or 'magnetic piston'}), {s.position}" + ("" if ok else f"; the sensor is listed for {', '.join(s.fits)} cylinders: check its mounting"),
+                                  "", [cyl.name]))
+        if c.control_V is not None and (s.V_min is not None or s.V_max is not None):
+            lo, hi = s.V_min or 0.0, s.V_max if s.V_max is not None else float("inf")
+            sev = "pass" if lo <= c.control_V <= hi else "fail"
+            out.append(_check("electrical", f"sensor {s.name} voltage", sev, f"{c.control_V:g} V DC control supply; the sensor runs on {lo:g}-{hi:g} V{src}",
+                              f"{lo:g}-{hi:g} V", [s.cylinder]))
+    return out
 
 
 def _nets(c: Circuit):
