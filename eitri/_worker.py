@@ -107,6 +107,7 @@ class Worker:
 
     def _start(self) -> None:
         env = dict(os.environ)
+        env["EITRI_AGENT_PROCESS"] = "1"        # model code is never a person (eitri.tickets.require_person)
         env.setdefault("PYTHONUNBUFFERED", "1")
         self.proc = subprocess.Popen([sys.executable, "-m", "eitri._worker"], stdin=subprocess.PIPE,
                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", bufsize=1, env=env)

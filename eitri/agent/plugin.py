@@ -318,7 +318,7 @@ def _viewer_port() -> int:
 
 def with_status(session: PluginSession, res: ToolResult) -> ToolResult:
     """A tool result with the project status appended (after builds and edits)."""
-    if session.project is None:
+    if session.project is None or res.refused:         # a ticket-gate refusal goes back as it is (an error)
         return res
     return ToolResult(res.text + "\n\n" + session.status_text(), res.images, res.is_error)
 

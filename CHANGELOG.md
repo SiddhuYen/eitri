@@ -71,6 +71,25 @@ is used (the lower for a limit, the higher for a draw).
   M1.6-M30), from the Albany County Fasteners chart labelled ISO 273 (c) 2025; Optimas's chart agrees up to M10 and
   gives larger M12-M16 holes without claiming ISO 273. `screw_clearance()` already matched it.
 
+- **Tickets and change packages** (`docs/tickets.md`). `eitri ticket new|show|list|plan|approve|waive|close` and
+  `eitri package` open a ticket, take a plan and produce a change package. The agent gets the tools `ticket_new`,
+  `ticket_show`, `ticket_list`, `ticket_plan` and `package`; none of them can approve, waive or close.
+  - **Plan gate.** While the project's active ticket has no approved plan, the model cannot be written, built or
+    restored.
+  - **Person-only actions.** Only a person approves, waives or closes, in their own terminal with a one-time code. These
+    actions refuse inside agent processes. Each approval is signed with a key kept outside the project, and editing the
+    ticket voids it.
+  - **The package.** It rebuilds the base and the result from scratch and contains:
+    - `package.json` (schema `eitri.package/1`);
+    - the report as Markdown and as self-contained HTML;
+    - the before/after check table with each check's source;
+    - parameter, parts/BOM and source diffs;
+    - Rev B's outputs (STEP/STL/3MF and the drawing for CAD);
+    - the revision table and a "Not checked" section;
+    - a draft change order.
+  - **Refusals.** No package when any check fails or did not run. A person may waive a check that did not run, with a
+    reason printed on page one; a failed check can never be waived.
+  - **New dependency:** PyYAML.
 - **Electronics**: `c.battery(name, chemistry, cells)` and `v_max=` on a supply. A battery straight on VIN is
   graded at its full charge (a 12 V lead-acid on charge, 14.5 V, fails an Uno's 7-12 V); a battery on a board's 5V
   pin fails. A MOSFET gate driven from an Uno or Nano pin with no pull-down is a warning (the pin floats through reset).
