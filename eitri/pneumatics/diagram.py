@@ -83,19 +83,8 @@ def _ports(comp, cx: float, cy: float) -> dict[str, tuple[float, float, str]]:
     if k == "valve":
         n = len(comp.positions)
         box = VBOX
-        x0 = cx - n * box / 2 + comp.rest_position * box        # the rest position's box carries the ports
-        out = {"P": (x0 + box / 2, cy + h / 2, "down")}
-        if "A" in comp.ports:
-            out["A"] = (x0 + box * 0.25, cy - h / 2, "up")
-        if "B" in comp.ports:
-            out["B"] = (x0 + box * 0.75, cy - h / 2, "up")
-        if "R" in comp.ports:
-            out["R"] = (x0 + box * 0.2, cy + h / 2, "down")
-        if "S" in comp.ports:
-            out["S"] = (x0 + box * 0.8, cy + h / 2, "down")
-        if comp.cls == "3/2":
-            out["A"] = (x0 + box / 2, cy - h / 2, "up")
-        return out
+        x0 = cx - n * box / 2 + display_index(comp, comp.rest_position) * box     # the rest position's box carries the ports
+        return {p: (x0 + box * fx, cy + (h / 2 if fy > 0 else -h / 2), "down" if fy > 0 else "up") for p, (fx, fy) in _port_spots(comp).items()}
     if k in ("frl", "regulator"):
         return {"IN": (cx - w / 2, cy, "left"), "OUT": (cx + w / 2, cy, "right")}
     if k == "supply":
@@ -105,8 +94,32 @@ def _ports(comp, cx: float, cy: float) -> dict[str, tuple[float, float, str]]:
     if k == "silencer":
         return {"IN": (cx, cy - h / 2, "up")}
     if k == "manifold":
-        return {"P": (cx, cy + h / 2, "down"), "R": (cx - w / 2 + 16, cy + h / 2, "down"), "S": (cx + w / 2 - 16, cy + h / 2, "down")}
+        return {"1": (cx, cy + h / 2, "down"), "5": (cx - w / 2 + 16, cy + h / 2, "down"), "3": (cx + w / 2 - 16, cy + h / 2, "down")}
     return {"N": (cx, cy, "up")}
+
+
+def _port_spots(comp) -> dict[str, tuple[float, float]]:
+    """Where each ISO 5599 port sits on a valve box, as a fraction of the box width and top (-1) / bottom (+1), laid out as the makers
+    draw them (SMC SY_EU.pdf PDF p.14; Festo VUVG catalogue p.12): 4 and 2 on top (4 left), 5, 1, 3 underneath (5 left)."""
+    if comp.cls in ("2/2", "3/2"):
+        spots = {"1": (0.5, 1), "2": (0.5, -1), "3": (0.8, 1)}
+    else:
+        spots = {"1": (0.5, 1), "4": (0.25, -1), "2": (0.75, -1), "5": (0.2, 1), "3": (0.8, 1)}
+    return {p: v for p, v in spots.items() if p in comp.ports}
+
+
+def display_index(comp, position: int) -> int:
+    """The box a valve position is drawn in, counted from the left. ISO 1219 draws each actuator beside the box it switches the
+    valve to: the coil 14 (eitri draws it on the left) beside the 1-4 box, the spring / coil 12 (right) beside the 1-2 box. eitri's
+    positions run [rest / 12 side, (centre), 14 side], so they are drawn right to left."""
+    return len(comp.positions) - 1 - position
+
+
+def port_label(comp, p: str) -> str:
+    """A port's label: its ISO number, with the maker's own letter after it when the catalogue part has one (SMC: "4(A)")."""
+    letters = ((getattr(comp, "catalog", None) or {}).get("info") or {}).get("letters") or {}
+    inv = {v: k for k, v in letters.items()}
+    return f"{p}({inv[p]})" if p in inv else p
 
 
 def _route(p1, p2) -> list[tuple[float, float]]:
@@ -217,7 +230,7 @@ def build_scene(c: Circuit, rep=None, status: dict[str, str] | None = None, foot
     for port, sref in c.attached.items():
         if port in ports:
             x, y, _d = ports[port]
-            off = -12.0 if port.port == "R" else 12.0 if port.port == "S" else 0.0      # exhausts either side of P: room for its tube
+            off = -12.0 if port.port == "5" else 12.0 if port.port == "3" else 0.0      # exhausts either side of 1: room for its tube
             sx, sy = x + off, y + 14 + _size(c.components[sref.component])[1] / 2
             pos[sref.component] = (sx, sy)
             leaders.append((sref.component, [(x, y), (x, y + 6), (sx, y + 6), (sx, y + 14)] if off else [(x, y), (x, y + 14)]))
@@ -241,7 +254,7 @@ def build_scene(c: Circuit, rep=None, status: dict[str, str] | None = None, foot
             continue
         mx, my = pos[mname]
         top = my - _size(c.components[mname])[1] / 2
-        for p in ("P", "R", "S"):
+        for p in ("1", "3", "5"):
             ref = PortRef(vname, p)
             if ref in ports:
                 x, y, _d = ports[ref]
@@ -281,7 +294,7 @@ def build_scene(c: Circuit, rep=None, status: dict[str, str] | None = None, foot
         comp = c.components[ref.component]
         if comp.kind == "node":
             d = node_side.get((tube, comp.name), d)
-        stub = 34.0 if (comp.kind == "valve" and ref.port == "P" and ref.component in silenced) else 10.0 if comp.kind == "node" else 14.0
+        stub = 34.0 if (comp.kind == "valve" and ref.port == "1" and ref.component in silenced) else 10.0 if comp.kind == "node" else 14.0
         return (x, y, d, stub)
 
     for t in order:
@@ -336,8 +349,9 @@ def build_scene(c: Circuit, rep=None, status: dict[str, str] | None = None, foot
         for p, (px, py, _d) in _ports(comp, cx, cy).items():
             if comp.kind in ("node", "silencer"):
                 continue
-            items.append({"t": "text", "x": px, "y": py, "s": p, "size": FONT - 4, "fill": MUTED, "anchor": "middle", "g": g, "cls": "port",
-                          "cands": _port_cands(px, py, _d, p)})
+            lab = port_label(comp, p) if comp.kind in ("valve", "manifold") else p
+            items.append({"t": "text", "x": px, "y": py, "s": lab, "size": FONT - 4, "fill": MUTED, "anchor": "middle", "g": g, "cls": "port",
+                          "cands": _port_cands(px, py, _d, lab)})
     if decorate is not None:
         decorate(sc, pos)
     place_labels(sc)
@@ -375,9 +389,9 @@ def _beside(pts, label: str, size: float) -> list[tuple[float, float, str]]:
 def _port_cands(px: float, py: float, d: str, name: str = "") -> list[tuple[float, float, str]]:
     """A port's name beside the point where its tube enters: off the tube's line, toward the outside of the symbol (a valve's
     exhausts R and S outward, past their silencers)."""
-    if d == "down" and name == "R":
+    if d == "down" and name.startswith("5"):
         return [(px - 22, py + 20, "end"), (px - 22, py + 30, "end"), (px - 5, py + 11, "end")]
-    if d == "down" and name == "S":
+    if d == "down" and name.startswith("3"):
         return [(px + 22, py + 20, "start"), (px + 22, py + 30, "start"), (px + 5, py + 11, "start")]
     if d == "down":
         return [(px - 5, py + 11, "end"), (px + 5, py + 11, "start"), (px - 5, py + 20, "end"), (px + 5, py + 20, "start"),
@@ -461,11 +475,9 @@ def _symbol(items, comp, cx, cy, w, h, col, g) -> None:
         bw = VBOX
         x0 = cx - n * bw / 2
         for i, pos in enumerate(comp.positions):
-            bx = x0 + i * bw
+            bx = x0 + display_index(comp, i) * bw
             box(bx, cy - h / 2, bw, h)
-            at = {"P": (bx + bw / 2, cy + h / 2 - 3), "A": (bx + bw * 0.25, cy - h / 2 + 3), "B": (bx + bw * 0.75, cy - h / 2 + 3), "R": (bx + bw * 0.2, cy + h / 2 - 3), "S": (bx + bw * 0.8, cy + h / 2 - 3)}
-            if comp.cls == "3/2":
-                at["A"] = (bx + bw / 2, cy - h / 2 + 3)
+            at = {p: (bx + bw * fx, cy + (h / 2 - 3 if fy > 0 else -h / 2 + 3)) for p, (fx, fy) in _port_spots(comp).items()}
             used = set()
             for a, b in pos:
                 if a in at and b in at:

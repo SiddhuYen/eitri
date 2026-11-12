@@ -51,17 +51,18 @@ def build(p):
     fc = {k: c.flow_control(k, meter="out", part="SMC AS2201F-01-06") for k in ("FC1A", "FC1B", "FC2A", "FC2B")}
 
     c.tube("T0", air["OUT"], frl["IN"], id_mm=6.5, length_m=3.0, part_number="SMC TU1065")    # 10 x 6.5 drop from the shop main
-    c.tube("T1", frl["OUT"], m1["P"], part="SMC TU0604", length_m=0.5)
-    c.tube("T4", v1["A"], fc["FC1B"]["A"], part="SMC TU0604", length_m=1.2)      # V1 position 1 (rest) feeds A: the pusher's ROD side
+    c.tube("T1", frl["OUT"], m1["1"], part="SMC TU0604", length_m=0.5)
+    # valve ports by ISO 5599 number (SMC marks 4 "A", 2 "B"): at rest the spring connects 1-2, coil 14 connects 1-4
+    c.tube("T4", v1["2"], fc["FC1B"]["A"], part="SMC TU0604", length_m=1.2)      # V1 port 2 (B), fed at rest: the pusher's ROD side
     c.screw_in(fc["FC1B"]["B"], c1["ROD"], name="J5")
-    c.tube("T6", v1["B"], fc["FC1A"]["A"], part="SMC TU0604", length_m=1.2)
+    c.tube("T6", v1["4"], fc["FC1A"]["A"], part="SMC TU0604", length_m=1.2)      # V1 port 4 (A), fed by coil 14 PUSHER_EXTEND: CAP
     c.screw_in(fc["FC1A"]["B"], c1["CAP"], name="J7")
-    c.tube("T8", v2["A"], fc["FC2B"]["A"], part="SMC TU0604", length_m=1.0)
+    c.tube("T8", v2["2"], fc["FC2B"]["A"], part="SMC TU0604", length_m=1.0)      # V2 port 2 (B), coil 12 CLAMP_OPEN: ROD
     c.screw_in(fc["FC2B"]["B"], c2["ROD"], name="J9")
-    c.tube("T10", v2["B"], fc["FC2A"]["A"], part="SMC TU0604", length_m=1.0)
+    c.tube("T10", v2["4"], fc["FC2A"]["A"], part="SMC TU0604", length_m=1.0)     # V2 port 4 (A), coil 14 CLAMP_CLOSE: CAP
     c.screw_in(fc["FC2A"]["B"], c2["CAP"], name="J11")
-    c.silencer(m1["R"], part="SMC AN10-01")
-    c.silencer(m1["S"], part="SMC AN10-01")
+    c.silencer(m1["3"], part="SMC AN10-01")
+    c.silencer(m1["5"], part="SMC AN10-01")
 
     c.sensor("B1", c1, "retracted", part="FESTO SMT-8M-A-PS-24V-E-0,3-M8D", signal="PUSHER_HOME")
     c.sensor("B2", c1, "extended", part="FESTO SMT-8M-A-PS-24V-E-0,3-M8D", signal="PART_AT_STOP")

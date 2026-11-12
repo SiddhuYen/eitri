@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 
 from ..checks import Check, check as _check, level, switched_off
 from .flow import DEFAULT_C, consumption_per_cycle_l, cylinder_forces, drop_for_flow, flow_l_s, required_flow_l_s, series, tube_data
-from .model import Manifold, EXHAUST_PORTS, LOAD_RATIOS, pressure_rating, P_ATM, Circuit, Cylinder, FlowControl, Node, PortRef, Regulator, Silencer, Supply, Tube, Valve
+from .model import Manifold, SUPPLY_PORT, WORK_PORTS, EXHAUST_PORTS, LOAD_RATIOS, pressure_rating, P_ATM, Circuit, Cylinder, FlowControl, Node, PortRef, Regulator, Silencer, Supply, Tube, Valve
 
 # The speed at the end of the stroke is higher than the mean speed (stroke / stroke time) a speed controller is set to. SMC Shock
 # Absorber Series RB catalogue (https://static.smc.eu/pdf/RB_EU.pdf, p.5 Model Selection, Note 1, fetched 2026-11-12): "The collision
@@ -297,7 +297,7 @@ def run_checks(c: Circuit) -> tuple[list[Check], list[CylinderInfo], list[Supply
                 checks.append(_check("circuit", f"{cyl.name}.CAP and {cyl.name}.ROD on separate lines", "fail",
                                      f"{cyl.name}'s CAP and ROD ports are on one line (joined by tubes" + (" and a tee" if any(x.kind == "node" for x in c.components.values()) else "")
                                      + "): both chambers always see the same pressure, so the piston cannot be driven either way",
-                                     "each port on its own line, each to its own valve port (A and B of a 5/2)", [cyl.name]))
+                                     "each port on its own line, each to its own valve working port (2 and 4 of a 5/2)", [cyl.name]))
             else:
                 checks.append(_check("circuit", f"{cyl.name}.CAP and {cyl.name}.ROD on separate lines", "pass",
                                      "the two chambers are fed by different lines", "", [cyl.name]))
@@ -328,7 +328,7 @@ def run_checks(c: Circuit) -> tuple[list[Check], list[CylinderInfo], list[Supply
                 bare = [str(v.port(e)) for v in c.components.values() if v.kind == "valve" for e in EXHAUST_PORTS if e in v.ports
                         and v.port(e) not in c.attached and v.port(e) not in c.vents and not c._tubes_at(v.port(e)) and v.name not in c.mounts]
                 why = (f"; {', '.join(bare)} {'has' if len(bare) == 1 else 'have'} nothing on {'it' if len(bare) == 1 else 'them'}, and an "
-                       "undeclared exhaust port counts as plugged: c.silencer(v[\"R\"]) or c.exhaust(v[\"R\"])") if bare else ""
+                       "undeclared exhaust port counts as plugged: c.silencer(v[\"3\"]) or c.exhaust(v[\"3\"])") if bare else ""
                 checks.append(_check("circuit", f"{cyl.name}.{port} can exhaust", "fail", f"{ref} cannot vent in any valve position: the chamber is dead-headed{why}",
                                      "a valve position joining the port to an exhaust", [cyl.name]))
         p_cyl = next((f.pressure_bar for f in fed.values() if f.found and f.pressure_bar is not None), None)
@@ -450,14 +450,14 @@ def run_checks(c: Circuit) -> tuple[list[Check], list[CylinderInfo], list[Supply
         for port in v.ports:
             ref = v.port(port)
             has = bool(c.connections_at(ref)) or ref in c.vents
-            if port == "P" and not has:
-                bad.append("P (supply) is unconnected")
-            elif port in ("A", "B") and not has:
+            if port == SUPPLY_PORT and not has:
+                bad.append("1 (supply) is unconnected")
+            elif port in WORK_PORTS and not has:
                 bad.append(f"work port {port} is unconnected (it would blow air)")
         if bad:
-            checks.append(_check("circuit", f"valve {v.name} ports", "fail", "; ".join(bad), "P supplied, every work port connected", [v.name]))
+            checks.append(_check("circuit", f"valve {v.name} ports", "fail", "; ".join(bad), "1 supplied, every working port (2, 4) connected", [v.name]))
         else:
-            checks.append(_check("circuit", f"valve {v.name} ports", "pass", f"{v.cls} {v.actuation}/{v.returns}: P, {', '.join(p for p in v.ports if p in ('A', 'B'))} connected" + (", exhausts " + ", ".join(p for p in v.ports if p in EXHAUST_PORTS) if any(p in EXHAUST_PORTS for p in v.ports) else ""), "", [v.name]))
+            checks.append(_check("circuit", f"valve {v.name} ports", "pass", f"{v.cls} {v.actuation}/{v.returns}: 1, {', '.join(p for p in v.ports if p in WORK_PORTS)} connected" + (", exhausts " + ", ".join(p for p in v.ports if p in EXHAUST_PORTS) if any(p in EXHAUST_PORTS for p in v.ports) else ""), "", [v.name]))
     # dead-headed lines
     dead = []
     for comp in c.components.values():
@@ -557,7 +557,7 @@ def _catalog_checks(c: Circuit, infos: list[CylinderInfo]) -> list[Check]:
     for v in [x for x in c.components.values() if isinstance(x, Valve)]:
         src = f" [{v.part_number} datasheet]" if v.part_number else ""
         if v.min_bar is not None:
-            path = find_path(c, v.port("P"), "supply")
+            path = find_path(c, v.port(SUPPLY_PORT), "supply")
             if path.found and path.pressure_bar is not None:
                 sev = "fail" if path.pressure_bar < v.min_bar else "pass"
                 out.append(_check("pressure", f"minimum pressure {v.name}", sev, f"{path.pressure_bar:g} bar at P; the internal pilot needs at least {v.min_bar:g} bar to shift{src}",
@@ -631,10 +631,10 @@ def _manifold_checks(c: Circuit, infos: list[CylinderInfo]) -> list[Check]:
             continue
         groups, how = simultaneous_groups(c)
         q, worst = max(((sum(demand_by_cyl.get(n, 0.0) for n in g), g) for g in groups), key=lambda t: t[0])
-        path = find_path(c, m.port("P"), "supply")
+        path = find_path(c, m.port(SUPPLY_PORT), "supply")
         cname = f"manifold {m.name} common supply"
         if not path.found or path.pressure_bar is None:
-            out.append(_check("manifold", cname, "fail", f"{m.name}.P is not fed from a supply", "a tube from the air preparation to the manifold's P", [m.name]))
+            out.append(_check("manifold", cname, "fail", f"{m.name}.P is not fed from a supply", "a tube from the air preparation to the manifold's 1", [m.name]))
             continue
         p1 = path.pressure_bar + P_ATM
         dp = drop_for_flow(path.C_eff, path.b_eff, p1, q) if q > 0 else 0.0

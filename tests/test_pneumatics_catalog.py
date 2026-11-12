@@ -29,18 +29,18 @@ def station(set_bar=6.0, valve="SMC SY3120-5LZ-C6", cyl="SMC CDQ2B32-20DZ", fc=T
     v = c.valve("V1", part=valve)
     cy = c.cylinder("C1", part=cyl, load_N=100, speed_mm_s=speed, load_mass_kg=mass, cycles_per_min=6, duty="static")
     c.tube("T1", air["OUT"], reg["IN"], id_mm=6, length_m=1)
-    c.tube("T2", reg["OUT"], v["P"], part=tube, length_m=0.5)
+    c.tube("T2", reg["OUT"], v["1"], part=tube, length_m=0.5)
     if fc:
         f1, f2 = c.flow_control("FC1", part="SMC AS2201F-01-06"), c.flow_control("FC2", part="SMC AS2201F-01-06")
-        c.tube("T3", v["A"], f1["A"], part=tube, length_m=1)
+        c.tube("T3", v["2"], f1["A"], part=tube, length_m=1)
         c.tube("T4", f1["B"], cy["ROD"], part=tube, length_m=0.05)
-        c.tube("T5", v["B"], f2["A"], part=tube, length_m=1)
+        c.tube("T5", v["4"], f2["A"], part=tube, length_m=1)
         c.tube("T6", f2["B"], cy["CAP"], part=tube, length_m=0.05)
     else:
-        c.tube("T3", v["A"], cy["ROD"], part=tube, length_m=1)
-        c.tube("T5", v["B"], cy["CAP"], part=tube, length_m=1)
-    c.silencer(v["R"], part="SMC AN05-M5")
-    c.silencer(v["S"], part="SMC AN05-M5")
+        c.tube("T3", v["2"], cy["ROD"], part=tube, length_m=1)
+        c.tube("T5", v["4"], cy["CAP"], part=tube, length_m=1)
+    c.silencer(v["3"], part="SMC AN05-M5")
+    c.silencer(v["5"], part="SMC AN05-M5")
     return c
 
 
@@ -224,12 +224,12 @@ def _two_valve_circuit(cls="5/2", returns="spring", center="closed", acting="dou
     air = c.supply("AIR", pressure_bar=6, flow_l_min=100)
     v = c.valve("V1", cls, returns=returns, center=center, C=1, b=0.3)
     cy = c.cylinder("C1", 32, 12, 50, acting=acting, spring_N=40 if acting == "single" else None, **cyl)
-    c.tube("T1", air["OUT"], v["P"])
-    c.tube("T2", v["A"], cy["CAP"])
+    c.tube("T1", air["OUT"], v["1"])
+    c.tube("T2", v["2"], cy["CAP"])
     if acting == "double":
-        c.tube("T3", v["B"], cy["ROD"])
-        c.silencer(v["S"])
-    c.silencer(v["R"])
+        c.tube("T3", v["4"], cy["ROD"])
+        c.silencer(v["5"])
+    c.silencer(v["3"])
     return c
 
 
@@ -276,7 +276,7 @@ def test_device_tags_follow_the_festo_en81346_codes():
     assert tg["C1"] == "-MM1" and tg["C2"] == "-MM2" and tg["V1"] == "-QM1" and tg["V2"] == "-QM2"
     assert tg["FRL"] == "-AZ1" and tg["M1"] == "-XM1" and {tg[k] for k in ("FC1A", "FC1B")} == {"-RZ1", "-RZ2"}
     assert [tg[s] for s in ("B1", "B2", "B3", "B4")] == ["-BG1", "-BG2", "-BG3", "-BG4"]      # retracted before extended
-    assert tg["S_M1_R"] == "-XM1:R"
+    assert tg["S_M1_3"] == "-XM1:3"
     every = [n for n, comp in c.components.items() if comp.kind != "supply"] + list(c.sensors)
     assert all(n in tg for n in every) and len(set(tg.values())) == len(tg)
 
@@ -309,16 +309,16 @@ def manifold_station(stations=4, valves=2, sup_id=6.0, sup_len=0.5, speed=200.0,
     reg = c.regulator("REG", set_bar=6.0, C=2.0, b=0.35)
     m = c.manifold("M1", part=f"SMC SS5Y3-20-{stations:02d}-Q")
     c.tube("T0", air["OUT"], reg["IN"], id_mm=6, length_m=1)
-    c.tube("T1", reg["OUT"], m["P"], id_mm=sup_id, length_m=sup_len)
-    c.silencer(m["R"], part="SMC AN10-01")
-    c.silencer(m["S"], part="SMC AN10-01")
+    c.tube("T1", reg["OUT"], m["1"], id_mm=sup_id, length_m=sup_len)
+    c.silencer(m["3"], part="SMC AN10-01")
+    c.silencer(m["5"], part="SMC AN10-01")
     for i in range(1, valves + 1):
         v = c.valve(f"V{i}", part="SMC SY3120-5LZ-C6", signal=f"Y{i}_EXTEND")
         c.mount(v, m)
         cy = c.cylinder(f"C{i}", part=bore_part, load_N=100, speed_mm_s=speed, cycles_per_min=6, duty="static", load_mass_kg=0.1,
                         on_power_loss="retract", on_air_loss="release")         # a light pad: unthrottled, 1/2 x 0.1 x 1.4^2 < 0.29 J
-        c.tube(f"TA{i}", v["A"], cy["ROD"], part="SMC TU0604", length_m=1)
-        c.tube(f"TB{i}", v["B"], cy["CAP"], part="SMC TU0604", length_m=1)
+        c.tube(f"TA{i}", v["2"], cy["ROD"], part="SMC TU0604", length_m=1)
+        c.tube(f"TB{i}", v["4"], cy["CAP"], part="SMC TU0604", length_m=1)
     return c
 
 
@@ -337,7 +337,7 @@ def test_manifold_part_and_mount():
         c.mount(c.valve("V8", part="SMC SY3120-5LZ-C6"), m, station=1)
     with pytest.raises(catalog.CatalogError, match="stations"):
         catalog.lookup("manifold", "SS5Y3-20-21")
-    assert catalog.lookup("manifold", "SS5Y3-20-0500F")[0]["connections"]["P"] == "G1/8"
+    assert catalog.lookup("manifold", "SS5Y3-20-0500F")[0]["connections"]["1"] == "G1/8"
 
 
 def test_manifold_circuit_feeds_and_exhausts_through_the_gallery():
@@ -347,7 +347,7 @@ def test_manifold_circuit_feeds_and_exhausts_through_the_gallery():
     assert fed.severity == "pass" and "T1 -> V1" in fed.measured           # T1 feeds the manifold's P; the gallery feeds V1 (no step of its own:
                                                                              # the manifold's C, b replace the valve's)
     ex = one(rep, "C1.ROD can exhaust")
-    assert "S_M1_R" in ex.measured or "S_M1_S" in ex.measured
+    assert "S_M1_3" in ex.measured or "S_M1_5" in ex.measured
     assert one(rep, "pressure ratings downstream of REG").severity == "pass" and "V" in one(rep, "pressure ratings downstream of REG").measured
 
 
@@ -388,7 +388,7 @@ def test_manifold_drawing_and_tags(tmp_path):
     from eitri.pneumatics.drawing import tags, write_drawing
     c = manifold_station(valves=2)
     tg = tags(c)
-    assert tg["M1"].startswith("-XM") and tg["S_M1_R"].endswith(":R")
+    assert tg["M1"].startswith("-XM") and tg["S_M1_3"] == tg["M1"] + ":3"
     paths = write_drawing(c, analyze(c), tmp_path, "m")
     svg = Path(paths["drawing_svg"]).read_text()
     assert "SS5Y3-20-04-Q" in svg and "manifold" in svg
@@ -554,3 +554,89 @@ def test_regulator_setting_against_its_regulation_range():
     f.set_bar = 8.0                                                        # MS4-LFR-...-D6: regulates 0.3-7 bar
     bad = one(analyze(c2), "regulator FRL setting")
     assert bad.severity == "fail" and "0.3-7 bar" in bad.measured and bad.rule == "pneumatics.regulator-setting"
+
+
+# ---------------------------------------------------------------------------- ISO 5599 port numbers (SMC SY_EU.pdf PDF p.14; Festo VUVG p.12)
+
+
+def _plumbed(valve_kw, cap_port, part=None):
+    """One cylinder on one valve: valve port `cap_port` to the cap end, the other working port to the rod end."""
+    c = Circuit("ports")
+    air = c.supply("AIR", pressure_bar=6, flow_l_min=100)
+    v = c.valve("V1", part=part, **valve_kw) if part else c.valve("V1", C=1, b=0.3, **valve_kw)
+    cy = c.cylinder("C1", 32, 12, 50)
+    rod_port = {"4": "2", "2": "4", "A": "B", "B": "A"}[cap_port]
+    c.tube("T1", air["OUT"], v["1"])
+    c.tube("T2", v[cap_port], cy["CAP"])
+    c.tube("T3", v[rod_port], cy["ROD"])
+    c.silencer(v["3"])
+    c.silencer(v["5"])
+    return c
+
+
+def test_rest_position_is_1_to_2_and_coil_14_is_1_to_4():
+    # the regression: a spring-return 5/2 rests with 1-2 and 4-5 (3 blocked); coil 14 gives 1-4 and 2-3
+    for v in (Circuit().valve("V", "5/2"), Circuit().valve("V", part="SMC SY3120-5LZ-C6"), Circuit().valve("V", part="SMC SY5120-5LZ-01")):
+        assert sorted(v.positions[v.rest_position]) == [("1", "2"), ("4", "5")], v.part_number
+        assert sorted(v.positions[1 - v.rest_position]) == [("1", "4"), ("2", "3")], v.part_number
+        assert v.coils[0][0] == "14"
+    five3 = {c: Circuit().valve("V", "5/3", center=c) for c in ("closed", "exhaust", "pressure")}
+    assert five3["closed"].positions[1] == [] and sorted(five3["exhaust"].positions[1]) == [("2", "3"), ("4", "5")]
+    assert sorted(five3["pressure"].positions[1]) == [("1", "2"), ("1", "4")]
+    assert sorted(five3["closed"].positions[-1]) == [("1", "4"), ("2", "3")] and sorted(five3["closed"].positions[0]) == [("1", "2"), ("4", "5")]
+
+
+def test_smc_letters_are_smcs_and_generic_letters_are_refused():
+    v = Circuit().valve("V", part="SMC SY3120-5LZ-C6")
+    assert (v["A"].port, v["B"].port, v["P"].port, v["EA"].port, v["EB"].port) == ("4", "2", "1", "5", "3")   # SY_EU p.14 "4 (A) 2 (B)"
+    with pytest.raises(PneumaticsError, match="ambiguous"):
+        v["R"]
+    with pytest.raises(PneumaticsError, match="SMC: A = 4"):
+        Circuit().valve("G")["A"]
+    m = Circuit().manifold("M", part="SMC SS5Y3-20-02-Q")
+    assert (m["P"].port, m["EA"].port, m["EB"].port) == ("1", "5", "3")
+
+
+CASES = [  # valve, port on the cap end, (state on loss of power, on loss of air)
+    (dict(cls="5/2", returns="spring"), "4", ("retract", "release")),       # rest 1-2: the rod end is fed
+    (dict(cls="5/2", returns="spring"), "2", ("extend", "release")),
+    (dict(cls="5/2", returns="solenoid"), "4", ("hold", "release")),
+    (dict(cls="5/2", returns="solenoid"), "2", ("hold", "release")),
+    (dict(cls="5/3", center="closed"), "4", ("trapped", "trapped")),
+    (dict(cls="5/3", center="closed"), "2", ("trapped", "trapped")),
+    (dict(cls="5/3", center="exhaust"), "4", ("release", "release")),
+    (dict(cls="5/3", center="exhaust"), "2", ("release", "release")),
+    (dict(cls="5/3", center="pressure"), "4", ("extend", "release")),       # both ends fed: the larger cap area wins
+    (dict(cls="5/3", center="pressure"), "2", ("extend", "release")),
+]
+
+
+@pytest.mark.parametrize("valve,cap,want", CASES, ids=[f"{v.get('cls')}-{v.get('returns', v.get('center'))}-{cap}cap" for v, cap, _w in CASES])
+def test_failsafe_by_valve_type_and_plumbing(valve, cap, want):
+    from eitri.pneumatics import failsafe
+    c = _plumbed(valve, cap)
+    assert (failsafe.outcome(c, c.get("C1"), "power")[0], failsafe.outcome(c, c.get("C1"), "air")[0]) == want
+
+
+def test_smc_clamp_plumbed_by_letter_releases_on_power_loss():
+    # SY3120 with SMC's port A (= 4) on the cap end: at rest 1-2 feeds B (= 2), the rod end: the clamp OPENS on a power cut.
+    # Declaring "extend" (stays closed) must fail; plumbing B to the cap end passes.
+    c = _plumbed({}, "A", part="SMC SY3120-5LZ-C6")
+    c.get("C1").on_power_loss, c.get("C1").on_air_loss = "extend", "release"
+    assert one(analyze(c), "on loss of electrical power C1").severity == "fail"
+    ok = _plumbed({}, "B", part="SMC SY3120-5LZ-C6")
+    ok.get("C1").on_power_loss, ok.get("C1").on_air_loss = "extend", "release"
+    assert one(analyze(ok), "on loss of electrical power C1").severity == "pass"
+
+
+def test_io_list_and_drawing_name_the_ports():
+    from eitri.pneumatics.diagram import _ports, display_index, port_label
+    c = _plumbed({}, "4", part="SMC SY3120-5LZ-C6")
+    c.get("V1").signal = "C1_EXTEND"
+    do = next(r for r in outputs.io_rows(c) if r["io"] == "DO")
+    assert do["signal"] == "C1_EXTEND" and "connects 1-4, 2-3" in do["function"] and "pressurises 4 (C1 CAP)" in do["function"]
+    v = c.get("V1")
+    assert port_label(v, "4") == "4(A)" and port_label(v, "2") == "2(B)" and port_label(Circuit().valve("G"), "4") == "4"
+    assert display_index(v, v.rest_position) == 1                         # the rest box is drawn on the spring side (right)
+    pts = _ports(v, 0.0, 0.0)
+    assert pts["4"][0] < pts["2"][0] and pts["5"][0] < pts["1"][0] < pts["3"][0]   # 4 left of 2, 5-1-3 as the makers draw them

@@ -24,11 +24,11 @@ def build(p):
     v = c.valve("V1", "5/2", C=1.2, b=0.3)
     cyl = c.cylinder("C1", bore_mm=p.bore_mm, rod_mm=12, stroke_mm=100, load_N=p.load_N, load_retract_N=100, speed_mm_s=200, cycles_per_min=20)
     c.tube("T1", air["OUT"], frl["IN"], id_mm=8, length_m=2.0, C=3.0)
-    c.tube("T2", frl["OUT"], v["P"], id_mm=6, length_m=1.0, C=2.0)
-    c.tube("T3", v["A"], cyl["CAP"], id_mm=6, length_m=1.5, C=1.8)
-    c.tube("T4", v["B"], cyl["ROD"], id_mm=6, length_m=1.5, C=1.8)
-    c.silencer(v["R"], C=3, b=0.3)
-    c.silencer(v["S"], C=3, b=0.3)
+    c.tube("T2", frl["OUT"], v["1"], id_mm=6, length_m=1.0, C=2.0)
+    c.tube("T3", v["2"], cyl["CAP"], id_mm=6, length_m=1.5, C=1.8)
+    c.tube("T4", v["4"], cyl["ROD"], id_mm=6, length_m=1.5, C=1.8)
+    c.silencer(v["3"], C=3, b=0.3)
+    c.silencer(v["5"], C=3, b=0.3)
     return c
 
 
@@ -102,7 +102,7 @@ def test_drag_a_component_and_highlight_a_failure(tmp_path):
         assert "C1" in set(page.eval_on_selector_all("#hedit .hpaper g.hl", "els => els.map(e => e.dataset.id)"))
         bad.click()
         before = _state(page)["domain"]["scene"]["nodes"]["V1"]
-        r = page.evaluate("""() => { const g = [...document.querySelectorAll('g[data-kind="component"][data-id="V1"]')].find(g => g.querySelector('rect')); const b = g.getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; }""")
+        r = page.evaluate("""() => { const g = [...document.querySelectorAll('g[data-kind="component"][data-id="V1"]')].find(g => g.querySelector('rect')); const b = g.querySelector('rect').getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; }""")
         page.mouse.move(*r)
         page.mouse.down()
         page.mouse.move(r[0] + 60, r[1] + 20, steps=5)

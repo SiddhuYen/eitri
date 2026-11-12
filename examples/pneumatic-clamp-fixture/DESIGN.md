@@ -34,3 +34,10 @@ Never energise CLAMP_CLOSE and CLAMP_OPEN together.
   no pressure build-up, acceleration or PLC scan) against 15 s.
 - clamp_fixture.io.md / .csv (7 points, coils with manifold station), .bom, .cylinders, schematic.
 - Build: 87 pass, 1 warn (flow data estimated for the tubes and the AW20, which publishes no C), 0 fail, 0 not run.
+
+## Port numbers (corrected 2026-11-12)
+Valve ports are the ISO 5599 numbers SMC prints on the SY body (SY_EU.pdf PDF p.14): 1 (P), 2 (B), 3 (EB), 4 (A), 5 (EA). At rest
+the spring connects 1-2 and 4-5; coil 14 connects 1-4 and 2-3. Plumbing: V1 port 2 (B) to the pusher's rod end (fed at rest: the
+pusher stays back on a power cut), port 4 (A) to its cap end (PUSHER_EXTEND); V2 port 4 (A) to the clamp's cap end (CLAMP_CLOSE,
+coil 14), port 2 (B) to its rod end (CLAMP_OPEN, coil 12). The deliverables before this date labelled the valve ports "A" (meaning
+port 2) and "B" (port 4): read against SMC's marking that is backwards. Use the drawing of 2026-11-12 or later.

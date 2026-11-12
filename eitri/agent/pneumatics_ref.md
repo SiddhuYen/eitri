@@ -17,9 +17,13 @@ c.supply(name, pressure_bar, flow_l_min=None)                  the source: gauge
 c.frl(name, set_bar, C=None, b=None, lubricator=False)           filter-regulator(-lubricator) unit; ports IN, OUT
 c.regulator(name, set_bar, C=None, b=None)                       a bare regulator; ports IN, OUT
 c.valve(name, "5/2", actuation="solenoid", returns="spring", C=None, b=None, normally="closed", center="closed")
-    classes "2/2", "3/2", "4/2", "5/2", "5/3"; ports P (supply), A, B (work), R, S (exhausts) by ISO 5599; actuation solenoid |
-    manual | pilot | lever | pedal | roller; returns spring | solenoid | detent; 3/2 and 2/2 take normally closed | open; 5/3 takes
-    center closed | exhaust | pressure. Position 1 of a 5/2 joins P-A and B-S, position 2 joins P-B and A-R.
+    classes "2/2", "3/2", "4/2", "5/2", "5/3"; ports are the ISO 5599 numbers: "1" supply, "2" and "4" working, "3" and "5"
+    exhausts (a 3/2: 1, 2, 3). actuation solenoid | manual | pilot | lever | pedal | roller; returns spring | solenoid | detent;
+    3/2 and 2/2 take normally closed | open; 5/3 takes center closed | exhaust | pressure. As SMC and Festo print the symbols: at
+    rest (spring / coil 12) a 5/2 joins 1-2 and 4-5; coil 14 joins 1-4 and 2-3. A 5/3's centre: closed (all blocked), exhaust
+    (4-5, 2-3), pressure (1-4, 1-2). So port 2 is the one fed when the power is off: plumb it to the end that must be held then.
+    Letters only on a catalogue valve whose maker prints them, with the maker's meaning: on an SMC valve v["A"] is port 4 and
+    v["B"] port 2 (EA = 5, EB = 3, P = 1). A generic valve refuses letters (makers differ).
 c.cylinder(name, bore_mm, rod_mm, stroke_mm, acting="double", load_N=0, load_retract_N=None, speed_mm_s=None,
            speed_retract_mm_s=None, cycles_per_min=0, spring_N=None, friction_fraction=0.10, duty="moving")
     ports CAP and ROD (a single-acting cylinder: CAP only, spring return of spring_N); duty sets the load-ratio limit:
@@ -28,7 +32,7 @@ c.cylinder(name, bore_mm, rod_mm, stroke_mm, acting="double", load_N=0, load_ret
 c.flow_control(name, meter="out", C=None, b=None)                a speed controller (throttle-check); ports A (valve side), B (cylinder side)
 c.node(name)                                                     a tee: any number of tubes meet at its port N
 c.tube(name, from_port, to_port, id_mm=6, length_m=1, fittings=2, C=None)    a run of tube; ports are comp["PORT"] or "NAME.PORT"
-c.silencer(valve["R"])                                           a silencer screwed onto an exhaust port;  c.exhaust(port) leaves it open
+c.silencer(valve["3"])                                           a silencer screwed onto an exhaust port;  c.exhaust(port) leaves it open
 c.sensor(name, cylinder, "extended"|"retracted", part=None, signal="", terminal="")   a position switch on a cylinder: a PLC input
 c.control_voltage(24)                                            the DC control voltage the coils and sensors run on
 c.drawing_info(project="", ticket="", revision="", title="", drawn_by="", approved_by="")   the circuit drawing's title block
@@ -39,9 +43,9 @@ c.step(name, "C1+", "C2-", until="B2", dwell_s=0)                one step of the
     ESTIMATED cycle time (valve response + stroke / mean speed + sensor + dwell: a lower bound) against cycles_per_min. A circuit
     with a control voltage or sensors and no sequence gets a "not run" notice. Outputs <name>.sequence.pdf/.svg (the
     displacement-step diagram with the coil signals) and <name>.sequence.md (the step table with times and assumptions).
-m = c.manifold("M1", part="SMC SS5Y3-20-04-Q")                    a valve manifold base: ports P (common supply), R, S (common exhausts)
-c.mount(valve, m, station=None)                                  mount a valve on the next free station: its P, R, S are the manifold's
-    (no tubes or silencers on them; silence the manifold's R and S); it takes the catalogue's valve-on-manifold C, b. Checks: valves
+m = c.manifold("M1", part="SMC SS5Y3-20-04-Q")                    a valve manifold base: ports 1 (common supply), 3, 5 (common exhausts)
+c.mount(valve, m, station=None)                                  mount a valve on the next free station: its 1, 3, 5 are the manifold's
+    (no tubes or silencers on them; silence the manifold's 3 and 5); it takes the catalogue's valve-on-manifold C, b. Checks: valves
     vs stations (empty stations get blanking plates in the BOM), and the drop through the manifold's supply at the air the cylinders
     on it draw at once (per sequence step when c.step(...) declares one, else all at once). The I/O list names each coil's station.
 every component also takes max_bar= and min_bar= (its working pressure range, from its datasheet) and part_number=; a tube max_bar=
@@ -155,9 +159,9 @@ def build(p):
                      spring_N=25, speed_mm_s=100, cycles_per_min=p.cycles_per_min, duty="static",   # clamping: load ratio up to 0.7
                      on_power_loss="retract", on_air_loss="retract")      # the 3/2 vents and the spring opens the clamp
     c.tube("T1", air["OUT"], frl["IN"], id_mm=8, length_m=1.5)
-    c.tube("T2", frl["OUT"], v["P"], id_mm=6, length_m=0.8)
-    c.tube("T3", v["A"], cyl["CAP"], id_mm=6, length_m=1.0)
-    c.silencer(v["R"])
+    c.tube("T2", frl["OUT"], v["1"], id_mm=6, length_m=0.8)
+    c.tube("T3", v["2"], cyl["CAP"], id_mm=6, length_m=1.0)
+    c.silencer(v["3"])
     return c
 
 
@@ -186,13 +190,13 @@ def build(p):
                      speed_mm_s=p.speed, cycles_per_min=p.cycles_per_min,
                      on_power_loss="extend", on_air_loss="release")       # V1 at rest feeds A -> CAP: it pushes out on a power cut
     c.tube("T1", air["OUT"], frl["IN"], id_mm=8, length_m=2.0)
-    c.tube("T2", frl["OUT"], v["P"], id_mm=6, length_m=1.0)
-    c.tube("T3", v["A"], fc2["A"], id_mm=6, length_m=1.0)
+    c.tube("T2", frl["OUT"], v["1"], id_mm=6, length_m=1.0)
+    c.tube("T3", v["2"], fc2["A"], id_mm=6, length_m=1.0)
     c.tube("T4", fc2["B"], cyl["CAP"], id_mm=6, length_m=0.5)
-    c.tube("T5", v["B"], fc1["A"], id_mm=6, length_m=1.0)
+    c.tube("T5", v["4"], fc1["A"], id_mm=6, length_m=1.0)
     c.tube("T6", fc1["B"], cyl["ROD"], id_mm=6, length_m=0.5)
-    c.silencer(v["R"])
-    c.silencer(v["S"])
+    c.silencer(v["3"])
+    c.silencer(v["5"])
     return c
 
 

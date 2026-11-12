@@ -26,6 +26,17 @@ annotated tags (`git show v0.4.0`).
 
 ### Changed
 
+- **Valve ports are the ISO 5599 numbers** "1" (supply), "2" / "4" (working), "3" / "5" (exhaust), as SMC (SY_EU.pdf PDF p.14)
+  and Festo (VUVG catalogue p.12) print them: at rest a spring-return 5/2 connects 1-2 and 4-5, coil 14 connects 1-4 and 2-3.
+  Up to 0.8.0 eitri named them P, A, B, R, S with A = 2; SMC marks A = 4, so on the SMC catalogue valves eitri's "A" was SMC's
+  "B": a model written with SMC's letters was graded backwards (its fail-safe and sequence results inverted) and the drawing's
+  A/B labels told the customer to plumb it backwards. Letters are now accepted only on a catalogue valve whose maker prints
+  them, with the maker's meaning (SMC: A = 4, B = 2, P = 1, EA = 5, EB = 3); a generic valve refuses them with the mapping
+  eitri used before. **Models must change**: `v["A"]` → `v["2"]`, `v["B"]` → `v["4"]`, `v["P"]` → `v["1"]`, `v["R"]` → `v["3"]`,
+  `v["S"]` → `v["5"]` keeps what eitri graded; silencers are named `S_V1_3` / `S_V1_5`.
+- Valve symbols are drawn as ISO 1219 does: the box beside coil 14 is the 1-4 position, the rest box (beside the spring / coil 12)
+  carries the ports, labelled with the number and the maker's letter ("4(A)").
+- The I/O list says what each coil connects and which cylinder end it pressurises ("connects 1-4, 2-3; pressurises 4 (C2 CAP)").
 - The default valve flow source now names the SY3000 body-ported table (C 0.6, b 0.29), not the series' best case.
 
 ## 0.8.0: tickets and checked change packages, a source on every check, fuses, pneumatic catalogue parts, reference parts

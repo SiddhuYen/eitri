@@ -3,7 +3,7 @@ passage, coil, sensor electrics), every figure with its source.
 
     c.cylinder("C1", part="SMC CDQ2B32-20DZ", load_N=300, ...)       # bore 32, rod 16, stroke 20, 0.5-10 bar, Rc1/8 ...
     c.valve("V1", part="SMC SY3120-5LZ-C6")                           # 5/2 single solenoid, C 0.76 b 0.30 P->A/B, 24 VDC 0.4 W
-    c.tube("T3", v["A"], cyl["CAP"], part="SMC TU0604", length_m=1)  # 6 x 4 mm polyurethane, 8 bar at 20 C
+    c.tube("T3", v["4"], cyl["CAP"], part="SMC TU0604", length_m=1)  # 6 x 4 mm polyurethane, 8 bar at 20 C (SMC marks 4 "A")
     c.sensor("B1", "C1", "extended", part="SMC D-M9B")               # a cylinder position switch (an I/O-list input)
 
 A part number is matched against the series patterns below (stroke in the number is taken from it and checked against the
@@ -88,6 +88,8 @@ _S = [
            'power consumption DC (per coil) "Standard 0.35 (With indicator light: 0.4 DIN terminal with indicator light: 0.45)", "With power saving circuit '
            '0.1 (With indicator light only)"; electrical entry L plug connector (L); p.3 Flow characteristics (ISO 6358), 2 position single: '
            'SY3[ ]20-[ ]-C6 (one row for single and double) 1->4/2 (P->A/B) C 0.76 b 0.30 Cv 0.19, 4/2->5/3 (A/B->EA/EB) C 0.65 b 0.39 Cv 0.17, ports 1, 5, 3 M5 x 0.8; '
+           'PDF p.14 (printed 5) Construction, JIS symbols: 2 position single rest (spring) box 1->2, 4->5, 3 blocked, solenoid box 1->4, '
+           '2->3; ports "4 (A) 2 (B)", "5 (EA) 1 (P) 3 (EB)"; 3 position closed / exhaust (4->5, 2->3) / pressure (1->4, 1->2) centre; '
            'SY5[ ]20-[ ]-01 P->A/B C 1.9 b 0.35 Cv 0.49, A/B->EA/EB C 2.4 b 0.39 Cv 0.61, all ports 1/8; p.2 Response Time (ms, at 0.5 MPa, '
            'JIS B 8375-1981): SY3000 2 position single 12 or less without light/surge suppressor, 15 Type S, Z, 12 Type R, U; 2 position double '
            '10 / 13 / 10; SY5000 single 19 / 26 / 19, double 18 / 22 / 18'),
@@ -149,6 +151,12 @@ class Series:
     stroke_range: tuple[float, float] | None = None
     stations_range: tuple[int, int] | None = None
     figures: dict = field(default_factory=dict)        # catalogue figures the build compares with (forces at a pressure ...)
+
+
+# SMC's printed letters for the ISO 5599 numbers (SY_EU.pdf PDF p.14, printed p.5, JIS symbols: "4 (A) 2 (B)", "5 (EA) 1 (P) 3 (EB)";
+# PDF p.48 manifold "P, EA, EB port"): a model may write v["A"] on an SMC valve and gets SMC's A, port 4 (pressurised by coil 14).
+SMC_VALVE_LETTERS = {"P": "1", "A": "4", "B": "2", "EA": "5", "EB": "3"}
+SMC_MANIFOLD_LETTERS = {"P": "1", "EA": "5", "EB": "3"}
 
 
 def _dsnu() -> list:
@@ -227,29 +235,29 @@ SERIES: list[Series] = [
     Series("valve", r"(?:SMC\s+)?SY3120-5L(?P<light>Z?)-C6",
            dict(cls="5/2", actuation="solenoid", returns="spring", C=0.76, b=0.30, C_exhaust=0.65, b_exhaust=0.39, min_bar=1.5, max_bar=7.0,
                 coil_V=24.0, coil_W=0.4, connector="L plug connector (lead wire 300 mm)", port="P, EA, EB M5 x 0.8; A, B one-touch 6 mm",
-                connections={"P": "M5", "R": "M5", "S": "M5", "A": "push-in 6", "B": "push-in 6"},
+                connections={"1": "M5", "3": "M5", "5": "M5", "4": "push-in 6", "2": "push-in 6"}, letters=SMC_VALVE_LETTERS,
                 max_hz=10.0, series="SY3000", response_ms=15.0, manufacturer="SMC", description="SMC SY3000 5/2 single-solenoid valve, body ported, 24 VDC"),
            ("smc-sy",)),
     Series("valve", r"(?:SMC\s+)?SY3220-5L(?P<light>Z?)-C6",
            dict(cls="5/2", actuation="solenoid", returns="solenoid", C=0.76, b=0.30, C_exhaust=0.65, b_exhaust=0.39, min_bar=1.0, max_bar=7.0,
                 coil_V=24.0, coil_W=0.4, connector="L plug connector x 2 (lead wire 300 mm)", port="P, EA, EB M5 x 0.8; A, B one-touch 6 mm",
-                connections={"P": "M5", "R": "M5", "S": "M5", "A": "push-in 6", "B": "push-in 6"},
+                connections={"1": "M5", "3": "M5", "5": "M5", "4": "push-in 6", "2": "push-in 6"}, letters=SMC_VALVE_LETTERS,
                 max_hz=10.0, series="SY3000", response_ms=13.0, manufacturer="SMC", description="SMC SY3000 5/2 double-solenoid valve (holds its position unpowered), 24 VDC"),
            ("smc-sy",)),
     Series("valve", r"(?:SMC\s+)?SY5120-5L(?P<light>Z?)-01",
            dict(cls="5/2", actuation="solenoid", returns="spring", C=1.9, b=0.35, C_exhaust=2.4, b_exhaust=0.39, min_bar=1.5, max_bar=7.0,
-                coil_V=24.0, coil_W=0.4, connector="L plug connector (lead wire 300 mm)", port="all ports Rc1/8", connections={k: "Rc1/8" for k in ("P", "A", "B", "R", "S")}, max_hz=5.0,
+                coil_V=24.0, coil_W=0.4, connector="L plug connector (lead wire 300 mm)", port="all ports Rc1/8", connections={k: "Rc1/8" for k in ("1", "2", "3", "4", "5")}, letters=SMC_VALVE_LETTERS, max_hz=5.0,
                 series="SY5000", response_ms=26.0, manufacturer="SMC", description="SMC SY5000 5/2 single-solenoid valve, body ported, 24 VDC"),
            ("smc-sy",)),
     # ---------------------------------------------------------------- valve manifolds (Type 20, bar stock, individual wiring)
     Series("manifold", r"(?:SMC\s+)?SS5Y3-20-(?P<stations>\d\d)(?P<thread>00F|00N|00T)?(?:-Q)?",
            dict(series="SY3000", C=0.72, b=0.29, C_exhaust=0.80, b_exhaust=0.36, max_stations=20, both_sides_above=10, port="P, EA, EB 1/8",
-                blanking_plate="SMC SY3000-26-19A-Q", connections={"P": "Rc1/8", "R": "Rc1/8", "S": "Rc1/8"},
+                blanking_plate="SMC SY3000-26-19A-Q", connections={"1": "Rc1/8", "3": "Rc1/8", "5": "Rc1/8"}, letters=SMC_MANIFOLD_LETTERS,
                 description="SMC SS5Y3-20 manifold base for SY3000, common SUP/EXH, 1/8 ports"),
            ("smc-sy-manifold",), stations_range=(2, 20)),
     Series("manifold", r"(?:SMC\s+)?SS5Y5-20-(?P<stations>\d\d)(?P<thread>00F|00N|00T)?(?:-Q)?",
            dict(series="SY5000", C=1.9, b=0.28, C_exhaust=2.2, b_exhaust=0.20, max_stations=20, both_sides_above=10, port="P, EA, EB 1/4",
-                blanking_plate="SMC SY5000-26-1A-Q", connections={"P": "Rc1/4", "R": "Rc1/4", "S": "Rc1/4"},
+                blanking_plate="SMC SY5000-26-1A-Q", connections={"1": "Rc1/4", "3": "Rc1/4", "5": "Rc1/4"}, letters=SMC_MANIFOLD_LETTERS,
                 description="SMC SS5Y5-20 manifold base for SY5000, common SUP/EXH, 1/4 ports"),
            ("smc-sy-manifold",), stations_range=(2, 20)),
     # ---------------------------------------------------------------- tube, flow controls, silencers

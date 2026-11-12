@@ -180,6 +180,29 @@ def cylinders_markdown(c: Circuit, rep: CircuitReport) -> str:
 _IO_COLS = ["tag", "io", "signal", "device", "function", "part_number", "voltage_V", "current_mA", "connector", "location", "terminal", "notes"]
 
 
+def reaches(c: Circuit, ref) -> str:
+    """The cylinder port a valve working port's line leads to (through tubes, tees and flow controls), "" when none."""
+    seen, todo = {ref}, [ref]
+    while todo:
+        r = todo.pop()
+        for kind, _t, other in c.connections_at(r):
+            if other in seen:
+                continue
+            seen.add(other)
+            comp = c.components.get(other.component)
+            if comp is None:
+                continue
+            if comp.kind == "cylinder":
+                return f"{comp.name} {other.port}"
+            if comp.kind == "node":
+                todo.append(other)
+            elif comp.kind == "flow_control":
+                o = comp.port("B" if other.port == "A" else "A")
+                seen.add(o)
+                todo.append(o)
+    return ""
+
+
 def io_rows(c: Circuit) -> list[dict]:
     """One row per PLC point: each solenoid coil (a digital output) and each position sensor (a digital input). Voltages and currents
     come from the parts' datasheets (catalogue parts or the coil_V / coil_W / sensor figures given in the model); a blank figure is
@@ -190,9 +213,10 @@ def io_rows(c: Circuit) -> list[dict]:
             continue
         for pilot, signal, terminal in v.coils:
             cur = round(v.coil_W / v.coil_V * 1000.0, 1) if v.coil_W and v.coil_V else None
-            what = "shifts to position 2 (P-B, A-R)" if v.cls in ("5/2", "4/2") else "energises"
-            if pilot == "12":
-                what = "shifts back to position 1 (P-A, B-S)" if v.cls in ("5/2", "4/2") else "energises the 12 side"
+            pos = v.positions[-1] if pilot == "14" else v.positions[0]
+            fed = [b if a == "1" else a for a, b in pos if "1" in (a, b)]
+            what = ("connects " + ", ".join(f"{a}-{b}" for a, b in pos) if pos else "centre") + "".join(
+                f"; pressurises {w}" + (f" ({where})" if (where := reaches(c, v.port(w))) else "") for w in fed)
             rows.append({"io": "DO", "signal": signal, "device": f"{v.name} coil {pilot}", "function": f"{v.cls} valve {v.name} {what}",
                          "location": f"{v.manifold} station {v.station}" if v.manifold else "",
                          "part_number": v.part_number, "voltage_V": v.coil_V, "current_mA": cur, "connector": v.connector, "terminal": terminal,
