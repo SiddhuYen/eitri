@@ -158,6 +158,7 @@ off on eitri.io/account. Then they restart their agent and ask it for a design. 
 eitri build path/to/model.py            # build a model file and print its geometry report
 eitri print path/to/project             # 3D-print export: parts, orientations, plates, STL + 3MF + zip
 eitri bom path/to/project               # harness or pneumatics: bill of materials (--cutlist for harnesses, --csv)
+eitri reference add path/to/project customer_part.step   # a customer's STEP file as a read-only reference part
 eitri chat path/to/project              # the terminal REPL (needs a key)
 eitri --help
 ```

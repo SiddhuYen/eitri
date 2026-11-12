@@ -648,10 +648,12 @@ def main(argv: list[str] | None = None) -> int:
     mc.add_argument("--plugin", action="store_true", help=argparse.SUPPRESS)
     from .plugin_install import add_parser as _add_plugin_parser
     _add_plugin_parser(sub)
+    from .reference_cli import add_parser as _add_reference_parser
+    _add_reference_parser(sub)
 
     argv = list(sys.argv[1:] if argv is None else argv)
     commands = ("chat", "build", "bom", "view", "drawing", "serve", "web", "cam", "cut", "print-prep", "print", "doctor", "key",
-                "update", "setup", "mcp", "plugin", "-h", "--help", "-V", "--version")
+                "update", "setup", "mcp", "plugin", "reference", "-h", "--help", "-V", "--version")
     if not argv:
         argv = ["web"]                   # plain `eitri`: the website, in the browser
     elif argv[0] not in commands:
@@ -667,6 +669,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "plugin":
         from .plugin_install import main as plugin_main
         return plugin_main(args)
+    if args.cmd == "reference":
+        from .reference_cli import main as reference_main
+        return reference_main(args)
     if args.cmd == "doctor":
         from .doctor import run_doctor
         return run_doctor(online=args.online, as_json=args.json)

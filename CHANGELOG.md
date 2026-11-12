@@ -55,6 +55,22 @@ is used (the lower for a limit, the higher for a draw).
 
 ### Added
 
+- **Reference parts: design around a customer's existing part.** `reference_step("inputs/motor.step", name="motor",
+  clearance=1.0, contact=["bracket"])` in a CAD model loads a STEP file as immutable geometry that joins the assembly,
+  the viewer, the review image, the exports and the BOM (never a print plate). Helpers: `.bbox`, `.holes()` /
+  `.bosses()` / `.hole(near=)` (axis, diameter, position, depth), `.mass_properties()` with a given density,
+  `.shape` (a copy for booleans). Each build checks: the file still has the SHA-256 recorded in `eitri.json` (a
+  changed file fails the build until a person runs `eitri reference accept`), the geometry is unmodified after direct
+  edits (edits naming it are refused), no designed part overlaps it, parts not in `contact` keep `clearance`, and
+  every `motor.mount(hole, part=, screw=, series=)` is coaxial within its stated tolerance with an ISO 273 clearance
+  diameter. A declared reference, and its mounts, cannot be dropped (`eitri reference remove`). The file is treated
+  as untrusted: it must be in `inputs/`, is capped (20 MB, 500k entities, 20k faces) and pre-scanned before it is
+  parsed inside the build. New `eitri reference list|add|accept|remove`; example `examples/motor-bracket/`; docs
+  `docs/reference-parts.md`.
+- **ISO 273 clearance holes** as a sourced table: `ISO_273`, `iso273_clearance(size, series)` (fine/medium/coarse,
+  M1.6-M30), from the Albany County Fasteners chart labelled ISO 273 (c) 2025; Optimas's chart agrees up to M10 and
+  gives larger M12-M16 holes without claiming ISO 273. `screw_clearance()` already matched it.
+
 - **Electronics**: `c.battery(name, chemistry, cells)` and `v_max=` on a supply. A battery straight on VIN is
   graded at its full charge (a 12 V lead-acid on charge, 14.5 V, fails an Uno's 7-12 V); a battery on a board's 5V
   pin fails. A MOSFET gate driven from an Uno or Nano pin with no pull-down is a warning (the pin floats through reset).

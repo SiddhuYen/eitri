@@ -63,7 +63,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 import build123d as bd
 from build123d import Vector
@@ -981,7 +981,33 @@ def _with(part: Part, shape: bd.Shape | None = None, color: str | None = None, m
     return Part(name or part.name, shape if shape is not None else part.shape, color or part.color,
                 material if material is not None else getattr(part, "material", None),
                 float(opacity) if opacity is not None else float(getattr(part, "opacity", 1.0) or 1.0),
-                getattr(part, "group", None), face_colors if face_colors is not None else getattr(part, "face_colors", None))
+                getattr(part, "group", None), face_colors if face_colors is not None else getattr(part, "face_colors", None),
+                getattr(part, "reference", None) if (name is None or name == part.name) and shape is None else None)
+
+
+def reference_targets(edit: Mapping, reference_names) -> list[str]:
+    """The reference parts (read-only customer geometry) an edit would change: it names one as its part, among its
+    parts, as a consumed tool (combine without keep_tool), or as a member of a group it moves. A reference used as
+    a kept tool (cut the bracket by the motor's shape) or as the target others align to is fine."""
+    refs = set(reference_names)
+    if not refs:
+        return []
+    hit = []
+    v = edit.get("part")
+    if isinstance(v, str) and v in refs:
+        hit.append(v)
+    for v in edit.get("parts") or []:
+        if isinstance(v, str) and v in refs:
+            hit.append(v)
+    tool = edit.get("tool")
+    if isinstance(tool, str) and tool in refs and not edit.get("keep_tool"):
+        hit.append(tool)
+    return sorted(set(hit))
+
+
+def reference_refusal(names: list[str]) -> str:
+    return (f"{', '.join(names)} {'is a reference part' if len(names) == 1 else 'are reference parts'} (read-only customer "
+            "geometry from a STEP file): edits never change it; change the designed parts around it instead")
 
 
 def _extrude_face_along(region, n: Vector, start: float, amount: float):
@@ -1090,6 +1116,12 @@ def apply_edits(parts: Parts, edits: Sequence[dict]) -> tuple[Parts, list[EditNo
                    or (op == "insert" and name not in current))
         if not creates and name not in current:
             notes.append(EditNote(str(op), str(name), False, "no such part"))
+            continue
+        refs = reference_targets(edit, [n for n, q in current.items() if getattr(q, "reference", None)])
+        if op in ("group", "ungroup", "move", "rotate") and edit.get("group"):
+            refs += [n for n, q in current.items() if getattr(q, "reference", None) and getattr(q, "group", None) == edit.get("group")]
+        if refs:
+            notes.append(EditNote(str(op), str(name), False, "refused: " + reference_refusal(sorted(set(refs)))))
             continue
         try:
             if op == "push_pull":
@@ -1994,6 +2026,7 @@ def apply_edits(parts: Parts, edits: Sequence[dict]) -> tuple[Parts, list[EditNo
         current[pname] = _with(part, face_colors=fmap)
     out = Parts([current[n] for n in order])
     out.anchors = list(getattr(parts, "anchors", None) or [])         # declared in build(p): a direct edit never moves one
+    out.references = list(getattr(parts, "references", None) or [])   # reference parts: read-only, never edited
     out.joints = [j.to_dict() for j in joints]
     out.sheets = {n: st.to_dict() for n, st in sheets.items() if n in current}
     out.sheet_states = {n: st for n, st in sheets.items() if n in current}
