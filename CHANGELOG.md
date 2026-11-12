@@ -204,8 +204,10 @@ is used (the lower for a limit, the higher for a draw).
   and was not read. The check says so. Optimas differs at M12-M16.
 - A reference file is accepted on its first build (trust on first use); hosted builds cap inputs at 8 MB and have no
   upload or accept UI yet. Hole detection finds full-round cylinders only.
-- Pneumatic catalogue: about 11 part numbers. The schematic has no device tags, sensors or title block; no manifolds, no
-  cycle time. The end-of-stroke speed uses SMC's 2x factor, possibly over-conservative without a speed controller.
+- Pneumatics: 26 catalogue cylinder bores (Festo DSNU, DSBC; SMC CQ2, MGPM), SMC SY valves and SS5Y manifolds and a few
+  accessories; anything else is typed from its data
+  sheet. The cycle time is an ESTIMATE (a lower bound). Valve letters are accepted only on SMC parts; other makers use the
+  port numbers. The end-of-stroke speed uses SMC's 2x factor, possibly over-conservative without a speed controller.
 - CAD geometry findings (thin wall, knife edge) are report issues with no sourced figure (1.5 mm, 30 deg).
 - Board and module outlines are not in `eitri.electronics.catalog` yet (hosted keeps them).
 
