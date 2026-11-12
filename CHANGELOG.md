@@ -3,6 +3,31 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
+## Unreleased (planned 0.8.1): the pneumatics package a fixture shop hands its customer
+
+### Added
+
+- **Circuit drawing** (`<name>.drawing.pdf` / `.svg`): device tags on every component (EN 81346-2 class codes as Festo Didactic
+  uses them: -MM cylinder, -QM valve, -BG sensor, -AZ air preparation, -XM distributor/manifold; -RZ flow control is our
+  inference), the sensors on their cylinders, coil signals 14 / 12, a parts table keyed by tag and a title block (project,
+  ticket, revision, date, drawn by eitri, approved by left blank, check counts by status). `c.drawing_info(...)`. A vector PDF
+  writer with no dependency (`eitri.diagram.scene_to_pdf`).
+- **Valve manifolds**: `c.manifold(..., part="SMC SS5Y3-20-04-Q")` (and SS5Y5-20), `c.mount(valve, manifold)`; checks on valves vs
+  stations (blanking plates in the BOM) and on the common supply's drop at the simultaneous demand; the I/O list names each
+  coil's station.
+- **Step sequence and cycle time**: `c.step("push", "C1+", until="B2")`, `c.start(...)`; checks that every step ends on a sensor
+  that exists at the right end, that no step commands a state its valves cannot give, that the cycle closes, and an ESTIMATED
+  cycle time (valve response from the SY catalogue, stroke / mean speed, sensor switch-on; a lower bound) against
+  `cycles_per_min`. A controller-run circuit with no sequence reports "sequence declared: not run". Outputs the
+  displacement-step diagram (`.sequence.pdf/.svg`) and the step table (`.sequence.md`).
+- **Catalogue parts**: Festo DSNU 16-63, SMC CQ2 12-100, Festo DSBC 32-100 (ISO 15552), SMC MGPM 20-32 (guided), SMC AW20 and
+  Festo MS4-LFR filter regulators (set pressure checked against the regulation range), AS1201F-M5-04 / AS2201F-02-08, TU0425 /
+  TU0805, AN10-01; every figure cited with its document and page.
+
+### Changed
+
+- The default valve flow source now names the SY3000 body-ported table (C 0.6, b 0.29), not the series' best case.
+
 ## 0.8.0: tickets and checked change packages, a source on every check, fuses, pneumatic catalogue parts, reference parts
 
 eitri for a shop that takes a ticket and hands back a checked change package. A ticket holds the customer's request and
