@@ -31,6 +31,7 @@ c.tube(name, from_port, to_port, id_mm=6, length_m=1, fittings=2, C=None)    a r
 c.silencer(valve["R"])                                           a silencer screwed onto an exhaust port;  c.exhaust(port) leaves it open
 c.sensor(name, cylinder, "extended"|"retracted", part=None, signal="", terminal="")   a position switch on a cylinder: a PLC input
 c.control_voltage(24)                                            the DC control voltage the coils and sensors run on
+c.drawing_info(project="", ticket="", revision="", title="", drawn_by="", approved_by="")   the circuit drawing's title block
 every component also takes max_bar= and min_bar= (its working pressure range, from its datasheet) and part_number=; a tube max_bar=
 valves also take coil_V=, coil_W=, connector=, signal= / signal_12= (the PLC signal names of coils 14 / 12), terminal=,
   C_exhaust= / b_exhaust= (the A/B -> R/S passage when the datasheet gives it apart)
@@ -106,6 +107,10 @@ is used (the smallest of those sizes: valve 0.6, silencer 1.0, flow control 0.3)
 tube by bore with a 10% service loop, fittings, sensors), `<name>.cylinders.md` / `.csv` (per stroke: pressure, load, usable force, load
 ratio, required and achievable speed, air per minute, status), `<name>.io.md` / `.io.csv` (the I/O list for the PLC programmer: every
 solenoid coil a DO and every position sensor a DI, with signal name, function, part, voltage, current, connector and terminal).
+`<name>.drawing.pdf` / `.drawing.svg`: the circuit diagram for the customer: a device tag on every component (EN 81346-2 codes as
+Festo uses them: -MM cylinder, -QM valve, -BG sensor, -AZ air preparation, -XM tee, -RZ flow control), the sensors on their
+cylinders, the coil signals (14 / 12) on the valves, a parts table keyed by tag and a title block (project, ticket, revision, date,
+drawn by eitri, approved by: blank).
 
 ## Direct edits and layout
 

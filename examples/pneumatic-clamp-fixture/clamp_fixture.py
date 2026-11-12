@@ -30,6 +30,7 @@ PARAMS = dict(
 def build(p):
     c = Circuit("Clamp fixture", "pusher locates the part against a stop, compact cylinder clamps it; PLC-controlled, 24 V DC")
     c.control_voltage(24)
+    c.drawing_info(project="Fixture shop demo: clamp fixture", ticket="T-0001", revision="A")
     air = c.supply("AIR", pressure_bar=7.0, flow_l_min=p.shop_air_l_min)
     frl = c.frl("FRL", set_bar=p.p_bar, part_number="SMC AW20-02BG", max_bar=10.0)           # AW20: 1.0 MPa max; no C published
     tee = c.node("MAN")                                                                        # the two valves' supply tee

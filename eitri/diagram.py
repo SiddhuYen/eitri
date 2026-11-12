@@ -214,6 +214,112 @@ def _svg_item(it: dict) -> str:
     return ""
 
 
+# --------------------------------------------------------------------------- PDF (vector, no dependency)
+
+PDF_SCALE = 0.75            # scene units are CSS px: 1 px = 0.75 pt
+
+
+def _pdf_rgb(h, alpha: float = 1.0) -> str | None:
+    c = _hex_rgb(h, alpha)
+    return None if c is None else " ".join(f"{v / 255:.3f}" for v in c)
+
+
+def _pdf_text(s: str) -> str:
+    b = str(s).encode("cp1252", errors="replace")
+    return "".join(chr(x) if 32 <= x < 127 and chr(x) not in "()\\" else ("\\" + chr(x) if chr(x) in "()\\" else f"\\{x:03o}") for x in b)
+
+
+def scene_to_pdf_bytes(scene: Scene) -> bytes:
+    """One-page vector PDF of a scene: lines, rectangles, circles, polylines, curves and text (Helvetica / Helvetica-Bold, the
+    PDF standard fonts, WinAnsi encoding). Same look as the SVG, without fonts embedded or any external program."""
+    H = scene.height
+    ops = [f"{PDF_SCALE} 0 0 {PDF_SCALE} 0 0 cm", "1 J 1 j", "1 1 1 rg", f"0 0 {scene.width:.1f} {H:.1f} re f"]
+    Y = lambda y: H - y
+
+    def stroke_fill(it, closed_fill=None):
+        out = []
+        sc = _pdf_rgb(it.get("stroke"))
+        fc = closed_fill
+        if sc:
+            out.append(f"{sc} RG {float(it.get('sw', 1)):.2f} w")
+        if fc:
+            out.append(f"{fc} rg")
+        dash = it.get("dash")
+        out.append(f"[{dash}] 0 d" if dash else "[] 0 d")
+        paint = "B" if (sc and fc) else "f" if fc else "S" if sc else "n"
+        return out, paint
+
+    for it in scene.items:
+        t = it["t"]
+        if t == "rect":
+            if it.get("alpha_fill", 1.0) == 0.0 and not _pdf_rgb(it.get("stroke")):
+                continue
+            fc = _pdf_rgb(it.get("fill"), it.get("alpha_fill", 1.0)) if it.get("alpha_fill", 1.0) > 0 else None
+            pre, paint = stroke_fill(it, fc)
+            ops += pre + [f"{it['x']:.2f} {Y(it['y'] + it['h']):.2f} {it['w']:.2f} {it['h']:.2f} re {paint}"]
+        elif t == "line":
+            pre, paint = stroke_fill(it)
+            if paint != "n":
+                ops += pre + [f"{it['x1']:.2f} {Y(it['y1']):.2f} m {it['x2']:.2f} {Y(it['y2']):.2f} l S"]
+        elif t == "circle":
+            fc = _pdf_rgb(it.get("fill"))
+            pre, paint = stroke_fill(it, fc)
+            cx, cy, r = it["cx"], Y(it["cy"]), float(it["r"])
+            k = 0.5523 * r
+            ops += pre + [f"{cx + r:.2f} {cy:.2f} m {cx + r:.2f} {cy + k:.2f} {cx + k:.2f} {cy + r:.2f} {cx:.2f} {cy + r:.2f} c "
+                          f"{cx - k:.2f} {cy + r:.2f} {cx - r:.2f} {cy + k:.2f} {cx - r:.2f} {cy:.2f} c "
+                          f"{cx - r:.2f} {cy - k:.2f} {cx - k:.2f} {cy - r:.2f} {cx:.2f} {cy - r:.2f} c "
+                          f"{cx + k:.2f} {cy - r:.2f} {cx + r:.2f} {cy - k:.2f} {cx + r:.2f} {cy:.2f} c h {paint}"]
+        elif t in ("polyline", "path"):
+            pts = it["pts"] if t == "polyline" else _flatten(it["pts"])
+            if len(pts) < 2:
+                continue
+            fill = it.get("fill") if t == "polyline" and it.get("fill") not in (None, "none") else None
+            pre, paint = stroke_fill(it if it.get("sw", 1) > 0 else {**it, "stroke": "none"}, _pdf_rgb(fill) if fill else None)
+            if paint == "n":
+                continue
+            d = f"{pts[0][0]:.2f} {Y(pts[0][1]):.2f} m " + " ".join(f"{x:.2f} {Y(y):.2f} l" for x, y in pts[1:])
+            if it.get("closed") or fill:
+                d += " h"
+            ops += pre + [f"{d} {paint}"]
+        elif t == "text":
+            s = str(it["s"])
+            size = float(it["size"])
+            bold = it.get("weight") == "700"
+            w = text_w(s, size)
+            x = it["x"] - (w / 2 if it.get("anchor") == "middle" else w if it.get("anchor") == "end" else 0)
+            if it.get("bg"):
+                bx, by, bw, bh = text_box(it, pad=2)
+                ops += [f"{_pdf_rgb(it['bg'])} rg {bx:.2f} {Y(by + bh):.2f} {bw:.2f} {bh:.2f} re f"]
+            ops += [f"{_pdf_rgb(it.get('fill') or '#000000')} rg BT /{'F2' if bold else 'F1'} {size:.1f} Tf {x:.2f} {Y(it['y']):.2f} Td "
+                    f"({_pdf_text(s)}) Tj ET"]
+    content = "\n".join(ops).encode("latin-1")
+    W, Hp = scene.width * PDF_SCALE, H * PDF_SCALE
+    objs = [b"<< /Type /Catalog /Pages 2 0 R >>",
+            b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {W:.1f} {Hp:.1f}] /Contents 4 0 R "
+            f"/Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> >>".encode(),
+            b"<< /Length " + str(len(content)).encode() + b" >>\nstream\n" + content + b"\nendstream",
+            b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+            b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>"]
+    out = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    offs = []
+    for i, o in enumerate(objs, 1):
+        offs.append(len(out))
+        out += f"{i} 0 obj\n".encode() + o + b"\nendobj\n"
+    xref = len(out)
+    out += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n".encode()
+    out += b"".join(f"{o:010d} 00000 n \n".encode() for o in offs)
+    out += f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    return bytes(out)
+
+
+def scene_to_pdf(scene: Scene, path) -> str:
+    from pathlib import Path as _P
+    _P(path).write_bytes(scene_to_pdf_bytes(scene))
+    return str(path)
+
+
 # --------------------------------------------------------------------------- PNG (Pillow)
 
 SS = 3          # drawn at 3x, shown at 1.5x: smooth edges without anti-aliased primitives

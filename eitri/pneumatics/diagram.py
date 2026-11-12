@@ -189,7 +189,10 @@ def layout(c: Circuit) -> dict[str, tuple[float, float]]:
     return pos
 
 
-def build_scene(c: Circuit, rep=None, status: dict[str, str] | None = None, footer: list[tuple[str, str]] | None = None, title: str | None = None) -> Scene:
+def build_scene(c: Circuit, rep=None, status: dict[str, str] | None = None, footer: list[tuple[str, str]] | None = None, title: str | None = None,
+                labels: dict[str, str] | None = None, decorate=None) -> Scene:
+    """The schematic. `labels` replaces a component's label text (the drawing's device tags); `decorate(scene, pos)` adds items
+    (sensors, coil signals) before the labels are placed, so they take part in the collision-free placement."""
     status = status or {}
     pos = layout(c)
     ports: dict[PortRef, tuple[float, float, str]] = {}
@@ -266,7 +269,7 @@ def build_scene(c: Circuit, rep=None, status: dict[str, str] | None = None, foot
         col = FAIL if st == "fail" else WARN if st == "warn" else TUBE
         g = f"tube:{t.name}"
         items.append({"t": "polyline", "pts": pts, "stroke": col, "sw": 2.2 if not st else 3.2, "fill": "none", "g": g, "cls": "tube"})
-        label = f"{t.name}  {t.id_mm:g} mm ID · {t.length_m:g} m"
+        label = "screwed in" if t.direct else f"{t.name}  {t.id_mm:g} mm ID · {t.length_m:g} m"
         items.append({"t": "text", "x": pts[0][0], "y": pts[0][1], "s": label, "size": FONT - 2, "fill": col if st else MUTED, "anchor": "middle",
                       "g": g, "cls": "label", "bg": "#ffffff", "cands": _beside(pts, label, FONT - 2)})
     for sname, pts in leaders:                                       # a silencer screwed onto its exhaust port
@@ -287,7 +290,7 @@ def build_scene(c: Circuit, rep=None, status: dict[str, str] | None = None, foot
         sc.nodes[name] = {"kind": "component", "x": cx, "y": cy, "w": w, "h": h}
         bx, by, bw, bh = _body(comp, cx, cy)
         if comp.kind != "silencer":
-            label = name if comp.kind in ("node",) else f"{name} · {_short(comp)}"
+            label = (labels or {}).get(name) or (name if comp.kind in ("node",) else f"{name} · {_short(comp)}")
             lw = text_w(label, FONT - 1)
             items.append({"t": "text", "x": cx, "y": by - 6, "s": label, "size": FONT - 1, "weight": "700", "fill": col, "anchor": "middle", "g": g, "cls": "label",
                           "bg": "#ffffff", "cands": [(cx, by - 6, "middle"), (bx - 8, cy + 4, "end"), (bx + bw + 8, cy + 4, "start"),
@@ -308,6 +311,8 @@ def build_scene(c: Circuit, rep=None, status: dict[str, str] | None = None, foot
                 continue
             items.append({"t": "text", "x": px, "y": py, "s": p, "size": FONT - 4, "fill": MUTED, "anchor": "middle", "g": g, "cls": "port",
                           "cands": _port_cands(px, py, _d, p)})
+    if decorate is not None:
+        decorate(sc, pos)
     place_labels(sc)
     sc.height = max(sc.height, max((it.get("y", 0) for it in items if it["t"] == "text"), default=0) + 12)
     if footer:

@@ -461,6 +461,7 @@ class Circuit:
         self.layout: dict[str, list[float]] = {}
         self.sensors: dict[str, Sensor] = {}
         self.control_V: float | None = None          # the control voltage (DC) the coils and sensors run on (the I/O list's)
+        self.meta: dict[str, str] = {}               # the drawing's title block (drawing_info)
 
     # -- building ----------------------------------------------------------
     def add(self, comp: Component) -> Component:
@@ -516,6 +517,12 @@ class Circuit:
         s = Sensor(**{k: v for k, v in kw.items() if v is not None})
         self.sensors[name] = s
         return s
+
+    def drawing_info(self, project: str = "", ticket: str = "", revision: str = "", title: str = "", drawn_by: str = "", approved_by: str = "") -> None:
+        """The circuit drawing's title block: project, ticket id, revision, title; drawn by (default "eitri <version>"); approved by
+        (left blank for the customer's signature unless given)."""
+        self.meta.update({k: str(v) for k, v in dict(project=project, ticket=ticket, revision=revision, title=title, drawn_by=drawn_by,
+                                                      approved_by=approved_by).items() if v})
 
     def control_voltage(self, volts: float) -> None:
         """The DC control voltage the valve coils and sensors are switched with (usually the PLC's 24 V)."""

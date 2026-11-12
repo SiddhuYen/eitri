@@ -263,3 +263,37 @@ def test_failsafe_check_grades_the_declaration():
     assert one(trapped, "on loss of electrical power C1").severity == "warn" and "may not hold" in one(trapped, "on loss of air C1").measured
     with pytest.raises(PneumaticsError, match="on_power_loss"):
         _two_valve_circuit(on_power_loss="stop")
+
+
+# ---------------------------------------------------------------------------- item 2: the customer drawing
+
+
+def test_device_tags_follow_the_festo_en81346_codes():
+    from eitri.model import load_model
+    from eitri.pneumatics.drawing import tags
+    c = load_model(EXAMPLE).build()
+    tg = tags(c)
+    assert tg["C1"] == "-MM1" and tg["C2"] == "-MM2" and tg["V1"] == "-QM1" and tg["V2"] == "-QM2"
+    assert tg["FRL"] == "-AZ1" and tg["MAN"] == "-XM1" and {tg[k] for k in ("FC1A", "FC1B")} == {"-RZ1", "-RZ2"}
+    assert [tg[s] for s in ("B1", "B2", "B3", "B4")] == ["-BG1", "-BG2", "-BG3", "-BG4"]      # retracted before extended
+    assert tg["S_V1_R"] == "-QM1:R"
+    every = [n for n, comp in c.components.items() if comp.kind != "supply"] + list(c.sensors)
+    assert all(n in tg for n in every) and len(set(tg.values())) == len(tg)
+
+
+def test_drawing_svg_and_pdf(tmp_path):
+    from eitri.model import load_model
+    from eitri.pneumatics.drawing import drawing_scene, write_drawing
+    from eitri.diagram import scene_to_svg
+    lm = load_model(EXAMPLE)
+    c = lm.build()
+    rep = analyze(c, lm.verify(c))
+    svg = scene_to_svg(drawing_scene(c, rep, today="2026-11-12"))
+    for s in ("-MM1  C1", "-BG2 PART_AT_STOP", "14: PUSHER_EXTEND", "12: CLAMP_OPEN", "Ticket", "T-0001", "Revision", "Approved by",
+              "Drawn by", "eitri ", "SMC CDQ2B32-20DZ", "2026-11-12", "EN 81346-2"):
+        assert s in svg, s
+    paths = write_drawing(c, rep, tmp_path, "fixture")
+    pdf = Path(paths["drawing_pdf"]).read_bytes()
+    assert pdf.startswith(b"%PDF-1.4") and pdf.rstrip().endswith(b"%%EOF") and b"(Approved by) Tj" in pdf and b"/Helvetica-Bold" in pdf
+    xref = int(pdf.rsplit(b"startxref", 1)[1].split()[0])
+    assert pdf[xref:xref + 4] == b"xref"
