@@ -27,6 +27,7 @@ DOWNLOADS = {
 EXPORTS = (("drawing", "Circuit drawing PDF", "Circuit diagram with device tags, parts table and title block (.pdf)"),
            ("drawing_svg", "Circuit drawing SVG", "Circuit diagram with device tags, parts table and title block (.svg)"),
            ("sequence", "Step diagram PDF", "Displacement-step diagram with coil signals and the estimated cycle time (.pdf)"),
+           ("sequence_svg", "Step diagram SVG", "Displacement-step diagram with coil signals and the estimated cycle time (.svg)"),
            ("sequence_md", "Sequence MD", "Step table: moves, coils, ending sensors, estimated times (Markdown)"),
            ("svg", "Schematic SVG", "The ISO 1219 schematic (.svg)"), ("png", "Schematic PNG", "The schematic (.png)"),
            ("bom", "BOM CSV", "Bill of materials (.csv)"), ("bom_md", "BOM MD", "Bill of materials (Markdown)"),
