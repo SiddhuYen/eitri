@@ -17,6 +17,7 @@ from mcp.server.mcpserver import Image, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ImageContent, TextContent
 
+from .. import __version__
 from ..project import Project
 from .tools import ToolResult, Tools
 
@@ -58,7 +59,7 @@ def _content(res: ToolResult) -> list[Any]:
 def make_server(project: Project, quality: float = 1.0) -> MCPServer:
     """The app's server: one project, fixed by the app that started Claude (EITRI_PROJECT)."""
     tools = Tools(project, render_quality=quality)
-    server = MCPServer("eitri", instructions="CAD modelling tools for the eitri agent.")
+    server = MCPServer("eitri", instructions="CAD modelling tools for the eitri agent.", version=__version__)
     _register(server, lambda: tools, lambda res: res, lambda: "")
     return server
 
@@ -69,7 +70,7 @@ def make_plugin_server(session=None) -> MCPServer:
     every rebuild, and every build result ends with what still fails or is unbuilt."""
     from .plugin import PluginSession, cad_reference_text, with_status
     session = session or PluginSession()
-    server = MCPServer("eitri", instructions=PLUGIN_INSTRUCTIONS)
+    server = MCPServer("eitri", instructions=PLUGIN_INSTRUCTIONS, version=__version__)
     _register(server, session.require, lambda res: with_status(session, res), session.no_project_text)
 
     @server.tool(description="Create a new eitri project folder and open it. `name` names it; `goal` (the request, in a "
