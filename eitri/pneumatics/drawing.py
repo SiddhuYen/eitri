@@ -152,8 +152,12 @@ def drawing_scene(c: Circuit, rep=None, today: str | None = None) -> Scene:
     table_bottom = y + rh * (len(rows) + 1) + 4
     # title block
     bx = W - 28 - bw
-    n_fail = len(rep.failed) if rep else None
-    checks = (f"{len(rep.checks) - len(rep.failed) - len(rep.warnings)} pass, {len(rep.warnings)} warn, {n_fail} fail" if rep else "not run")
+    if rep is not None:
+        from ..checks import status_of
+        st = [status_of(x) for x in rep.checks]
+        checks = f"{st.count('pass')} pass, {st.count('warn')} warn, {st.count('fail')} fail, {st.count('not_run')} not run"
+    else:
+        checks = "not built"
     from .. import __version__ as _v
     fields = [("Project", meta.get("project", "")), ("Title", meta.get("title") or c.name), ("Ticket", meta.get("ticket", "")),
               ("Revision", meta.get("revision", "")), ("Date", today or _dt.date.today().isoformat()), ("Drawn by", meta.get("drawn_by") or f"eitri {_v}"),
