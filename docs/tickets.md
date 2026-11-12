@@ -94,7 +94,7 @@ refuses. `--despite-changes` accepts the change, and the package's first page sa
 |---|---|
 | `package.json` | everything, as data (schema `eitri.package/1`: `eitri/tickets/package.schema.json`) |
 | `report.md`, `report.html` | the human report; the HTML is self-contained (images inlined, no scripts, no links out) |
-| `checks.csv` | each check before and after: status (pass / warn / fail / not run), measured, expected, source |
+| `checks.csv` | each check before and after: status (pass / warn / fail / not run), measured, expected, source (the check's structured sources: text, revision, URL), rule id, source basis, source URLs |
 | `parameters.csv` | parameter diff |
 | `bom_diff.csv` | changed parts and BOM lines (CAD: parts with size, volume, hole sizes and centres; other domains: their BOM CSVs) |
 | `source.diff` | unified diff of the model file |

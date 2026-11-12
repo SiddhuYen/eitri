@@ -48,11 +48,14 @@ The full example is `examples/motor-bracket/` (`eitri build examples/motor-brack
 
 - **Unchanged file.** The file on disk must have the accepted SHA-256. If it changed, the build fails with
   `reference file inputs/motor.step CHANGED since it was accepted`. Restore it, or, if the customer really sent a
-  new revision: `eitri reference accept <project> inputs/motor.step`.
+  new revision: `eitri reference accept <project> inputs/motor.step`. `add`, `accept` and `remove` are for a person: like
+  `eitri ticket approve` they refuse in an agent's process, ask for a one-time code typed back in the terminal, and sign the
+  record (`eitri reference list` shows who accepted each file and whether its record still verifies).
 - **Unmodified geometry.** Direct edits that name a reference part (push/pull, move, delete, a boolean that consumes it)
   are refused, and every build proves the part's geometry after the edits is what was loaded.
 - **No interference.** No designed part may overlap it (more than 0.001 mm³, the boolean's numerical tolerance).
-- **Clearance** (with `clearance=`). Every designed part not listed in `contact=` keeps at least that gap.
+- **Clearance** (with `clearance=`). Every designed part not listed in `contact=` keeps at least that gap. Without
+  `clearance=` the check is "not run" (a warning; a change package needs it run, or waived by a person).
 - **Mounts.** For each `mount(...)`: the designed part has a hole coaxial with the reference hole (axis offset and
   angle within your stated tolerances; the smallest coaxial hole is taken as the clearance bore), and its diameter
   is the ISO 273 clearance for the screw and series (fine / medium / coarse) as published by Albany County Fasteners
