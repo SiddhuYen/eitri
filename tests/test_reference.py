@@ -15,6 +15,43 @@ from eitri.model import load_model
 from eitri.project import Project
 
 FIX = Path(__file__).parent / "fixtures" / "reference"
+
+
+class _TTY:
+    """A person at /dev/tty: reads back the one-time code they were shown (eitri.tickets.store.terminal_confirm)."""
+
+    def __init__(self):
+        self.seen = ""
+
+    def write(self, text):
+        self.seen += text
+
+    def flush(self):
+        pass
+
+    def readline(self):
+        import re as _re
+        return _re.findall(r"type this code: (\w+)", self.seen)[-1] + "\n"
+
+    def fileno(self):
+        raise OSError
+
+    def close(self):
+        pass
+
+
+@pytest.fixture
+def person(tmp_path, monkeypatch):
+    """A person in their own terminal (no agent markers, a stand-in /dev/tty), eitri's signing key in a temporary folder:
+    reference add / accept / remove are person-only, like `eitri ticket approve`."""
+    from eitri.tickets import store
+    for k in store.AGENT_ENV:
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("EITRI_CONFIG_DIR", str(tmp_path / "config"))
+    store.set_signer(store.LocalKeySigner())
+    tty = _TTY()
+    monkeypatch.setattr(store, "_open_tty", lambda: tty)
+    return tty
 EXAMPLE = Path(__file__).resolve().parents[1] / "examples" / "motor-bracket"
 
 
@@ -192,7 +229,7 @@ def test_fixing_the_design_turns_every_reference_check_green(tmp_path):
     assert sum("coaxial" in n for n in names) == 2 and sum("ISO 273 medium" in n for n in names) == 2
 
 
-def test_a_changed_file_fails_until_a_person_accepts_it(tmp_path, capsys):
+def test_a_changed_file_fails_until_a_person_accepts_it(tmp_path, capsys, person):
     from eitri.cli import main as cli
     folder = _folder(tmp_path / "job", "test_block.step")
     (folder / "clamp.py").write_text(BAD.replace("blk.mount(h, ", "pass  # blk.mount(h, "))
@@ -204,14 +241,17 @@ def test_a_changed_file_fails_until_a_person_accepts_it(tmp_path, capsys):
     assert not res.ok and "CHANGED since it was accepted" in res.error and "eitri reference accept" in res.error
     assert cli(["reference", "list", str(folder)]) == 1
     assert "CHANGED" in capsys.readouterr().out
-    assert cli(["reference", "accept", str(folder), "inputs/test_block.step"]) == 0
-    assert Project(folder).references()["inputs/test_block.step"]["by"] == "cli"
+    assert cli(["reference", "accept", str(folder), "inputs/test_block.step", "--by", "Pat Person"]) == 0
+    assert "type this code" in person.seen and "inputs/test_block.step" in person.seen        # the person saw what they accept
+    rec = Project(folder).references()["inputs/test_block.step"]
+    assert rec["by"] == "Pat Person" and rec["person"]["signature"] and rec["person"]["method"] == "cli-terminal"
+    assert Project(folder).reference_acceptance("inputs/test_block.step") == (f"Pat Person on {rec['person']['at'][:10]}", True)
     pr.reload()
     assert pr.build(note="accepted", render=False).error is None
     assert cli(["reference", "list", str(folder)]) == 0
 
 
-def test_a_reference_cannot_be_dropped_and_direct_edits_on_it_are_refused(tmp_path):
+def test_a_reference_cannot_be_dropped_and_direct_edits_on_it_are_refused(tmp_path, person):
     from eitri.cli import main as cli
     folder = _folder(tmp_path / "job", "test_block.step")
     (folder / "clamp.py").write_text(BAD)
@@ -232,13 +272,13 @@ def test_a_reference_cannot_be_dropped_and_direct_edits_on_it_are_refused(tmp_pa
     assert pr.build(note="removed by the person", render=False).error is None
 
 
-def test_cli_add_copies_and_accepts(tmp_path, capsys):
+def test_cli_add_copies_and_accepts(tmp_path, capsys, person):
     from eitri.cli import main as cli
     folder = tmp_path / "job"
     Project(folder, name="m")
     assert cli(["reference", "add", str(folder), str(FIX / "test_motor.step"), "--name", "motor"]) == 0
     assert (folder / "inputs" / "motor.step").read_bytes() == (FIX / "test_motor.step").read_bytes()
-    assert Project(folder).references()["inputs/motor.step"]["by"] == "cli"
+    assert Project(folder).references()["inputs/motor.step"]["person"]["signature"]
     assert 'reference_step("inputs/motor.step", name="motor")' in capsys.readouterr().out
     bad = tmp_path / "bad.step"
     bad.write_bytes(b"not a step file")
@@ -277,3 +317,51 @@ def test_accepted_hashes_apply_only_to_their_own_project(tmp_path):
         R.reference_step("inputs/test_block.step")
     R.take()
     R.set_accepted({})
+
+
+def test_accept_add_and_remove_are_person_only_like_ticket_approve(tmp_path, monkeypatch, capsys):
+    """The same barriers as `eitri ticket approve`: refused in an agent's process (its markers), refused without a terminal, a
+    hand-edited acceptance record does not verify, and nothing is recorded or copied when refused."""
+    import subprocess
+    import sys
+    from eitri.cli import main as cli
+    from eitri.tickets import store
+    monkeypatch.setenv("EITRI_CONFIG_DIR", str(tmp_path / "config"))
+    folder = _folder(tmp_path / "job", "test_block.step")
+    (folder / "clamp.py").write_text(BAD)
+    pr = Project(folder, name="clamp")
+    assert pr.build(note="first", render=False).error is None             # first use records the hash (unsigned: no person)
+    before = json.dumps(Project(folder).references(), sort_keys=True)
+    for k in store.AGENT_ENV:
+        monkeypatch.delenv(k, raising=False)
+    for marker in ("EITRI_AGENT_PROCESS", "CLAUDECODE"):
+        monkeypatch.setenv(marker, "1")
+        with pytest.raises(store.NotAPerson, match=marker):
+            pr.accept_reference("inputs/test_block.step", confirm=lambda a, b: {})
+        with pytest.raises(store.NotAPerson, match=marker):
+            pr.remove_reference("inputs/test_block.step", confirm=lambda a, b: {})
+        assert cli(["reference", "accept", str(folder), "inputs/test_block.step"]) == 1
+        assert cli(["reference", "add", str(folder), str(FIX / "test_motor.step"), "--name", "motor"]) == 1
+        assert not (folder / "inputs" / "motor.step").exists()              # a refused add copies nothing
+        monkeypatch.delenv(marker)
+    assert "refused" in capsys.readouterr().err
+    with pytest.raises(store.NotAPerson, match="interactive terminal"):  # pytest's stdin is not a terminal
+        pr.accept_reference("inputs/test_block.step")
+    env = {k: v for k, v in __import__("os").environ.items() if k not in store.AGENT_ENV}
+    proc = subprocess.run([sys.executable, "-m", "eitri", "reference", "accept", str(folder), "inputs/test_block.step"], input="",
+                          capture_output=True, text=True, env={**env, "PYTHONPATH": str(Path(__file__).resolve().parents[1]),
+                                                               "EITRI_LAZY_IMPORT": "1"}, timeout=300)
+    assert proc.returncode == 1 and "terminal" in proc.stderr, proc.stderr
+    assert json.dumps(Project(folder).references(), sort_keys=True) == before
+    # a person accepts; then a hand edit of the record (an agent's own Write tool) no longer verifies
+    tty = _TTY()
+    monkeypatch.setattr(store, "_open_tty", lambda: tty)
+    store.set_signer(store.LocalKeySigner())
+    f = folder / "inputs" / "test_block.step"
+    f.write_bytes(f.read_bytes().replace(b"test_block", b"test_blocc", 1))
+    pr.accept_reference("inputs/test_block.step", by="Pat Person")
+    assert pr.reference_acceptance("inputs/test_block.step")[1] is True
+    st = json.loads((folder / "eitri.json").read_text())
+    st["references"]["clamp.py"]["inputs/test_block.step"]["sha256"] = "0" * 64
+    (folder / "eitri.json").write_text(json.dumps(st))
+    assert Project(folder).reference_acceptance("inputs/test_block.step")[1] is False

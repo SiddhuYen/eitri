@@ -11,7 +11,7 @@
 # Settings (environment variables):
 #   EITRI_NO_UV_INSTALL=1   do not install uv automatically (stop and say how instead)
 #   EITRI_NO_PATH_EDIT=1    leave your shell profile alone (then run eitri by the full path printed at the end)
-#   EITRI_VERSION=0.7.0     install this version instead of the newest
+#   EITRI_VERSION=0.8.0     install this version instead of the newest
 #   EITRI_INSTALL_SOURCE=…  install from this instead: a checkout folder, a wheel, or any uv requirement
 #                           (./install.sh in a checkout sets it to the checkout)
 #   EITRI_PLUGIN=1          same as --plugin
@@ -29,7 +29,7 @@
 # The whole script is one function called on the last line, so a download cut off half-way runs nothing.
 set -eu
 
-EITRI_FALLBACK_TAG="${EITRI_FALLBACK_TAG:-v0.7.0}"
+EITRI_FALLBACK_TAG="${EITRI_FALLBACK_TAG:-v0.8.0}"
 EITRI_REPO="https://github.com/SiddhuYen/eitri"
 PYPI_PACKAGE="eitri-hardware"
 OLD_PACKAGE="eitri-cad"          # the name up to 0.5.6 (installed from GitHub); both provide the `eitri` command
@@ -181,8 +181,19 @@ eitri_install() {
     fi
     say ""
     say "==> registering the eitri plugin in your agent apps (eitri plugin install)"
-    if ! "$eitri" plugin install; then
-      err "the plugin could not be registered everywhere (the FAIL lines above); fix that and run: $eitri plugin install"
+    plugin_rc=0
+    plugin_out="$("$eitri" plugin install 2>&1)" || plugin_rc=$?
+    printf '%s\n' "$plugin_out"
+    if [ "$plugin_rc" -ne 0 ]; then
+      case "$plugin_out" in
+        *"No agent app found"*)
+          # nothing failed: there is no agent app to register the plugin in yet (eitri itself is installed and works)
+          say ""
+          say "eitri is installed. To use it as a plugin, install Claude Code, Codex or Cursor, then run:  $eitri plugin install"
+          say "Or start eitri's own app now:  eitri"
+          exit 0 ;;
+      esac
+      err "the plugin could not be registered in every agent app (see the lines above); fix that and run: $eitri plugin install"
       exit 1
     fi
     if ! "$eitri" plugin status 2>/dev/null | grep -q 'eitri.io token: (none)'; then

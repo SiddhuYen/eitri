@@ -5,7 +5,7 @@ Mirrors eitri/report.py: `analyze()` runs the built-in checks and the model's ow
 """
 from __future__ import annotations
 
-from ..checks import checks_not_run, not_run_line
+from ..checks import checks_not_run, stamp_status, not_run_line
 from ..check_sources import attach, check_lines
 
 import time
@@ -46,7 +46,7 @@ class HarnessReport:
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
-        d["checks_not_run"] = checks_not_run(self.checks)     # checks switched off by an unset input
+        stamp_status(d, self.checks)            # each check's status + checks_not_run (switched off by an unset input)
         return d
 
 

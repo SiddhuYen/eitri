@@ -93,6 +93,89 @@ def _supply(c, h):
     return power.power_sources(lim.source) or [rule(f"not graded: {lim.basis}")]
 
 
+# ---------------------------------------------------------------------------- overcurrent protection (eitri.harness.protection)
+# The protection checks cite a short source in their text ("[source: Littelfuse ATOF 287 datasheet rev. 12/06/2022, p.1]");
+# eitri.harness.fuses.FUSE_SOURCES holds each one's full quote with the address the document was read at. Here they become records:
+# the short cite as the text (it names the revision and page), the address from the quote as the URL.
+_ADDR = re.compile(r"((?:[a-z0-9-]+\.)+[a-z]{2,}/[^\s,;)']+)")
+
+
+def _fuse_doc(short: str):
+    from .fuses import FUSE_SOURCES
+    full = FUSE_SOURCES.get(short)
+    if full is None:
+        return None
+    m = _ADDR.search(full)
+    return doc(short, "https://" + m.group(1).rstrip(".") if m else "", short)
+
+
+def _fuse_docs(*shorts):
+    return tuple(d for d in (_fuse_doc(x) for x in shorts) if d is not None)
+
+
+def _all_fuse_docs():
+    from .fuses import FUSE_SOURCES
+    return _fuse_docs(*FUSE_SOURCES)
+
+
+GIVEN = "as given in the model file (not from eitri's catalog)"
+OVERCURRENT = rule("a branch from a declared source passes an overcurrent device before any wire thinner than what the source can deliver")
+DECLARED = rule("every supply net is fed by a declared source (h.source) or marked a signal net")
+SCOPE = rule("eitri's overcurrent checks cover DC up to 60 V; mains and high voltage are out of scope (IEC 60364, NFPA 70)")
+AMBIENT_DEFAULT = assumption("40 C ambient around the fuses when Harness(ambient_C=) is not given (a warm machine enclosure)")
+
+
+def _cited(c):
+    """The short sources the check's text cites, as records (a model-given figure: the model file)."""
+    out = []
+    for m in re.findall(r"\[source: ([^\]]+)\]", f"{c.measured} {c.expected}"):
+        for part in [x.strip() for x in m.split("; ") if x.strip()]:
+            if part == GIVEN:
+                out.append(model_file("the device's own figure"))
+                continue
+            d = _fuse_doc(part)
+            if d is not None:
+                out.append(d)
+    return out
+
+
+def _protection(extra):
+    def resolve(c, h):
+        out = _cited(c) + list(extra(c, h) if callable(extra) else extra)
+        if "ASSUMPTION: Harness(ambient_C" in c.measured:
+            out.append(AMBIENT_DEFAULT)
+        return out
+    return resolve
+
+
+def _device(c, h):
+    dev = h.connectors.get(c.refs[0]) if c.refs else None
+    return getattr(dev, "device", None)
+
+
+def _device_docs(*keys):
+    """The device's own sources for these figures (a catalog part's datasheet; a part the model describes: the model file)."""
+    def extra(c, h):
+        d = _device(c, h)
+        out = []
+        for k in keys:
+            t = (getattr(d, "sources", None) or {}).get(k) if d is not None else None
+            if t == GIVEN:
+                out.append(model_file(f"{c.refs[0]} {k}"))
+            elif t:
+                out.append(_fuse_doc(t) or model_file(f"{c.refs[0]} {k}"))
+        return out
+    return extra
+
+
+def _both(*fns):
+    return lambda c, h: [x for f in fns for x in (f(c, h) if callable(f) else f)]
+
+
+def _source_figures(c, h):
+    return [model_file("h.source max_current_A / short_circuit_A"), CHASSIS_AMPACITY]
+
+
 R = "harness."
 RULES = [
     Rule(R + "pins-connected", "connectivity", r"all pins connected or declared NC$", (rule("every connector pin is wired or declared NC"),)),
@@ -113,4 +196,23 @@ RULES = [
     Rule(R + "shield-terminated", "consistency", r"shield terminated: ", (rule("a cable's shield is connected at one end or both"),)),
     Rule(R + "board-supply-pin", "power", r"supply ", tuple(dict.fromkeys(power.POWER_DOCS.values())), _supply),
     Rule(R + "shared-ground", "power", r"shared ground ", (rule("a load that takes a board's signal shares the board's ground"),)),
+    Rule(R + "overcurrent-protection", "protection", r"overcurrent protection from ", (OVERCURRENT, CHASSIS_AMPACITY,
+         model_file("h.source max_current_A / short_circuit_A")), _protection(lambda c, h: [OVERCURRENT] + _source_figures(c, h))),
+    Rule(R + "fuse-rating-vs-wire", "protection", r".+ rating within the wire it protects$", _fuse_docs(
+         "Blue Sea Systems 'DC Circuit Protection' 2005: rating <= wire ampacity") + (CHASSIS_AMPACITY, model_file("rating_A / trip_A")),
+         _protection(_both([CHASSIS_AMPACITY], _device_docs("rating")))),
+    Rule(R + "fuse-continuous-load", "protection", r".+ continuous load$", _all_fuse_docs() + (requirement("current_A"), AMBIENT_DEFAULT,
+         model_file("continuous_fraction")), _protection(_both([requirement("current_A")], _device_docs("continuous", "rerate")))),
+    Rule(R + "fuse-voltage-rating", "protection", r".+ voltage rating$", _all_fuse_docs() + (model_file("voltage_rating_V / h.source voltage_V"),),
+         _protection(_both([model_file("h.source voltage_V")], _device_docs("voltage")))),
+    Rule(R + "fuse-interrupting-rating", "protection", r".+ interrupting rating$", _all_fuse_docs() + (model_file("h.source short_circuit_A"),),
+         _protection(_both([model_file("h.source short_circuit_A")], _device_docs("interrupt")))),
+    Rule(R + "fuse-at-source-end", "protection", r".+ at the source end$", _fuse_docs(
+         "ABYC E-11 7 in (175 mm), per Blue Sea Systems 'DC Circuit Protection' 2005") + (CHASSIS_AMPACITY,),
+         _protection(lambda c, h: [] if _cited(c) else [CHASSIS_AMPACITY])),
+    Rule(R + "fuse-on-a-branch", "protection", r".+ on a branch from a declared source$", (DECLARED,)),
+    Rule(R + "supply-nets-declared", "protection", r"every supply net fed by a declared source$", (DECLARED,)),
+    Rule(R + "signal-net", "protection", r"signal net ", _fuse_docs("Arduino UNO R3 pinout: 20 mA per I/O pin") + (requirement("current_A"),),
+         _protection([requirement("current_A")])),
+    Rule(R + "in-scope", "protection", r"in scope: net ", (SCOPE,)),
 ]

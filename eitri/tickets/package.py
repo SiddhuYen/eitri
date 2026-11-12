@@ -258,7 +258,8 @@ def check_table(before: list[dict] | None, after: list[dict]) -> list[dict]:
         else:
             change = "same"
         ref = y or x
-        rows.append({"name": name, "category": ref["category"], "source": ref["source"], "change": change,
+        rows.append({"name": name, "category": ref["category"], "source": ref["source"], "sources": ref.get("sources") or [],
+                     "rule": ref.get("rule") or "", "change": change,
                      "from": None if x is None else {k: x[k] for k in ("status", "measured", "expected", "inputs_unset")},
                      "to": None if y is None else {k: y[k] for k in ("status", "measured", "expected", "inputs_unset")}})
     return rows
@@ -541,9 +542,12 @@ def _write_tables(out: Path, pkg: dict) -> None:
     fr, to = pkg["revisions"]["from"], pkg["revisions"]["to"]
     a = f"rev_{(fr or {}).get('letter') or 'base'}"
     b = f"rev_{to['letter']}"
-    w("checks.csv", ["check", "category", "change", f"{a}_status", f"{a}_measured", f"{b}_status", f"{b}_measured", f"{b}_expected", "source"],
+    w("checks.csv", ["check", "category", "change", f"{a}_status", f"{a}_measured", f"{b}_status", f"{b}_measured", f"{b}_expected", "source",
+                    "rule", "source_basis", "source_urls"],
       [[r["name"], r["category"], r["change"], (r["from"] or {}).get("status", ""), (r["from"] or {}).get("measured", ""),
-        (r["to"] or {}).get("status", ""), (r["to"] or {}).get("measured", ""), (r["to"] or {}).get("expected", ""), r["source"]]
+        (r["to"] or {}).get("status", ""), (r["to"] or {}).get("measured", ""), (r["to"] or {}).get("expected", ""), r["source"],
+        r.get("rule", ""), " ".join(dict.fromkeys(x["basis"] for x in r.get("sources") or [])),
+        " ".join(dict.fromkeys(x["url"] for x in r.get("sources") or [] if x.get("url")))]
        for r in pkg["checks"]["rows"]])
     if pkg["parameters"] is not None:
         w("parameters.csv", ["parameter", a, b, "change"], [[p["name"], p["from"], p["to"], p["change"]] for p in pkg["parameters"]])

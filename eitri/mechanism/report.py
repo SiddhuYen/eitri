@@ -5,7 +5,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from ..checks import Check, from_verify, checks_not_run, not_run_line
+from ..checks import Check, from_verify, checks_not_run, stamp_status, not_run_line
 from ..check_sources import attach, check_lines
 from ..model import Checker
 from .checks import JointInfo, TargetInfo, run_checks
@@ -41,7 +41,7 @@ class MechanismReport:
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
-        d["checks_not_run"] = checks_not_run(self.checks)     # checks switched off by an unset input
+        stamp_status(d, self.checks)            # each check's status + checks_not_run (switched off by an unset input)
         return d
 
 
@@ -108,7 +108,8 @@ def mechanism_data(m: Mechanism, rep: MechanismReport | None = None) -> dict[str
                     "actuator": ({"name": j.actuator.name, "stall_kgcm": j.actuator.stall_kgcm, "rated_kgcm": j.actuator.rated_kgcm, "stall_N": j.actuator.stall_N,
                                   "rated_N": j.actuator.rated_N, "speed_deg_s": j.actuator.speed_deg_s, "speed_mm_s": j.actuator.speed_mm_s,
                                   "gear_ratio": j.actuator.gear_ratio, "efficiency": j.actuator.efficiency, "travel_deg": j.actuator.travel_deg,
-                                  "travel_mm": j.actuator.travel_mm, "mass_g": j.actuator.mass_g} if j.actuator else None),
+                                  "travel_mm": j.actuator.travel_mm, "mass_g": j.actuator.mass_g,
+                                  "stall_A": j.actuator.stall_current()[0], "stall_A_source": j.actuator.stall_current()[1]} if j.actuator else None),
                     "speed_required": m.speeds.get(j.name), "status": jinfo[j.name].status if j.name in jinfo else None,
                     "required": jinfo[j.name].required if j.name in jinfo else None, "load_unit": jinfo[j.name].load_unit if j.name in jinfo else None,
                     "stall": jinfo[j.name].stall if j.name in jinfo else None, "rated": jinfo[j.name].rated if j.name in jinfo else None,

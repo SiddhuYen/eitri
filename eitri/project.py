@@ -221,10 +221,14 @@ class Project:
         if remember(self.state, self.model_path.name, result.references, time.time()):
             self._save()
 
-    def accept_reference(self, rel: str, model: str | None = None) -> tuple[str | None, str]:
+    def accept_reference(self, rel: str, model: str | None = None, *, by: str | None = None, confirm=None,
+                         action: str = "eitri reference accept") -> tuple[str | None, str]:
         """A person accepts the file now at `rel` (inputs/<name>.step) as the reference: (old sha256, new sha256).
-        For the CLI only; the agent has no tool for this."""
+        Person-only, with the same barriers as `eitri ticket approve` (eitri.tickets.store.person_record: refused in an agent's
+        process, a typed one-time code on the person's terminal) and a signed record. The agent has no tool for this."""
         from .reference import STATE_KEY, prescan, resolve_path
+        from .tickets import store as _person
+        _person.require_person(action)                       # first: an agent's process learns nothing more than "no"
         target, rel = resolve_path(rel, self.folder)
         data = target.read_bytes()
         prescan(data, rel)
@@ -235,8 +239,20 @@ class Project:
         allrefs = dict(self.state.get(STATE_KEY) or {})
         mine = {k: dict(v) for k, v in (allrefs.get(model) or {}).items()}
         old = (mine.get(rel) or {}).get("sha256")
+        if old == sha and (mine.get(rel) or {}).get("person"):
+            return old, sha                                   # already accepted by a person, as it is: nothing to confirm
+        text = (f"Accept {rel} as the reference part for {model} in {self.folder}:\n"
+                f"  sha256 {old or '(not recorded yet)'}\n      -> {sha}\n  {len(data)} bytes\n"
+                "Every build of this design is then checked against this file's geometry (interference, clearance, mounts).")
+        kw = {"by": by} if confirm is None else {"by": by, "confirm": confirm}
+        rec = _person.person_record(action, text, f"accept {rel}", **kw)
+        payload = {"model": model, "path": rel, "sha256": sha, "bytes": len(data)}
+        rec = _person.sign_record("reference-accept", payload, rec)
+        self.reload()
+        allrefs = dict(self.state.get(STATE_KEY) or {})
+        mine = {k: dict(v) for k, v in (allrefs.get(model) or {}).items()}
         entry = dict(mine.get(rel) or {})
-        entry.update(sha256=sha, bytes=len(data), accepted=round(time.time(), 3), by="cli")
+        entry.update(sha256=sha, bytes=len(data), accepted=round(time.time(), 3), by=rec["by"], person=rec)
         entry.setdefault("name", Path(rel).stem)
         entry.setdefault("mounts", 0)
         mine[rel] = entry
@@ -245,11 +261,21 @@ class Project:
         self._save()
         return old, sha
 
-    def remove_reference(self, rel: str, model: str | None = None) -> bool:
-        """Forget an accepted reference (the person took the customer part out of the job). CLI only."""
+    def remove_reference(self, rel: str, model: str | None = None, *, by: str | None = None, confirm=None) -> bool:
+        """Forget an accepted reference (the person took the customer part out of the job). Person-only, like accept: dropping
+        a reference drops its checks."""
         from .reference import STATE_KEY
+        from .tickets import store as _person
         self.reload()
         model = model or self.model_path.name
+        allrefs = dict(self.state.get(STATE_KEY) or {})
+        mine = dict(allrefs.get(model) or {})
+        if rel not in mine:
+            return False
+        kw = {"by": by} if confirm is None else {"by": by, "confirm": confirm}
+        _person.person_record("eitri reference remove", f"Forget the reference {rel} of {model} in {self.folder}: its interference, "
+                              "clearance and mounting checks stop running.", f"remove {rel}", **kw)
+        self.reload()
         allrefs = dict(self.state.get(STATE_KEY) or {})
         mine = dict(allrefs.get(model) or {})
         gone = mine.pop(rel, None) is not None
@@ -257,6 +283,18 @@ class Project:
         self.state[STATE_KEY] = allrefs
         self._save()
         return gone
+
+    def reference_acceptance(self, rel: str, model: str | None = None) -> tuple[str, bool]:
+        """How the recorded hash of a reference was accepted: ("first use", True) when the first build that read the file
+        recorded it, ("<person> on <date>", verified) for a person's acceptance (verified: its signature checks out)."""
+        from .reference import STATE_KEY
+        from .tickets import store as _person
+        rec = ((self.state.get(STATE_KEY) or {}).get(model or self.model_path.name) or {}).get(rel) or {}
+        who = rec.get("person")
+        if not who:
+            return "first use (recorded by the first build that read it)", True
+        payload = {"model": model or self.model_path.name, "path": rel, "sha256": rec.get("sha256"), "bytes": rec.get("bytes")}
+        return f"{who.get('by')} on {str(who.get('at', ''))[:10]}", _person.verify_record("reference-accept", payload, who)
 
     def reference_parts(self) -> set[str]:
         """Names of the reference parts in the current model's latest build (for refusing direct edits up front)."""

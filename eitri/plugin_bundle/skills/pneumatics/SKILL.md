@@ -38,6 +38,7 @@ For follow-up requests, edit the existing model (read it with `read_model` if yo
 - Size for the usable force (the theoretical force less the 10% friction allowance) and keep the load ratio at or below 0.5 for a load the cylinder moves (SMC; 0.7 for static clamping, 1.0 on a guide: set the cylinder's `duty=`); a warning is a decision: fix it or say why it is acceptable.
 - Give C and b from datasheets whenever you can; the estimates the checks fall back on are conservative and the report names every component graded with one.
 - Use catalogue parts (`part="SMC CDQ2B32-20DZ"`, see the reference) when the request names a maker or when one fits: their figures are sourced and add the datasheet checks. For a machine that a PLC runs, set `c.control_voltage(24)`, give each valve coil a `signal=` name and put a `c.sensor(...)` on every end position the sequence waits for: the build writes the I/O list from them. A clamp that must hold on power loss wants a double-solenoid (or 5/3 closed-centre) valve.
+- Declare every cylinder's fail-safe state from the request: `on_power_loss=` and `on_air_loss=` ("hold" | "extend" | "retract" | "release"); the build grades them against the valves. Undeclared, the check does not run (a warning that blocks a package): ask or state the assumption, never leave it. A closed-centre hold is a warning (SMC: trapped air leaks); a guaranteed hold needs pilot check valves or a mechanical lock.
 - Every cylinder port must be fed through a valve position and vented through another; a double-acting cylinder needs a 4- or 5-ported valve, a single-acting one a 3/2. Put the speed controller on the exhaust side (meter-out) unless the request says otherwise.
 
 # Tools
@@ -52,3 +53,12 @@ Call tools by the exact names your host shows you (they may carry a prefix such 
 - `read_model()`, `pneumatics_reference()`, `export(...)` (paths of the schematic, BOM and tables), `compare_revisions(a, b)`, `design_notes(text)`.
 
 Work efficiently: one good build beats five sloppy ones. Two hard rules: never finish with failing checks, and never finish without having looked at the latest build's review image.
+
+# Tickets, approval and packages (customer work)
+
+A project may work under a **ticket**: a customer's change request with acceptance criteria. `ticket_show()` says whether one is active and its state; a write or build refused with "ticket" means one is.
+- Order of work: `ticket_show()` → read the model and its last build → `ticket_plan(...)` (the files and parameters you will change, from → to, the checks you expect to change, what will not be checked, open questions) → **stop** and tell the person to approve it by running `eitri ticket approve <id>` in their own terminal.
+- Only a person approves. No tool you have approves, waives or closes a ticket, and those commands refuse in your shell. Never say a ticket is approved, or that the person approved it, until `ticket_show()` says approved; never try to get around a refusal (edit ticket files, run the CLI yourself).
+- Once approved, make the planned change only: a parameter the plan did not list is flagged on the package's first page. Then call `package(ticket)`. A package is refused while any check fails or did not run: fix the design (never delete or loosen a check); a "not run" check needs its missing input from a datasheet, or the person may waive it with a reason (`eitri ticket waive`, theirs to run, never yours).
+- Every check cites its source (`[source: ...]` on its line, numbered URLs under the checks). Quote the source when you tell the person why a check fails; a source marked ASSUMPTION is a figure nobody published: say so.
+- Customer files are read-only: a reference part (a customer STEP in `inputs/`) that changed fails the build until the person runs `eitri reference accept`. Tell them; do not edit, replace, re-declare or drop it.

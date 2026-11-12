@@ -6,7 +6,9 @@
     eitri reference remove <project> inputs/<file.step>    forget one (the customer part is no longer in the job)
 
 These are deliberately command-line only: the agent has no tool that accepts or removes a reference, so it can never
-make a changed customer file pass, or drop a reference to get rid of its checks. Nothing here parses the STEP file
+make a changed customer file pass, or drop a reference to get rid of its checks. add, accept and remove are person-only
+with the same barriers as `eitri ticket approve` (eitri.tickets.store.person_record): refused in an agent's process, a
+one-time code typed back on the person's terminal, and a signed record in eitri.json. Nothing here parses the STEP file
 (that happens inside a build, where model code runs); it is only size-capped, pre-scanned and hashed.
 """
 from __future__ import annotations
@@ -28,14 +30,17 @@ def add_parser(sub) -> None:
     a.add_argument("file")
     a.add_argument("--name", default=None, help="the reference part's name (default: the file name)")
     a.add_argument("--model", default=None, help="model file to accept it for (default: the project's current one)")
+    a.add_argument("--by", default=None, help="your name, for the record (default: your login name)")
     ac = rs.add_parser("accept", help="accept the file now at inputs/<file> (a new revision from the customer)")
     ac.add_argument("project")
     ac.add_argument("path")
     ac.add_argument("--model", default=None)
+    ac.add_argument("--by", default=None, help="your name, for the record (default: your login name)")
     rm = rs.add_parser("remove", help="forget an accepted reference (its reference_step() can then be taken out of the model)")
     rm.add_argument("project")
     rm.add_argument("path")
     rm.add_argument("--model", default=None)
+    rm.add_argument("--by", default=None, help="your name, for the record (default: your login name)")
 
 
 def _project(folder: str):
@@ -48,6 +53,7 @@ def _project(folder: str):
 
 def main(args: argparse.Namespace) -> int:
     from .reference import ReferenceError, STATE_KEY, prescan, resolve_path, sha256_file
+    from .tickets.store import TicketError
     try:
         pr = _project(args.project)
         if args.ref_cmd == "list":
@@ -64,9 +70,12 @@ def main(args: argparse.Namespace) -> int:
                         status = "ok" if now == rec.get("sha256") else f"CHANGED (now {now[:16]}…)"
                     except ReferenceError as exc:
                         status = f"MISSING ({exc})"
+                    how, signed = pr.reference_acceptance(rel, model)
+                    if not signed:
+                        status += "; the acceptance record's signature does NOT verify (edited by hand, or accepted on another machine)"
                     bad += status != "ok"
                     print(f"{model}: {rec.get('name') or rel}  {rel}  sha256 {str(rec.get('sha256'))[:16]}…  "
-                          f"{rec.get('bytes')} bytes  mounts {rec.get('mounts', 0)}  accepted by {rec.get('by')}  [{status}]")
+                          f"{rec.get('bytes')} bytes  mounts {rec.get('mounts', 0)}  accepted: {how}  [{status}]")
             return 1 if bad else 0
         if args.ref_cmd == "add":
             src = Path(args.file)
@@ -85,16 +94,24 @@ def main(args: argparse.Namespace) -> int:
                       f"copy the file over it yourself and run `eitri reference accept {args.project} {dest.relative_to(pr.folder)}`",
                       file=sys.stderr)
                 return 1
+            from .tickets.store import require_person
+            require_person("eitri reference add")              # before the copy: a refused add leaves inputs/ as it was
             dest.parent.mkdir(parents=True, exist_ok=True)
-            if not dest.exists():
+            copied = not dest.exists()
+            if copied:
                 shutil.copyfile(src, dest)
             rel = str(dest.relative_to(pr.folder)).replace("\\", "/")
-            _old, sha = pr.accept_reference(rel, model=args.model)
+            try:
+                _old, sha = pr.accept_reference(rel, model=args.model, by=args.by, action="eitri reference add")
+            except TicketError:
+                if copied:
+                    dest.unlink(missing_ok=True)
+                raise
             print(f"accepted {rel} (sha256 {sha}) for {args.model or pr.model_path.name}")
             print(f'use it in the model:  {stem} = reference_step("{rel}", name="{stem}")')
             return 0
         if args.ref_cmd == "accept":
-            old, sha = pr.accept_reference(args.path, model=args.model)
+            old, sha = pr.accept_reference(args.path, model=args.model, by=args.by)
             if old == sha:
                 print(f"{args.path} is unchanged (sha256 {sha}); nothing to accept")
             else:
@@ -102,12 +119,15 @@ def main(args: argparse.Namespace) -> int:
                 print("rebuild the project: its checks now run against the new file")
             return 0
         if args.ref_cmd == "remove":
-            if pr.remove_reference(args.path, model=args.model):
+            if pr.remove_reference(args.path, model=args.model, by=args.by):
                 print(f"forgot {args.path}; take its reference_step(...) out of the model file (the file itself is kept)")
                 return 0
             print(f"{args.path} is not an accepted reference of {args.model or pr.model_path.name}", file=sys.stderr)
             return 1
     except ReferenceError as exc:
         print(f"not accepted: {exc}", file=sys.stderr)
+        return 1
+    except TicketError as exc:                       # NotAPerson (an agent's process, no terminal) or a wrong code
+        print(f"refused: {exc}", file=sys.stderr)
         return 1
     return 2

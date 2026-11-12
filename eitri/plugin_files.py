@@ -66,7 +66,8 @@ def domain_skill(name: str) -> str:
     title = {"cad": "mechanical CAD", "harness": "wire harnesses", "mechanism": "mechanisms", "pneumatics": "pneumatics",
              "firmware": "firmware", "electronics": "electronics"}[kind]
     front = f"---\nname: {name}\ndescription: {json.dumps(desc)}\n---\n\n"
-    return front + _PREAMBLE.format(title=title, kind=kind if kind != "cad" else "CAD", ref=ref) + text + "\n"
+    tickets = (_AGENT / "tickets_prompt.md").read_text(encoding="utf-8").strip()
+    return front + _PREAMBLE.format(title=title, kind=kind if kind != "cad" else "CAD", ref=ref) + text + "\n\n" + tickets + "\n"
 
 
 def cursor_rule() -> str:

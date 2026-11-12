@@ -87,7 +87,8 @@ class Report:
     near_gap: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        from .checks import stamp_status
+        return stamp_status(asdict(self), self.checks)      # each check's status, and checks_not_run (as every domain reports)
 
     @property
     def ok(self) -> bool:
@@ -403,6 +404,10 @@ def _summarize_core(report: Report, max_parts: int = 30) -> str:
     if report.checks:
         lines.append("Checks (verify):")
         lines += ["  " + x for x in check_lines(report.checks)]
+        from .checks import not_run_line
+        off = not_run_line(report.checks)
+        if off:
+            lines.append(off)
     return "\n".join(lines)
 
 

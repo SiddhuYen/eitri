@@ -271,3 +271,36 @@ def test_install_hint_points_at_setup():
     assert "`eitri setup firmware`" in install_hint("arduino:avr")
     assert "`eitri setup firmware --esp32`" in install_hint("esp32:esp32")
     assert "arduino-cli core install arduino:avr" in install_hint("arduino:avr")
+
+
+def _plugin_step(tmp_path, install_out: str, install_rc: int):
+    """Run the installer's --plugin step (scripts/install-remote.sh) against a stand-in `eitri` command."""
+    import subprocess
+    text = (ROOT / "scripts/install-remote.sh").read_text(encoding="utf-8")
+    start = text.index('  if [ "$want_plugin" = "1" ]; then')
+    end = text.index("\n  fi\n", start) + len("\n  fi\n")
+    fake = tmp_path / "eitri"
+    fake.write_text("#!/bin/sh\n"
+                    'case "$1 $2" in\n'
+                    "  '--help '*) echo '    plugin   the plugin' ;;\n"
+                    f"  'plugin install') printf '%s\\n' {install_out!r}; exit {install_rc} ;;\n"
+                    "  'plugin status') echo 'eitri.io token: (none)' ;;\n"
+                    "esac\nexit 0\n")
+    fake.chmod(0o755)
+    script = ("say() { printf '%s\\n' \"$*\"; }\nerr() { printf 'eitri install: %s\\n' \"$*\" >&2; }\n"
+              f"run() {{\n  want_plugin=1\n  eitri={str(fake)!r}\n{text[start:end]}}}\nrun </dev/null\n")
+    return subprocess.run(["sh", "-c", script], capture_output=True, text=True, timeout=60)
+
+
+def test_installer_plugin_step_with_no_agent_app_exits_0(tmp_path):
+    """0.7.1 brief: `--plugin` on a machine with no agent app installs eitri fine; it must not exit 1 or mention FAIL lines."""
+    p = _plugin_step(tmp_path, "No agent app found (looked for Claude Code, Codex and Cursor). Install one, then run `eitri plugin install`.", 1)
+    assert p.returncode == 0, p.stderr
+    assert "install Claude Code, Codex or Cursor" in p.stdout and "FAIL" not in p.stdout + p.stderr
+
+
+def test_installer_plugin_step_keeps_exit_1_for_a_real_failure(tmp_path):
+    p = _plugin_step(tmp_path, "  FAIL Claude Code: claude plugin install failed", 1)
+    assert p.returncode == 1 and "could not be registered" in p.stderr
+    ok = _plugin_step(tmp_path, "  ok   Claude Code: installed", 0)
+    assert ok.returncode == 0 and "Done. Restart your agent" in ok.stdout

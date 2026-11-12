@@ -52,6 +52,8 @@ class ActuatorSpec:
     rated_kgcm: float | None
     at_V: float
     source: str
+    stall_A: float | None = None       # current drawn at stall, where a source gives one (None: not published / not read)
+    stall_A_source: str = ""
 
 
 # Datasheet figures, fetched 2026-10-26 (STS3215 re-read 2026-11-07). Matched by name: Actuator("MG996R", ...) or Actuator("Feetech STS3215", ...).
@@ -60,8 +62,13 @@ ACTUATOR_CATALOG = {s.key: s for s in [
                  "Specification: stall torque 16.5 kg.cm and rated torque 4 kg.cm at 6 V (19.5 / 5 at 7.4 V); Feetech's product page "
                  "says 19.5 / 6.5 at 6 V, the lower spec-sheet figures are used (https://www.feetechrc.com/Data/feetechrc/upload/file/"
                  "20260622/6391772523943436695270694.pdf)"),
-    ActuatorSpec("MG996R", 9.4, None, 4.8, "TowerPro MG996R datasheet: stall 9.4 kgf.cm at 4.8 V, 11 kgf.cm at 6 V; no continuous rating"),
-    ActuatorSpec("SG90", 1.8, None, 4.8, "TowerPro SG90 datasheet: stall 1.8 kgf.cm at 4.8 V; no continuous rating"),
+    ActuatorSpec("MG996R", 9.4, None, 4.8, "TowerPro MG996R datasheet: stall 9.4 kgf.cm at 4.8 V, 11 kgf.cm at 6 V; no continuous rating",
+                 2.5, "TowerPro MG996R page (https://towerpro.com.tw/product/mg996r/): \"Stall current draw 1400mA\"; Electronicos Caldas "
+                      "MG996R datasheet (2014-08-19): \"Stall Current 2.5 A (6V)\": the higher draw is used (the same figure as "
+                      "eitri.electronics' MG996R)"),
+    ActuatorSpec("SG90", 1.8, None, 4.8, "TowerPro SG90 datasheet: stall 1.8 kgf.cm at 4.8 V; no continuous rating",
+                 2.0, "ASSUMPTION: TowerPro SG90 page Q&A (https://towerpro.com.tw/product/sg90-7/, 2021-11-07, re-read 2026-11-07): "
+                      "\"about 0.5A - 2A\"; the higher figure taken as the stall draw (the same figure as eitri.electronics' SG90)"),
 ]}
 
 
@@ -115,16 +122,28 @@ class Actuator:
     continuous: bool = False             # it turns without end (a continuous-rotation servo, a motor with its own encoder): no travel to grade
     mass_g: float = 0.0                  # the motor body, carried by the parent link at the joint
     notes: str = ""
+    stall_A: float | None = None         # current at stall, A (a DC motor's or servo's): as given, else the catalog's sourced figure;
+                                         # None: unknown, and a check that needs it (a host's supply budget) reports "not run"
 
     def __post_init__(self) -> None:
         if self.gear_ratio <= 0 or not 0 < self.efficiency <= 1:
             raise MechanismError(f"actuator {self.name!r}: gear_ratio must be positive and efficiency in (0, 1]")
-        for k in ("stall_kgcm", "rated_kgcm", "stall_N", "rated_N", "speed_deg_s", "speed_mm_s", "travel_deg", "travel_mm"):
+        for k in ("stall_kgcm", "rated_kgcm", "stall_N", "rated_N", "speed_deg_s", "speed_mm_s", "travel_deg", "travel_mm", "stall_A"):
             v = getattr(self, k)
             if v is not None and float(v) <= 0:
                 raise MechanismError(f"actuator {self.name!r}: {k} must be positive")
         if self.mass_g < 0:
             raise MechanismError(f"actuator {self.name!r}: mass_g must not be negative")
+
+    def stall_current(self) -> tuple[float | None, str]:
+        """(amps at stall or None, where it comes from): the model file's stall_A, else the catalog's sourced figure for a named
+        actuator, else (None, why). A check that needs it treats None as "not run", never as zero."""
+        if self.stall_A is not None:
+            return float(self.stall_A), f"the model file ({self.name} stall_A)"
+        spec = catalog_actuator(self.name)
+        if spec is not None and spec.stall_A is not None:
+            return float(spec.stall_A), spec.stall_A_source
+        return None, f"{self.name} has no stall_A, and eitri's catalog has no sourced stall current for it"
 
     def stall_out(self, kind: str) -> float | None:
         """Stall torque (kgf.cm) or force (N) at the joint, after the transmission."""

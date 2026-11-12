@@ -5,7 +5,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from ..checks import Check, from_verify, checks_not_run, not_run_line
+from ..checks import Check, from_verify, checks_not_run, stamp_status, not_run_line
 from ..check_sources import attach, check_lines
 from ..model import Checker
 from .checks import CylinderInfo, PathInfo, StrokeInfo, SupplyInfo, run_checks
@@ -38,7 +38,7 @@ class CircuitReport:
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
-        d["checks_not_run"] = checks_not_run(self.checks)
+        stamp_status(d, self.checks)            # each check's status + checks_not_run (switched off by an unset input)
         for cy in d["cylinders"]:                                  # PathInfo holds Tube objects: keep names only
             for s in cy["strokes"]:
                 for k in ("fill", "exhaust"):

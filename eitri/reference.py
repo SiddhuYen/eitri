@@ -558,11 +558,45 @@ def _pair_lookup(report) -> dict:
     return out
 
 
+# ---------------------------------------------------------------------------- the checks' rules and sources (eitri.check_sources)
+
+
+def _rules():
+    from .check_sources import doc, requirement, rule
+    from .lib.fasteners import ISO_273_SOURCE, ISO_273_URL
+    return {
+        "cad.reference-present": (rule("every declared reference part is in the assembly"),),
+        "cad.reference-unmodified": (rule("a reference part is the accepted file's geometry: topology counts, volume, area and bounding "
+                                          "box unchanged after the direct edits (the file's SHA-256 is checked before the build)"),),
+        "cad.reference-overlap": (rule(f"no designed part overlaps a reference part (more than {OVERLAP_TOL_MM3:g} mm^3, the boolean's "
+                                       "numerical tolerance, not a physical figure)"),),
+        "cad.reference-clearance": (requirement("reference_step(clearance=, contact=)"),),
+        "cad.reference-mounts-kept": (rule("a reference's declared mounting checks are kept: never fewer than an earlier build declared"),),
+        "cad.reference-mount-coaxial": (requirement("mount(coaxial_tol=, angle_tol=)"),
+                                        rule("the designed part has a hole coaxial with the reference hole")),
+        "cad.reference-mount-clearance": (doc(ISO_273_SOURCE, ISO_273_URL, "Albany County Fasteners Clearance Hole Chart, (c) 2025, p.2"),
+                                          requirement("mount(screw=, series=, dia_tol=)")),
+    }
+
+
+RULE_IDS = ("cad.reference-present", "cad.reference-unmodified", "cad.reference-overlap", "cad.reference-clearance",
+            "cad.reference-mounts-kept", "cad.reference-mount-coaxial", "cad.reference-mount-clearance")
+
+
+def _res(rule_id: str, name: str, ok: bool, measured: str, expected: str = "", not_run=()):
+    """A reference check with its rule id and sources (the rule table above)."""
+    from .model import CheckResult
+    c = CheckResult(name, ok, measured, expected, source=list(_rules()[rule_id]), rule=rule_id)
+    if not_run:
+        from .checks import switched_off
+        switched_off(c, *not_run)
+    return c
+
+
 def checks(parts, report, accepted: dict | None = None, signatures: dict | None = None) -> list:
     """The reference parts' own checks (CheckResults for the report): geometry untouched, no interference,
     clearance, the kept-mounts guard, and every declared mount (coaxial + ISO 273 clearance diameter)."""
     from . import measure
-    from .model import CheckResult
     from .report import _box_gap
     out: list = []
     declared = list(getattr(parts, "references", None) or [])
@@ -576,11 +610,11 @@ def checks(parts, report, accepted: dict | None = None, signatures: dict | None 
         nm = rec["name"]
         part = by_name.get(nm)
         if part is None:
-            out.append(CheckResult(f"reference {nm}: still in the assembly", False, "missing (deleted by an edit?)", "present, unmodified"))
+            out.append(_res("cad.reference-present", f"reference {nm}: still in the assembly", False, "missing (deleted by an edit?)", "present, unmodified"))
             continue
         now = (signatures or {}).get(nm) or signature(part.shape)      # taken right after the direct edits
         same = _same_signature(now, rec.get("signature"))
-        out.append(CheckResult(f"reference {nm}: geometry unmodified ({rec['path']}, sha256 {rec['sha256'][:12]})", same,
+        out.append(_res("cad.reference-unmodified", f"reference {nm}: geometry unmodified ({rec['path']}, sha256 {rec['sha256'][:12]})", same,
                                "identical to the file" if same else "CHANGED after loading (an edit touched it?)", "byte-identical B-rep"))
         rbox = measure.bounding_box(part.shape)
         clearance = rec.get("clearance")
@@ -607,20 +641,24 @@ def checks(parts, report, accepted: dict | None = None, signatures: dict | None 
                 over.append(f"{p.name} {ov:.3g} mm^3")
             elif clearance is not None and p.name not in contact:
                 tight.append((dist, p.name))
-        out.append(CheckResult(f"no designed part overlaps reference {nm}", not over,
+        out.append(_res("cad.reference-overlap", f"no designed part overlaps reference {nm}", not over,
                                ("overlap: " + ", ".join(over)) if over else f"none ({checked} part(s) within {reach:g} mm measured)",
                                f"overlap <= {OVERLAP_TOL_MM3:g} mm^3"))
-        if clearance is not None:
+        if clearance is None:
+            out.append(_res("cad.reference-clearance", f"clearance to reference {nm}", True,
+                            f"no clearance= given for {nm}, so the gap to it is not graded (only overlap is)",
+                            "reference_step(..., clearance=<mm>, contact=[parts allowed to touch])", not_run=(f"{nm}.clearance",)))
+        else:
             bad = sorted((d, n) for d, n in tight if d < clearance - 1e-6)
             least = min(tight) if tight else None
             measured = (", ".join(f"{n} {d:.3g} mm" for d, n in bad) if bad else
                         f"tightest {least[1]} {least[0]:.3g} mm" if least else
                         f"every non-contact part is over {reach:g} mm away (bounding boxes)")
-            out.append(CheckResult(f"clearance to reference {nm} >= {clearance:g} mm" + (f" (contact allowed: {', '.join(sorted(contact))})" if contact else ""),
+            out.append(_res("cad.reference-clearance", f"clearance to reference {nm} >= {clearance:g} mm" + (f" (contact allowed: {', '.join(sorted(contact))})" if contact else ""),
                                    not bad, measured, f">= {clearance:g} mm"))
         kept = int(((accepted or {}).get(rec["path"]) or {}).get("mounts") or 0)
         if kept > len(rec.get("mounts") or []):
-            out.append(CheckResult(f"reference {nm}: declared mounting checks are kept", False,
+            out.append(_res("cad.reference-mounts-kept", f"reference {nm}: declared mounting checks are kept", False,
                                    f"{len(rec['mounts'])} mount(s) declared", f">= {kept} (earlier builds declared {kept})"))
         for i, m in enumerate(rec.get("mounts") or [], 1):
             out += _mount_checks(nm, i, m, by_name.get(m["part"]))
@@ -629,17 +667,17 @@ def checks(parts, report, accepted: dict | None = None, signatures: dict | None 
 
 def _mount_checks(ref_name: str, i: int, m: dict, part) -> list:
     from . import measure
-    from .lib.fasteners import ISO_273_SOURCE, iso273_clearance
-    from .model import CheckResult
+    from .lib.fasteners import ISO_273_PUBLISHER, ISO_273_SOURCE, iso273_clearance
+
     h = m["hole"]
     c = tuple(h["center"])
     ax = tuple(h["axis"])
     label = f"mount {i} ({ref_name} Ø{h['diameter']:g} at ({c[0]:g}, {c[1]:g}, {c[2]:g}) -> {m['part']}, {m['screw']})"
     want = iso273_clearance(m["screw"], m["series"])
     if part is None:
-        return [CheckResult(f"{label}: coaxial clearance hole", False, f"no part named {m['part']!r}", "a designed part")]
+        return [_res("cad.reference-mount-coaxial", f"{label}: coaxial clearance hole", False, f"no part named {m['part']!r}", "a designed part")]
     if getattr(part, "reference", None):
-        return [CheckResult(f"{label}: coaxial clearance hole", False, f"{m['part']} is a reference part", "a designed part")]
+        return [_res("cad.reference-mount-coaxial", f"{label}: coaxial clearance hole", False, f"{m['part']} is a reference part", "a designed part")]
     cos_tol = math.cos(math.radians(m["angle_tol"]))
     best = None
     for f in measure.cylindrical_features(part.shape):
@@ -656,17 +694,17 @@ def _mount_checks(ref_name: str, i: int, m: dict, part) -> list:
         if best is None or cand[:2] < best[:2]:          # coaxial ones first, the smallest of them: the clearance bore
             best = cand
     if best is None:
-        return [CheckResult(f"{label}: coaxial clearance hole", False, f"{m['part']} has no hole parallel to it "
+        return [_res("cad.reference-mount-coaxial", f"{label}: coaxial clearance hole", False, f"{m['part']} has no hole parallel to it "
                             f"(within {m['angle_tol']:g} deg)", f"offset <= {m['coaxial_tol']:g} mm, angle <= {m['angle_tol']:g} deg")]
     _, _, off, ang, f = best
     coax = off <= m["coaxial_tol"] + 1e-9 and ang <= m["angle_tol"] + 1e-9
-    out = [CheckResult(f"{label}: {m['part']} hole coaxial", coax,
+    out = [_res("cad.reference-mount-coaxial", f"{label}: {m['part']} hole coaxial", coax,
                        f"axis offset {off:.3g} mm, angle {ang:.2g} deg (nearest {m['part']} hole Ø{f.diameter:.3g})",
                        f"offset <= {m['coaxial_tol']:g} mm, angle <= {m['angle_tol']:g} deg")]
     if coax:
         okd = abs(f.diameter - want) <= m["dia_tol"] + 1e-9
-        out.append(CheckResult(f"{label}: clearance Ø per ISO 273 {m['series']}", okd, f"Ø{f.diameter:.3g}",
-                               f"Ø{want:g} ±{m['dia_tol']:g} ({ISO_273_SOURCE})"))
+        out.append(_res("cad.reference-mount-clearance", f"{label}: clearance Ø per ISO 273 {m['series']} (as published by {ISO_273_PUBLISHER})",
+                            okd, f"Ø{f.diameter:.3g}", f"Ø{want:g} ±{m['dia_tol']:g} ({ISO_273_SOURCE})"))
     return out
 
 

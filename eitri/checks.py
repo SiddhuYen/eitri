@@ -18,10 +18,20 @@ class Check(CheckResult):
     severity: str = "pass"                       # pass | warn | fail
     category: str = ""
     refs: list[str] = field(default_factory=list)      # ids of what the check is about (an editor highlights them)
-    not_run: list[str] = field(default_factory=list)   # the model inputs left unset (None) that switch this check off; empty when it ran
+    # not_run (inherited, keyword-only): the model inputs left unset (None) that switch this check off; empty when it ran
     # the sources of its limit (eitri.check_sources), given by the domain's rule table (rules.py) after the checks run
     source: list[CheckSource] = field(default_factory=list, kw_only=True)
-    rule: str = field(default="", kw_only=True)        # the rule-table id ("harness.wire-ampacity"); "" when no rule matched
+    # rule (inherited): the rule-table id ("harness.wire-ampacity"); "" when no rule matched
+
+    @property
+    def status(self) -> str:
+        """pass | warn | fail | not_run. A check switched off by an unset input is not_run: its severity stays "warn" and its text
+        starts "not run: ", so a reader of the older form (severity + text) still sees a warning that says why."""
+        if self.severity == "fail":
+            return "fail"
+        if self.not_run or str(self.measured).startswith("not run: "):
+            return "not_run"
+        return self.severity
 
     def line(self, numbers: dict | None = None) -> str:
         mark = {"pass": "PASS", "warn": "WARN", "fail": "FAIL"}[self.severity]
@@ -35,7 +45,33 @@ def check(category: str, name: str, severity: str, measured: str, expected: str 
                  refs=list(dict.fromkeys(refs)), not_run=list(not_run), source=list(source), kind=kind)
 
 
-def switched_off(c: Check, *inputs: str) -> Check:
+STATUSES = ("pass", "warn", "fail", "not_run")
+
+
+def status_of(c) -> str:
+    """The status of a check object or of its JSON form (result.json; an older build has no "status": it is derived the
+    same way, from the severity / ok, the not_run inputs and the "not run: " text)."""
+    if not isinstance(c, dict):
+        return c.status
+    if c.get("status") in STATUSES:
+        return c["status"]
+    sev = c.get("severity") or ("pass" if c.get("ok", True) else "fail")
+    if sev == "fail":
+        return "fail"
+    if c.get("not_run") or str(c.get("measured", "")).startswith("not run: "):
+        return "not_run"
+    return sev
+
+
+def stamp_status(d: dict, checks: Iterable) -> dict:
+    """Write each check's status into a report's JSON form (asdict drops properties) and its checks_not_run list."""
+    for cd, c in zip(d.get("checks") or [], checks):
+        cd["status"] = c.status
+    d["checks_not_run"] = checks_not_run(checks)
+    return d
+
+
+def switched_off(c: CheckResult, *inputs: str) -> CheckResult:
     """Mark a check as not run because these model inputs are unset (None): its text says "not run: ..." and the build
     report lists it under checks_not_run, so an edit that switches a check off is visible (hosted escalates on it)."""
     c.not_run = list(dict.fromkeys(list(c.not_run) + list(inputs)))
@@ -47,22 +83,23 @@ def switched_off(c: Check, *inputs: str) -> Check:
 def checks_not_run(checks: Iterable[Check]) -> list[dict]:
     """The checks a model switched off by leaving an input unset: [{name, category, severity, inputs, refs, why}], for the
     build report (report JSON key "checks_not_run")."""
-    return [{"name": c.name, "category": c.category, "severity": c.severity, "inputs": list(c.not_run), "refs": list(c.refs),
-             "why": c.measured} for c in checks if getattr(c, "not_run", None)]
+    return [{"name": c.name, "category": getattr(c, "category", "") or "verify",
+             "severity": getattr(c, "severity", "pass" if c.ok else "fail"), "status": c.status, "inputs": list(c.not_run),
+             "refs": list(getattr(c, "refs", []) or []), "why": c.measured} for c in checks if c.status == "not_run"]
 
 
 def not_run_line(checks: Iterable[Check]) -> str | None:
     """One summary line naming every check not run and the input that switched it off (None when there are none)."""
-    off = [c for c in checks if getattr(c, "not_run", None)]
+    off = [c for c in checks if c.status == "not_run"]
     if not off:
         return None
-    return "Not run (an input is unset): " + "; ".join(f"{c.name} ({', '.join(c.not_run)} not set)" for c in off)
+    return "Not run (an input is unset): " + "; ".join(f"{c.name} ({', '.join(c.not_run) or 'an input'} not set)" for c in off)
 
 
 def from_verify(r: CheckResult) -> Check:
     """A verify() result as a Check (category "verify")."""
     return Check(name=r.name, ok=r.ok, measured=r.measured, expected=r.expected, severity="pass" if r.ok else "fail", category="verify",
-                 source=list(r.source), kind=r.kind, rule="verify")
+                 source=list(r.source), kind=r.kind, rule=r.rule or "verify", not_run=list(r.not_run))
 
 
 def level(value: float, limit: float, warn_fraction: float = 0.8, above_is_bad: bool = True) -> str:

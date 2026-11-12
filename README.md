@@ -1,5 +1,7 @@
 # eitri
 
+<!-- mcp-name: io.github.SiddhuYen/eitri -->
+
 **A local AI CAD agent.** Describe a part in plain language; eitri models it as a parametric
 [build123d](https://github.com/gumyr/build123d) (OpenCASCADE) model, builds it, **measures it against your
 request**, looks at it, fixes what fails, and hands you STEP / STL / 3MF / GLB files. Then keep going in a

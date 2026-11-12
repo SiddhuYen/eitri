@@ -5,7 +5,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from ..checks import Check, from_verify, checks_not_run, not_run_line
+from ..checks import Check, from_verify, checks_not_run, stamp_status, not_run_line
 from ..check_sources import attach, check_lines
 from ..model import Checker
 from .checks import PinInfo, run_checks
@@ -40,7 +40,7 @@ class FirmwareReport:
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
-        d["checks_not_run"] = checks_not_run(self.checks)     # checks switched off by an unset input
+        stamp_status(d, self.checks)            # each check's status + checks_not_run (switched off by an unset input)
         return d
 
 

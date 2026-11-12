@@ -207,6 +207,17 @@ def test_mcp_surface_cannot_approve_waive_or_close(tmp_path, monkeypatch):
     text, err = _call(plugin, "ticket_show", {})
     assert "AWAITING APPROVAL" in text
     assert T.load(p, "T-0001").status == "awaiting_approval"
+    # the reference-part acceptance is person-only the same way: no tool for it, and refused from the agent's Python
+    for server in (plugin, app):                       # (the *_reference tools are API documentation, not reference parts)
+        names = {t.name for t in asyncio.run(server.list_tools())}
+        assert not [n for n in names if re.search(r"accept|reference_(add|remove|accept)|(add|remove)_reference", n, re.I)], names
+    code = ("from eitri.project import Project\nfrom eitri.tickets import store\n"
+            f"try:\n    Project({str(p.folder)!r}).accept_reference('inputs/x.step', confirm=lambda a, b: {{}})\n    print('ACCEPTED')\n"
+            "except store.NotAPerson as e:\n    print('REFUSED', e)\nexcept Exception as e:\n    print('OTHER', type(e).__name__, e)\n")
+    (p.folder / "inputs").mkdir(exist_ok=True)
+    shutil.copyfile(ROOT / "tests" / "fixtures" / "reference" / "test_block.step", p.folder / "inputs" / "x.step")
+    text, err = _call(plugin, "inspect", {"code": code})
+    assert "REFUSED" in text and "ACCEPTED" not in text, text
 
 
 def test_person_only_actions_refuse_in_agent_processes_and_without_a_terminal(tmp_path, monkeypatch):
@@ -227,6 +238,17 @@ def test_person_only_actions_refuse_in_agent_processes_and_without_a_terminal(tm
                           capture_output=True, text=True, env={**__import__("os").environ, "PYTHONPATH": str(ROOT), "EITRI_LAZY_IMPORT": "1"}, timeout=120)
     assert proc.returncode == 1 and "terminal" in proc.stderr
     assert T.load(p, "T-0001").status == "awaiting_approval"
+    # the same barriers on a reference part's acceptance (eitri reference accept): markers, then the terminal
+    (p.folder / "inputs").mkdir(exist_ok=True)
+    shutil.copyfile(ROOT / "tests" / "fixtures" / "reference" / "test_block.step", p.folder / "inputs" / "x.step")
+    for marker in ("EITRI_AGENT_PROCESS", "CLAUDECODE"):
+        monkeypatch.setenv(marker, "1")
+        with pytest.raises(T.NotAPerson, match=marker):
+            p.accept_reference("inputs/x.step", confirm=_person)
+        monkeypatch.delenv(marker)
+    with pytest.raises(T.NotAPerson, match="interactive terminal"):
+        p.accept_reference("inputs/x.step")
+    assert not p.references()
 
 
 class _FakeTTY(io.StringIO):

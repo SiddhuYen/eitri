@@ -860,7 +860,8 @@ def _contacts(c: Circuit, an: Analysis) -> list[Check]:
 # --------------------------------------------------------------------------- transistors
 
 
-def _gate_voltage(c: Circuit, an: Analysis, q) -> tuple[float | None, str]:
+def gate_voltage(c: Circuit, an: Analysis, q) -> tuple[float | None, str]:
+    """The voltage a MOSFET's gate sees when it is driven: (volts or None, how it was found)."""
     g = c._net_of.get(PinRef(q.name, "G"))
     if not g:
         return None, "the gate is not connected"
@@ -917,7 +918,7 @@ def _mosfets(c: Circuit, an: Analysis) -> list[Check]:
         if q.kind != "mosfet":
             continue
         s = q.spec
-        vg, how = _gate_voltage(c, an, q)
+        vg, how = gate_voltage(c, an, q)
         name = f"gate drive {q.name} ({q.catalog})"
         table = sorted(s["rds_on"])                      # [(vgs, ohm max)]
         lowest = table[0][0]
@@ -1047,3 +1048,9 @@ def _parts(c: Circuit, an: Analysis) -> list[Check]:
             out.append(_c("parts", f"capacitor voltage {p.name}", sev, f"{v:g} V across a {p.spec['v_rated']:g} V part (from the model file)",
                           f"<= {p.spec['v_rated']:g} V", [p.name]))
     return out
+
+
+# Public names for hosts (eitri_suite reads rail budgets and gate drive); the private spellings stay as aliases.
+_rail_loads = rail_loads
+_rail_limit = rail_limit
+_gate_voltage = gate_voltage

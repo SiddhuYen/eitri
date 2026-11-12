@@ -147,7 +147,12 @@
             "properties": {
               "name": {"type": "string"},
               "category": {"type": "string"},
-              "source": {"type": "string", "description": "the document the check's figure cites, or where its inputs come from"},
+              "source": {"type": "string", "description": "the check's sources as one line of text (eitri.check_sources: each source's text, revision and URL); a build from before 0.8.0: the document its text cites, or where its inputs come from"},
+              "sources": {"type": "array", "description": "the structured sources of the check's limit (added in 0.8.0)",
+                          "items": {"type": "object", "required": ["text", "url", "rev", "basis"],
+                                    "properties": {"text": {"type": "string"}, "url": {"type": "string"}, "rev": {"type": "string"},
+                                                   "basis": {"enum": ["document", "requirement", "model", "rule", "tool", "assumption"]}}}},
+              "rule": {"type": "string", "description": "the rule-table id the check matched (\"harness.wire-ampacity\"); \"\" when none (a CAD geometry finding)"},
               "change": {"enum": ["same", "value", "status", "added", "removed", "new"]},
               "from": {"$ref": "#/$defs/check_state"},
               "to": {"$ref": "#/$defs/check_state"}

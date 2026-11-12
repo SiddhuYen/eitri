@@ -30,13 +30,19 @@ def harness_reference_text() -> str:
             .replace("{{FUSES}}", fuse_table()).strip())
 
 
+def tickets_prompt_text() -> str:
+    """Tickets, approval, packages and customer files: the same static text in every domain's prompt, right after the behaviour
+    prompt (it never depends on the ticket's state, so the cached prompt prefix stays the same for the whole session)."""
+    return (_HERE / "tickets_prompt.md").read_text(encoding="utf-8").strip()
+
+
 def system_prompt(project: Project | None = None, include_reference: bool = True) -> str:
     from .library_docs import catalog
 
     if project is not None and project.kind != "cad":          # another domain: no CAD reference, its own prompt and reference
         from ..domains import module
         dom = module(project.kind)
-        parts = [dom.prompt_text()]
+        parts = [dom.prompt_text(), tickets_prompt_text()]
         if include_reference:
             parts.append(dom.reference_text())
         notes = project.design_notes_path
@@ -47,7 +53,7 @@ def system_prompt(project: Project | None = None, include_reference: bool = True
             parts.append(f"# Current model file ({project.model_path.name})\n\n```python\n{code.strip()}\n```")
         return "\n\n".join(parts)
 
-    parts = [(_HERE / "prompt.md").read_text(encoding="utf-8").strip()]
+    parts = [(_HERE / "prompt.md").read_text(encoding="utf-8").strip(), tickets_prompt_text()]
     if include_reference:
         parts.append((_HERE / "build123d_ref.md").read_text(encoding="utf-8").strip())
     parts.append("# Feature library (call library(name) for full docs)\n\n```\n" + catalog() + "\n```")

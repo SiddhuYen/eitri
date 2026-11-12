@@ -5,7 +5,7 @@ from __future__ import annotations
 from .model import Actuator, Mechanism, MechanismError, _unit, _vec
 
 MECHANISM_OPS = frozenset({"set_joint", "set_actuator", "set_link", "set_payload", "set_target", "add_target", "remove_target", "set_speed"})
-_ACT_FIELDS = ("name", "stall_kgcm", "rated_kgcm", "stall_N", "rated_N", "speed_deg_s", "speed_mm_s", "gear_ratio", "efficiency", "travel_deg", "travel_mm", "mass_g")
+_ACT_FIELDS = ("name", "stall_kgcm", "rated_kgcm", "stall_N", "rated_N", "speed_deg_s", "speed_mm_s", "gear_ratio", "efficiency", "travel_deg", "travel_mm", "mass_g", "stall_A")
 
 
 def target_of(e: dict) -> str:

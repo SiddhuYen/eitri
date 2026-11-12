@@ -25,12 +25,14 @@ m.joint(name, parent, child, type="revolute", axis=(0, 0, 1), at=None, limit_deg
     type "prismatic" slides along `axis` by the joint value in mm; type "fixed" is a rigid attachment (no limits)
 
 Actuator(name, stall_kgcm=None, rated_kgcm=None, stall_N=None, rated_N=None, speed_deg_s=None, speed_mm_s=None,
-         gear_ratio=1, efficiency=1, travel_deg=None, travel_mm=None, mass_g=0, continuous=False)
+         gear_ratio=1, efficiency=1, travel_deg=None, travel_mm=None, mass_g=0, continuous=False, stall_A=None)
     the motor's own figures (at its shaft); gear_ratio > 1 multiplies torque (x efficiency) and divides speed at the joint;
     rated_* = recommended continuous: give the datasheet's when it has one; else the catalog's (STS3215: 4 kg·cm of 16.5 stall at 6 V), else
     1/5 of stall, an assumption the checks name (MG996R, SG90 publish stall only; Feetech STS3215 0.24, ROBOTIS 1/5); travel = the actuator's own
     range (180 for a hobby servo); without it the joint-travel check does not run and the report says so (a WARN, listed under
-    "Not run"); continuous=True for one that turns without end; mass_g sits on the parent link at the joint
+    "Not run"); continuous=True for one that turns without end; mass_g sits on the parent link at the joint;
+    stall_A = the current at stall from its datasheet (else the catalog's: MG996R 2.5 A, SG90 2 A, an ASSUMPTION; others None,
+    and a supply budget that needs it does not run)
 
 m.payload(mass_g, link=None, at=None)       a point mass the tip carries (default: at the tip)
 m.mass(name, link, mass_g, at=None)         an extra point mass on a link (a gripper, a camera), at a point in the link's frame

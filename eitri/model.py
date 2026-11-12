@@ -274,9 +274,20 @@ class CheckResult:
     # where the limit comes from (eitri.check_sources): a verify() result checks the model's own requirement
     source: list[CheckSource] = field(default_factory=verify_sources, kw_only=True)
     kind: str = field(default="rule", kw_only=True)         # rule (deterministic) | judgement
+    # the model inputs left unset (None) that switched this check off (eitri.checks.switched_off); empty when it ran
+    not_run: list[str] = field(default_factory=list, kw_only=True)
+    rule: str = field(default="", kw_only=True)             # the rule-table id ("cad.reference-overlap"); "" for verify()
+
+    @property
+    def status(self) -> str:
+        """pass | fail | not_run: a check switched off by an unset input did not run (a failed one still fails). The text form
+        stays readable for older readers: such a check is ok, and its measured text starts "not run: "."""
+        if not self.ok:
+            return "fail"
+        return "not_run" if self.not_run or str(self.measured).startswith("not run: ") else "pass"
 
     def line(self, numbers: dict | None = None) -> str:
-        mark = "PASS" if self.ok else "FAIL"
+        mark = {"pass": "PASS", "fail": "FAIL", "not_run": "WARN"}[self.status]
         exp = f" (expected {self.expected})" if self.expected else ""
         return f"[{mark}] {self.name}: {self.measured}{exp}{source_tag(self, numbers)}"
 

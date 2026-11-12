@@ -54,7 +54,10 @@ ISO_273: dict[str, tuple[float, float, float]] = {
     "M10": (10.5, 11.0, 12.0), "M12": (13.0, 13.5, 14.5), "M14": (15.0, 15.5, 16.5), "M16": (17.0, 17.5, 18.5),
     "M20": (21.0, 22.0, 24.0), "M24": (25.0, 26.0, 28.0), "M30": (31.0, 33.0, 35.0),
 }
-ISO_273_SOURCE = "ISO 273 as published in the Albany County Fasteners clearance hole chart, (c) 2025"
+ISO_273_SOURCE = ("ISO 273 clearance holes as published by Albany County Fasteners (Clearance Hole Chart p.2, (c) 2025; the only "
+                  "ISO-labelled table read: ISO 273 itself is paywalled)")
+ISO_273_PUBLISHER = "Albany County Fasteners"
+ISO_273_URL = "https://www.albanycountyfasteners.com/media/6b/b8/g0/1764944339/clearance-hole-chart.pdf"
 _SERIES = {"fine": 0, "close": 0, "medium": 1, "normal": 1, "coarse": 2, "loose": 2}
 
 

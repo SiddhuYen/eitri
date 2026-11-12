@@ -584,8 +584,9 @@ def _failsafe_checks(c: Circuit) -> list[Check]:
     from . import failsafe
     out: list[Check] = []
     for cyl in c.cylinders:
-        for event, attr, label in (("power", "on_power_loss", "loss of electrical power"), ("air", "on_air_loss", "loss of air")):
-            name = f"on {label} {cyl.name}"
+        for event, attr, lost in (("power", "on_power_loss", "electrical power"), ("air", "on_air_loss", "air")):
+            label = f"loss of {lost}"
+            name = f"on loss of {lost} {cyl.name}"
             req = getattr(cyl, attr)
             got, how = failsafe.outcome(c, cyl, event)
             if req is None:

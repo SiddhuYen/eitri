@@ -477,6 +477,30 @@ def terminal_confirm(text: str, what: str) -> dict:
         tty.close()
 
 
+def person_record(action: str, text: str, what: str, *, by: str | None = None,
+                  confirm: Callable[[str, str], dict] = terminal_confirm, method: str = "cli-terminal") -> dict:
+    """The one person-only confirmation every such action uses (ticket approve / waive / close, reference add / accept /
+    remove): refuse in an agent's process, show `text` on the person's terminal and take back the typed one-time code, and
+    return who confirmed it, when and how (sign it with sign_record)."""
+    require_person(action)
+    extra = confirm(text, what)
+    return {**_who(by), "at": now_iso(), "method": method, **(extra or {}), "signer": getattr(_SIGNER, "name", "host")}
+
+
+def sign_record(kind: str, payload: dict, rec: dict) -> dict:
+    """rec with its signature over (kind, payload, rec): the same signer as ticket approvals."""
+    rec = {k: v for k, v in rec.items() if k != "signature"}
+    rec["signature"] = _SIGNER.sign({"kind": kind, "payload": payload, "record": rec})
+    return rec
+
+
+def verify_record(kind: str, payload: dict, rec: dict | None) -> bool:
+    if not isinstance(rec, dict) or not rec.get("signature"):
+        return False
+    body = {k: v for k, v in rec.items() if k != "signature"}
+    return _SIGNER.verify({"kind": kind, "payload": payload, "record": body}, rec["signature"])
+
+
 def _who(by: str | None) -> dict:
     try:
         user = getpass.getuser()

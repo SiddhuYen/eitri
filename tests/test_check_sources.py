@@ -76,12 +76,26 @@ def _texts(node, assigns: dict) -> list[str]:
     return []
 
 
+# every file that makes a domain's checks (a new checks module goes here, or its checks are never scanned)
+CHECK_FILES = {"harness": ("checks.py", "protection.py"), "pneumatics": ("checks.py", "failsafe.py")}
+
+
 def _sites(domain: str):
-    path = ROOT / "eitri" / domain / "checks.py"
+    out = []
+    for fname in CHECK_FILES.get(domain, ("checks.py",)):
+        out += _file_sites(domain, ROOT / "eitri" / domain / fname)
+    return out
+
+
+def _file_sites(domain: str, path: Path):
     tree = ast.parse(path.read_text())
     out = []
+    module: dict[str, list] = {}                         # module-level constants (CAT = "protection")
+    for n in tree.body:
+        if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name):
+            module.setdefault(n.targets[0].id, []).append(n.value)
     for fn in [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]:
-        assigns: dict[str, list] = {}
+        assigns: dict[str, list] = {k: list(v) for k, v in module.items()}
         for n in ast.walk(fn):
             if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name):
                 assigns.setdefault(n.targets[0].id, []).append(n.value)
@@ -89,7 +103,7 @@ def _sites(domain: str):
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in _MAKERS and len(n.args) >= 3:
                 if fn.name in _MAKERS:                       # the helpers themselves
                     continue
-                out.append((f"{domain}:{n.lineno}", n.args[0], n.args[1], assigns))
+                out.append((f"{domain}:{path.name}:{n.lineno}", n.args[0], n.args[1], assigns))
     return out
 
 
@@ -98,6 +112,31 @@ SITES = [s for d in DOMAINS for s in _sites(d)]
 
 def test_the_scan_finds_the_checks():
     assert len(SITES) > 150
+    assert any(":protection.py:" in s[0] for s in SITES)          # the harness overcurrent checks are scanned too
+    for domain in DOMAINS:                                          # no module that makes checks is left out of CHECK_FILES
+        for f in (ROOT / "eitri" / domain).glob("*.py"):
+            if f.name not in CHECK_FILES.get(domain, ("checks.py",)) and f.name != "rules.py":
+                assert not _file_sites(domain, f), f"{f}: makes checks; add it to CHECK_FILES"
+
+
+def test_every_reference_check_has_a_rule_and_a_document_for_iso_273():
+    """The CAD reference-part checks (eitri.reference) carry their own rule ids and sources: every one made goes through
+    _res(<a rule id from the table>, ...)."""
+    from eitri import reference as R
+    table = R._rules()
+    assert set(table) == set(R.RULE_IDS)
+    for rid, srcs in table.items():
+        assert rid.startswith("cad.reference-") and srcs
+        for x in srcs:
+            assert x.basis in BASES and (not x.url or x.url.startswith("https://"))
+    tree = ast.parse((ROOT / "eitri" / "reference.py").read_text())
+    made = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "CheckResult"]
+    assert len(made) == 1, "make reference checks through _res(rule_id, ...)"
+    used = {n.args[0].value for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "_res"
+            and n.args and isinstance(n.args[0], ast.Constant)}
+    assert used == set(R.RULE_IDS)
+    iso = table["cad.reference-mount-clearance"][0]
+    assert iso.basis == "document" and "as published by Albany County Fasteners" in iso.text and iso.url
 
 
 @pytest.mark.parametrize("site,cat,name,assigns", SITES, ids=[s[0] for s in SITES])
@@ -129,6 +168,30 @@ def _report(domain: str):
         mod.verify(built, p, ck)
     rm = importlib.import_module(f"eitri.{domain}.report")
     return rm, rm.analyze(built, ck)
+
+
+# the models that exercise the 0.8.0 checks: harness overcurrent protection, pneumatics catalogue parts and fail-safe states
+EXTRA = {"harness": "eitri/demos/servo-arm/servo_arm_harness.py", "pneumatics": "examples/pneumatic-clamp-fixture/clamp_fixture.py"}
+
+
+@pytest.mark.parametrize("domain,rel", list(EXTRA.items()))
+def test_new_checks_carry_sources_at_runtime(domain, rel):
+    from eitri.model import Checker, Params
+    spec = importlib.util.spec_from_file_location(f"_extra_{domain}", ROOT / rel)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    p = Params(getattr(mod, "PARAMS", {}))
+    rm = importlib.import_module(f"eitri.{domain}.report")
+    rep = rm.analyze(mod.build(p), Checker())
+    cats = {c.category for c in rep.checks}
+    assert ("protection" in cats) if domain == "harness" else {"fail-safe", "cushioning", "electrical", "sensors"} <= cats
+    for c in rep.checks:
+        assert c.source and c.rule and c.kind in KINDS, f"{rel}: {c.name}"
+        if c.category in ("protection", "fail-safe", "cushioning", "electrical", "sensors") or c.name.startswith(("datasheet force", "minimum pressure")):
+            assert any(x.basis == "document" for x in c.source) or c.rule in (
+                "harness.supply-nets-declared", "harness.fuse-on-a-branch", "harness.in-scope"), f"{c.name}: {c.source}"
+    d = rep.to_dict()
+    assert all(cd["status"] in ("pass", "warn", "fail", "not_run") for cd in d["checks"])
 
 
 @pytest.mark.parametrize("domain", DOMAINS)
