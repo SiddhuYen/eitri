@@ -158,10 +158,12 @@ class Project:
         export tool, the viewer's downloads), each verified then - on a 40-part assembly that saves ~8 s
         per build."""
         self.last_build_stderr = ""
+        self.reload()
         result = build_model(self.model_path, self.out_dir, params=params, render=render, formats=formats,
-                             timeout=timeout, guards=self.guards() or None, **kw)
+                             timeout=timeout, guards=self.guards() or None, references=self.references(), **kw)
         self.last_result = result
         self._remember_guards(result)
+        self._remember_references(result)
         self._record(result, note)
         return result
 
@@ -193,6 +195,76 @@ class Project:
         g[self.model_path.name] = mine
         self.state["guards"] = g
         self._save()
+
+    # -- reference parts: customer STEP files the model is built around (eitri.reference) --------------------
+    def references(self, model: str | None = None) -> dict[str, dict]:
+        """{relative path: {sha256, bytes, name, mounts, accepted, by}}: the reference files accepted for a model file."""
+        from .reference import accepted_for
+        return accepted_for(self.state, model or self.model_path.name)
+
+    def _remember_references(self, result: BuildResult) -> None:
+        """A reference file a build read for the first time is accepted as it is (trust on first use: the person put
+        it in inputs/); its hash never changes here again. Only accept_reference() (the CLI) takes a new one."""
+        if result.error or not result.references:
+            return
+        from .reference import remember
+        self.reload()
+        if remember(self.state, self.model_path.name, result.references, time.time()):
+            self._save()
+
+    def accept_reference(self, rel: str, model: str | None = None) -> tuple[str | None, str]:
+        """A person accepts the file now at `rel` (inputs/<name>.step) as the reference: (old sha256, new sha256).
+        For the CLI only; the agent has no tool for this."""
+        from .reference import STATE_KEY, prescan, resolve_path
+        target, rel = resolve_path(rel, self.folder)
+        data = target.read_bytes()
+        prescan(data, rel)
+        import hashlib
+        sha = hashlib.sha256(data).hexdigest()
+        self.reload()
+        model = model or self.model_path.name
+        allrefs = dict(self.state.get(STATE_KEY) or {})
+        mine = {k: dict(v) for k, v in (allrefs.get(model) or {}).items()}
+        old = (mine.get(rel) or {}).get("sha256")
+        entry = dict(mine.get(rel) or {})
+        entry.update(sha256=sha, bytes=len(data), accepted=round(time.time(), 3), by="cli")
+        entry.setdefault("name", Path(rel).stem)
+        entry.setdefault("mounts", 0)
+        mine[rel] = entry
+        allrefs[model] = mine
+        self.state[STATE_KEY] = allrefs
+        self._save()
+        return old, sha
+
+    def remove_reference(self, rel: str, model: str | None = None) -> bool:
+        """Forget an accepted reference (the person took the customer part out of the job). CLI only."""
+        from .reference import STATE_KEY
+        self.reload()
+        model = model or self.model_path.name
+        allrefs = dict(self.state.get(STATE_KEY) or {})
+        mine = dict(allrefs.get(model) or {})
+        gone = mine.pop(rel, None) is not None
+        allrefs[model] = mine
+        self.state[STATE_KEY] = allrefs
+        self._save()
+        return gone
+
+    def reference_parts(self) -> set[str]:
+        """Names of the reference parts in the current model's latest build (for refusing direct edits up front)."""
+        names = {str(v.get("name")) for v in self.references().values() if v.get("name")}
+        try:
+            data = json.loads((self.out_dir / "result.json").read_text(encoding="utf-8"))
+            if Path(str(data.get("model") or self.model_path)).name == self.model_path.name or "model" not in data:
+                names |= {str(r.get("name")) for r in data.get("references") or [] if r.get("name")}
+        except (OSError, ValueError):
+            pass
+        return names
+
+    def _refuse_reference_edit(self, edit: Mapping) -> None:
+        from .edits import reference_refusal, reference_targets
+        hit = reference_targets(edit, self.reference_parts())
+        if hit:
+            raise ValueError(reference_refusal(hit))
 
     def _record(self, result: BuildResult, note: str) -> None:
         self.reload()
@@ -406,6 +478,7 @@ class Project:
     def add_edit(self, edit: dict, merge: bool = True) -> list[dict]:
         """Append a direct edit; a repeated gesture on the same geometry merges into the last one."""
         from .edits import merge_edit
+        self._refuse_reference_edit(edit)
         edits = self.edits()
         merged = merge_edit(edits[-1], dict(edit)) if (merge and edits) else None
         if merged is not None:
@@ -424,6 +497,7 @@ class Project:
 
     def update_edit(self, index: int, edit: dict) -> list[dict]:
         """Replace one edit in place (the viewer's "edit feature" / suppress)."""
+        self._refuse_reference_edit(edit)
         edits = self.edits()
         if not 0 <= index < len(edits):
             raise IndexError(f"no edit #{index + 1}")

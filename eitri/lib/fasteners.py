@@ -15,10 +15,19 @@ Sourced figures (re-checked 2026-11-07):
   for M2-M6 (ruthex.de: "M2, M2.5, M3, M4, M5, M6 ... 3.2 + 4 + 5.6 + 6.4 + 8mm"); for M8 the same column
   meaning is assumed (ruthex publishes no M8 drill). insert_depth is the insert length L; ruthex gives no
   hole-depth figure (a deeper hole is usual for melt overflow).
+- close/normal/loose are the ISO 273 fine/medium/coarse clearance-hole series (ISO_273 below, re-checked 2026-11-12).
+  Source: Albany County Fasteners (Raw Products Corp), "Clearance Hole Chart", page 2 "Metric Series Clearance Holes
+  (ISO 273)", columns Close Fit (H12) / Normal Fit (H13) / Loose Fit (H14), (c) 2025,
+  https://www.albanycountyfasteners.com/media/6b/b8/g0/1764944339/clearance-hole-chart.pdf (M1.6-M30). Cross-check:
+  Optimas OE Solutions, "Recommended Tapping Drill Sizes and Clearance Holes" (page stamp 2026-07-08; it does not
+  name ISO 273), https://optimas.com/technical-resources/tapping-sizes/ : the same figures for M1.6-M10, M20, M24,
+  but M12 13/14/15, M14 15/16/17, M16 17/18/19 where the ISO-273-labelled chart has 13/13.5/14.5, 15/15.5/16.5,
+  17/17.5/18.5. The ISO-labelled figures are used (Optimas does not claim to be ISO 273). ISO 273:1979 itself is
+  paywalled and was not read; EN 20273:1991 is its identical European adoption.
 """
 from __future__ import annotations
 
-__all__ = ["METRIC", "screw_clearance", "tap_drill", "counterbore_dims", "countersink_dims", "nut_dims",
+__all__ = ["METRIC", "ISO_273", "iso273_clearance", "screw_clearance", "tap_drill", "counterbore_dims", "countersink_dims", "nut_dims",
            "heat_set_insert_dims", "washer_dims", "screw_pitch"]
 
 # size: clearance (close, normal, loose), tap drill (coarse pitch), pitch,
@@ -36,6 +45,29 @@ METRIC: dict[str, dict[str, float]] = {
     "M10": dict(close=10.5, normal=11.0, loose=12.0, tap=8.5, pitch=1.5, head_d=16.0, head_h=10.0, cb_d=18.0, cs_d=22.4, nut_af=16.0, nut_h=8.4, washer_od=20.0, washer_t=2.0, insert_d=12.0, insert_depth=15.0),
     "M12": dict(close=13.0, normal=13.5, loose=14.5, tap=10.2, pitch=1.75, head_d=18.0, head_h=12.0, cb_d=20.0, cs_d=26.88, nut_af=18.0, nut_h=10.8, washer_od=24.0, washer_t=2.5, insert_d=14.0, insert_depth=18.0),
 }
+
+
+# ISO 273 clearance holes for bolts and screws, mm: size -> (fine, medium, coarse). Source: see the module docstring.
+ISO_273: dict[str, tuple[float, float, float]] = {
+    "M1.6": (1.7, 1.8, 2.0), "M2": (2.2, 2.4, 2.6), "M2.5": (2.7, 2.9, 3.1), "M3": (3.2, 3.4, 3.6),
+    "M4": (4.3, 4.5, 4.8), "M5": (5.3, 5.5, 5.8), "M6": (6.4, 6.6, 7.0), "M8": (8.4, 9.0, 10.0),
+    "M10": (10.5, 11.0, 12.0), "M12": (13.0, 13.5, 14.5), "M14": (15.0, 15.5, 16.5), "M16": (17.0, 17.5, 18.5),
+    "M20": (21.0, 22.0, 24.0), "M24": (25.0, 26.0, 28.0), "M30": (31.0, 33.0, 35.0),
+}
+ISO_273_SOURCE = "ISO 273 as published in the Albany County Fasteners clearance hole chart, (c) 2025"
+_SERIES = {"fine": 0, "close": 0, "medium": 1, "normal": 1, "coarse": 2, "loose": 2}
+
+
+def iso273_clearance(size: str, series: str = "medium") -> float:
+    """ISO 273 clearance hole diameter (mm) for a metric screw: series "fine" | "medium" | "coarse"
+    (also "close" | "normal" | "loose")."""
+    key = str(size).upper().replace(" ", "")
+    if key not in ISO_273:
+        raise KeyError(f"unknown screw size {size!r} for ISO 273; known: {', '.join(ISO_273)}")
+    s = str(series).lower()
+    if s not in _SERIES:
+        raise ValueError("series must be fine, medium or coarse (close, normal or loose)")
+    return ISO_273[key][_SERIES[s]]
 
 
 def _row(size: str) -> dict[str, float]:

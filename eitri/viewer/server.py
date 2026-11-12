@@ -77,7 +77,8 @@ def _state(project: Project, hub=None, home: str | None = None, plugin: str | No
                 report = None
         if report:
             parts = [{"name": p["name"], "color": p["color"], "volume": p["volume"], "size": p["size"],
-                      "valid": p["valid"], "material": p.get("material"), "mass_g": p.get("mass_g"), "solids": p.get("solids"), "group": p.get("group") or groups.get(p["name"])} for p in report.get("parts", [])]
+                      "valid": p["valid"], "material": p.get("material"), "mass_g": p.get("mass_g"), "solids": p.get("solids"), "group": p.get("group") or groups.get(p["name"]),
+                      "reference": p.get("reference")} for p in report.get("parts", [])]
     last = mine[-1] if mine else None
     from ..edits import describe
     edits = project.edits()

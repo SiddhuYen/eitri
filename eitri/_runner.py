@@ -26,6 +26,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--set", action="append", default=[], help="param=value override")
     ap.add_argument("--guards", default="", help="JSON: what the project remembers for this model's extensions (eitri.extensions)")
     ap.add_argument("--max-parts", type=int, default=0, help="refuse a model with more parts than this (0: no limit)")
+    ap.add_argument("--references", default="", help="JSON: the reference files the project accepted for this model (eitri.reference)")
     args = ap.parse_args(argv)
 
     out_dir = Path(args.out)
@@ -52,12 +53,20 @@ def main(argv: list[str] | None = None) -> int:
     stage("building the geometry")
     t0 = time.time()
     try:
+        accepted = json.loads(args.references) if args.references else {}
+    except ValueError:
+        accepted = {}
+    try:
+        from . import reference as _refs
+        _refs.set_accepted(accepted, model_path.parent)  # a changed reference file fails inside reference_step()
         from .model import load_model
         model = load_model(model_path, overrides)
         result["params"] = {k: v for k, v in model.params.items()}
         parts = model.build()
-    except Exception:
-        result["error"] = _clean_traceback(traceback.format_exc(), model_path)
+    except Exception as exc:
+        from .reference import ReferenceError as _RefErr
+        result["error"] = (f"reference part: {exc}" if isinstance(exc, _RefErr)
+                           else _clean_traceback(traceback.format_exc(), model_path))
         return finish(1)
     from .domains import kind_of_object, module as domain_module
     kind = kind_of_object(parts)
@@ -68,6 +77,14 @@ def main(argv: list[str] | None = None) -> int:
                                   guards=json.loads(args.guards) if args.guards else {})
         result["ok"] = result["error"] is None
         return finish(0 if result["ok"] else 1)
+    declared_refs = list(getattr(parts, "references", None) or [])
+    if declared_refs or accepted:
+        from .reference import public as _public, verify_files
+        result["references"] = [_public(r) for r in declared_refs]
+        err = verify_files(parts, model_path.parent, accepted)      # the bytes on disk are still the accepted ones
+        if err:
+            result["error"] = f"reference part: {err}"
+            return finish(1)
     if args.max_parts and len(parts) > args.max_parts:
         result["error"] = (f"the model has {len(parts)} parts; this deployment allows at most {args.max_parts} per assembly "
                            "(combine parts, or build the assembly in smaller projects)")
@@ -78,6 +95,10 @@ def main(argv: list[str] | None = None) -> int:
     # exact-geometry fingerprints, taken before meshing: the analysis reuses what it measured on unchanged parts
     from .report import fingerprint
     fingerprints = {p.name: fingerprint(p.shape) for p in parts}
+    ref_signatures = {}
+    if declared_refs:                                    # what each reference is after the direct edits, before meshing
+        from .reference import signature as _ref_signature
+        ref_signatures = {p.name: _ref_signature(p.shape) for p in parts if getattr(p, "reference", None)}
 
     # the viewer's model first, announced as a preview: the page shows the new geometry at once while the
     # checks, the exports and the review render (the slow part) are still running
@@ -139,6 +160,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         from .report import analyze, summarize
         report = analyze(parts, checker, wall_samples=args.wall_samples, progress=stage, fingerprints=fingerprints)
+        if declared_refs:
+            from .reference import checks as _ref_checks
+            stage("checking the reference parts: interference, clearance, mounts")
+            report.checks.extend(_ref_checks(parts, report, accepted, ref_signatures))
         _run_extensions(result, report, "cad", model, parts, model_path, out_dir, args.guards, stage)
         if export_note:
             report.issues.append(export_note) if "LOST" in export_note else None
@@ -149,6 +174,9 @@ def main(argv: list[str] | None = None) -> int:
         from .anchors import describe as describe_anchors, to_json as anchors_json
         result["anchors"] = anchors_json(parts)
         summary = summarize(report) + (f"\n{export_note}" if export_note else "")
+        if declared_refs:
+            from .reference import summary as _ref_summary
+            summary += "\n" + _ref_summary(parts)
         if result["anchors"]:
             summary += "\n" + describe_anchors(result["anchors"])
         if model.edit_notes:

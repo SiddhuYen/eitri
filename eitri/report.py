@@ -59,6 +59,7 @@ class PartReport:
     mass_g: float | None = None
     group: str | None = None
     inertia: dict | None = None            # mass properties (inertia tensor about the centre of mass) when a material is set
+    reference: str | None = None           # a reference part: the customer STEP file it came from (read-only; not graded for DFM)
 
 
 @dataclass
@@ -107,7 +108,8 @@ def _group_holes(hs: list[measure.Hole]) -> list[HoleInfo]:
     return rows
 
 
-def analyze_part(name: str, color: str, shape: bd.Shape, wall_samples: int = 600, material: str | None = None) -> PartReport:
+def analyze_part(name: str, color: str, shape: bd.Shape, wall_samples: int = 600, material: str | None = None,
+                 reference: str | None = None) -> PartReport:
     solids = list(shape.solids())
     faces = shape.faces()
     edges = shape.edges()
@@ -145,6 +147,17 @@ def analyze_part(name: str, color: str, shape: bd.Shape, wall_samples: int = 600
         issues.append(f"{free} free edge(s) on a solid part")
     if max(bb.size.X, bb.size.Y, bb.size.Z) > 2000:
         issues.append("part is over 2 m in extent - check units (mm expected)")
+
+    if reference:                              # the customer's geometry: measured, never graded for manufacturability
+        issues = [i for i in issues if i.startswith("geometry is INVALID")]
+        hs = measure.cylindrical_features(shape) if faces and len(faces) < 20000 else []
+        return PartReport(
+            name=name, color=color, solids=len(solids), faces=len(faces), edges=len(edges), valid=valid,
+            volume=round(volume, 3), area=round(shape.area, 3), bbox_min=_t3(bb.min), bbox_max=_t3(bb.max),
+            size=_t3(bb.size), center_of_mass=_t3(com), free_edges=free,
+            holes=_group_holes([h for h in hs if h.kind == "hole"]), bosses=_group_holes([h for h in hs if h.kind == "boss"]),
+            issues=issues, material=material,
+            mass_g=(round(measure.mass_grams(shape, material), 2) if material in measure.DENSITY else None), reference=reference)
 
     hs = measure.cylindrical_features(shape) if faces and len(faces) < 4000 else []
     hole_rows = _group_holes([h for h in hs if h.kind == "hole"])
@@ -254,25 +267,29 @@ def analyze(parts: Parts, checker: Checker | None = None, wall_samples: int = 60
             pass
     for k, (p, n) in enumerate(zip(plist, samples), 1):
         material = getattr(p, "material", None)
+        ref = (getattr(p, "reference", None) or {}).get("path")
         fp = fps.get(p.name)
-        key = (fp, p.name, p.color, n, material) if fp else None
+        key = (fp, p.name, p.color, n, material, ref) if fp else None
         hit = _cache_get(_PART_CACHE, key) if key else None
         if hit is not None:
             cache_stats["part_hits"] += 1
             part_reports.append(copy.deepcopy(hit))
             continue
         say(f"measuring {p.name}" + (f" ({k} of {len(plist)})" if len(plist) > 1 else "") + ": walls, holes")
-        pr = analyze_part(p.name, p.color, p.shape, n, material)
+        pr = analyze_part(p.name, p.color, p.shape, n, material, reference=ref)
         if key:
             cache_stats["part_misses"] += 1
             _cache_put(_PART_CACHE, key, copy.deepcopy(pr), _PART_CACHE_MAX)
         part_reports.append(pr)
     for pr, p in zip(part_reports, parts):
         pr.group = getattr(p, "group", None)
-        if pr.material in measure.DENSITY and pr.solids:
+        rho = (getattr(p, "reference", None) or {}).get("density")     # a reference part's density as given (g/cm^3)
+        if (pr.material in measure.DENSITY or rho) and pr.solids:
             try:
-                mp = measure.mass_properties(p.shape, pr.material)
+                mp = measure.mass_properties(p.shape, float(rho) if rho else pr.material)
                 pr.inertia = {"principal": mp["principal"], "tensor": mp["inertia"], "units": mp["units"]}
+                if rho:
+                    pr.mass_g = round(mp["mass_g"], 2)
             except Exception:
                 pr.inertia = None
     bb = parts.bbox
@@ -351,9 +368,11 @@ def _summarize_core(report: Report, max_parts: int = 30) -> str:
              f"{len(report.parts)} part(s)"]
     for p in report.parts[:max_parts]:
         v = "valid" if p.valid else "INVALID"
+        if p.reference:
+            v += f"; REFERENCE (read-only, {p.reference})"
         lines.append(f"- {p.name}: {p.solids} solid(s), {p.faces} faces, {v}; size {p.size[0]:g} x {p.size[1]:g} x {p.size[2]:g}; "
                      f"bbox X {p.bbox_min[0]:g}..{p.bbox_max[0]:g} Y {p.bbox_min[1]:g}..{p.bbox_max[1]:g} Z {p.bbox_min[2]:g}..{p.bbox_max[2]:g}; "
-                     f"volume {p.volume:g} mm^3" + (f"; {p.material}, {p.mass_g:g} g" if p.mass_g is not None else ""))
+                     f"volume {p.volume:g} mm^3" + (f"; {p.material or 'density as given'}, {p.mass_g:g} g" if p.mass_g is not None else ""))
         if p.min_wall is not None:
             lines.append(f"    thinnest wall ~{p.min_wall:g} mm at {p.min_wall_at}")
         lines += _fmt_holes(p.holes, "hole")

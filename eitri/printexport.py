@@ -109,8 +109,11 @@ def make_plan(parts, settings: PrintSettings | None = None, report: dict | None 
         if not list(shape.solids()):
             continue                                          # sketches / surfaces are not printable bodies
         bought, why = classify(p.name, getattr(p, "material", None))
+        ref = getattr(p, "reference", None)
+        if ref:                                               # the customer's part: never printed
+            bought, why = True, f"reference part (the customer's, from {ref.get('path')}; not printed)"
         included = (st.include_bought or not bought) and p.name not in st.exclude
-        if p.name in st.include:
+        if p.name in st.include and not ref:
             included = True
         pp = PrintPart(p.name, p.color, bought, why, included, round(abs(measure.signed_volume(shape)), 2))
         if included:

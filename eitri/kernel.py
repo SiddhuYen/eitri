@@ -41,6 +41,7 @@ class BuildResult:
     extensions: dict = field(default_factory=dict)    # data returned by build extensions, by name (eitri.extensions)
     guards: dict = field(default_factory=dict)        # what the extensions declared this build, for the project to remember
     anchors: list = field(default_factory=list)       # a CAD model's named points and frames (eitri.anchors), as plain data
+    references: list = field(default_factory=list)    # the reference parts the build read (eitri.reference): path, sha256, mounts
 
     @property
     def image(self) -> str | None:
@@ -50,7 +51,10 @@ class BuildResult:
 def build_model(model_path: str | Path, out_dir: str | Path, params: Mapping[str, str] | None = None,
                 formats: tuple[str, ...] = ("step", "glb"), render: bool = True, timeout: float = 240.0,
                 views: tuple[str, ...] = ("iso", "front", "top", "right"), quality: float = 1.0,
-                wall_samples: int = 600, guards: Mapping | None = None) -> BuildResult:
+                wall_samples: int = 600, guards: Mapping | None = None, references: Mapping | None = None) -> BuildResult:
+    """Build a model file out of process. `references`: the reference files (eitri.reference) the project accepted
+    for this model, by relative path; when not given they are read from the folder's eitri.json, so a plain
+    `eitri build` of a project's model file honours them too."""
     model_path = Path(model_path).resolve()
     out_dir = Path(out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -65,6 +69,11 @@ def build_model(model_path: str | Path, out_dir: str | Path, params: Mapping[str
         cmd.append("--no-render")
     if guards:
         cmd += ["--guards", json.dumps(guards)]
+    if references is None:
+        from .reference import accepted_from_folder
+        references = accepted_from_folder(model_path.parent, model_path.name)
+    if references:
+        cmd += ["--references", json.dumps(dict(references))]
     for k, v in (params or {}).items():
         cmd += ["--set", f"{k}={v}"]
     env = dict(os.environ)
@@ -114,6 +123,7 @@ def build_model(model_path: str | Path, out_dir: str | Path, params: Mapping[str
             harness=data.get("harness") if is_harness else None,
             domain_report=data.get("report") if kind != "cad" else None, domain=data.get(kind) if kind != "cad" else None,
             extensions=data.get("extensions") or {}, guards=data.get("guards") or {}, anchors=data.get("anchors") or [],
+            references=data.get("references") or [],
         )
     # the runner died before writing a result (crash, import error)
     tail = (stderr or stdout).strip().splitlines()[-25:]

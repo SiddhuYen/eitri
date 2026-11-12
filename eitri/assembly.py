@@ -195,11 +195,16 @@ def bom(parts) -> list[dict]:
         except Exception:
             vol, size = 0.0, (0, 0, 0)
         mat = getattr(p, "material", None)
-        key = (round(vol, 2), size, mat or "")
+        ref = getattr(p, "reference", None)
+        key = (round(vol, 2), size, mat or "", (ref or {}).get("path") or "")
         row = index.get(key)
         if row is None:
             row = {"item": len(rows) + 1, "name": p.name, "qty": 0, "parts": [], "material": mat or "-", "volume": round(vol, 1),
                    "mass_g": (round(vol / 1000 * DENSITY[mat], 1) if mat in DENSITY else None), "size": list(size), "group": getattr(p, "group", None)}
+            if ref:                                           # customer-supplied: listed, never made
+                row["supplied"] = f"customer (reference {ref.get('path')})"
+                if row["material"] == "-":
+                    row["material"] = "customer part"
             index[key] = row
             rows.append(row)
         row["qty"] += 1

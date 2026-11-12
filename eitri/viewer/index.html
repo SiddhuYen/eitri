@@ -3087,7 +3087,7 @@ function renderParts() {
   for (const name of names) {
     const info = (state.parts || []).find(p => p.name === name);
     const row = document.createElement('div'); row.className = 'row part' + (hidden.has(name) ? ' off' : '');
-    row.innerHTML = `<span class="sw" style="background:${info ? info.color : '#999'}"></span><span>${info && info.group ? '<span class="muted">' + info.group + ' › </span>' : ''}${name}</span><span class="muted" style="margin-left:auto">${info ? (info.mass_g != null ? `${info.material} ${info.mass_g.toFixed(1)} g · ` : '') + info.volume.toFixed(0) + ' mm³' : ''}</span>`;
+    row.innerHTML = `<span class="sw" style="background:${info ? info.color : '#999'}"></span><span>${info && info.group ? '<span class="muted">' + info.group + ' › </span>' : ''}${name}${info && info.reference ? ' <span class="muted" title="' + info.reference + ': the customer part, read-only (edits are refused)">· reference, read-only</span>' : ''}</span><span class="muted" style="margin-left:auto">${info ? (info.mass_g != null ? `${info.material} ${info.mass_g.toFixed(1)} g · ` : '') + info.volume.toFixed(0) + ' mm³' : ''}</span>`;
     row.onclick = ev => { if (ev.shiftKey) togglePart(name); else { selected.clear(); selected.add(name); refreshMaterials(); renderSelection(); } };
     row.title = 'click: select part · shift-click: hide/show';
     el.appendChild(row);

@@ -25,7 +25,8 @@ def _load_all() -> None:
          "from eitri.model import PALETTE, Params, Parts, Checker, srgb\n"
          "from eitri.measure import *\n"
          "from eitri.lib import *\n"
-         "from eitri.anchors import anchor\n", g)
+         "from eitri.anchors import anchor\n"
+         "from eitri.reference import reference_step\n", g)
 
 
 if _os.environ.get("EITRI_LAZY_IMPORT") == "1":

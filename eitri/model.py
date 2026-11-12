@@ -93,6 +93,7 @@ class Part:
     opacity: float = 1.0         # 1 = solid; lower values render translucent in the viewer
     group: str | None = None     # component group (sub-assembly) the part belongs to
     face_colors: dict | None = None   # {face index: sRGB hex} appearances on individual faces
+    reference: dict | None = None     # a reference part (eitri.reference): read-only customer geometry from a STEP file
 
     @property
     def solids(self) -> list[bd.Solid]:
@@ -506,14 +507,18 @@ class LoadedModel:
         if cached is not None and cached[0] == key:
             parts, reused = _clone_parts(cached[1]), True
         else:
-            from . import anchors as _anchors
+            from . import anchors as _anchors, reference as _refs
             _anchors.begin()                          # anchor() calls inside build(p) are collected onto the Parts
+            _refs.begin(self.path.parent)             # so are reference_step() parts (customer STEP files)
             try:
                 result = self.module.build(self.params)
             finally:
                 declared = _anchors.take()
+                references = _refs.take()
             from .domains import kind_of_object, module as domain_module
             kind = kind_of_object(result)
+            if kind and references:
+                raise _refs.ReferenceError("reference_step() works in CAD models (from eitri import *) only")
             if kind:                                  # another domain (harness, mechanism, ...), with its own direct edits
                 dom = domain_module(kind)
                 if hasattr(dom, "apply_layout"):
@@ -521,6 +526,9 @@ class LoadedModel:
                 return result, dom.apply_edits(result, self.edits), False
             parts = result if isinstance(result, Parts) else normalize_result(result, self.path.stem)
             parts.anchors = declared
+            parts.references = []
+            if references:
+                _refs.attach(parts, references)       # added as parts of their own, flagged read-only
             if key:                                   # the kept copy is never handed out
                 _BASE_BUILDS[str(self.path)] = (key, _clone_parts(parts))
         mats = getattr(self.module, "MATERIALS", None) or {}
