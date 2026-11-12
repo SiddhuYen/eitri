@@ -25,7 +25,7 @@ from collections import OrderedDict
 from ..diagram import INK, MUTED, Scene, scene_to_pdf, scene_to_svg, text_w
 from .model import Circuit
 
-CODE = {"cylinder": "MM", "valve": "QM", "frl": "AZ", "regulator": "AZ", "node": "XM", "flow_control": "RZ"}
+CODE = {"cylinder": "MM", "valve": "QM", "frl": "AZ", "regulator": "AZ", "node": "XM", "manifold": "XM", "flow_control": "RZ"}
 DESIGNATION_NOTE = ("Designations: EN 81346-2 class codes as used by Festo Didactic (TP 101 workbook 541088, p. XXIII): -MM cylinder, "
                     "-QM directional valve, -BG sensor, -AZ air preparation, -XM distributor; -RZ flow control (inferred); silencers by valve port.")
 LINE = "#2b3a4a"

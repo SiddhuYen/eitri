@@ -63,6 +63,15 @@ _S = [
            'D-M9B: "In-line", "2-wire", applicable load "24 VDC relay, PLC", load voltage "24 VDC (10 to 28 VDC)", load current "2.5 to 40 mA", '
            'internal voltage drop "4 V or less", leakage current "0.8 mA or less", "Red LED illuminates when ON"; lead wires "D-M9B(V) 0.15 mm2 x '
            '2 cores", 0.5 m standard'),
+    Source("smc-sy-manifold", "SMC Europe catalogue CAT.EUS11-83 SY series (SY_EU.pdf), Type 20 body ported bar stock manifold",
+           "https://static.smc.eu/pdf/SY_EU.pdf",
+           'PDF p.46 (printed 37) How to Order Manifold: SS5Y{3,5,7}-20-{02..20 stations}{-: Rc, 00F: G, 00N: NPT, 00T: NPTF}-Q, '
+           '"This also includes the number of blanking plate assemblies"; PDF p.48 (printed 39) Manifold Specifications: SS5Y3-20 / SS5Y5-20 '
+           '"Common SUP, Common EXH", "2 to 20 stations", P, EA, EB port 1/8 (SS5Y3) / 1/4 (SS5Y5); "Note 1) For more than 10 stations ... '
+           'supply pressure to P port on both sides and exhaust from EA/EB port on both sides"; Flow Characteristics (manifold base with 5 '
+           'stations, individually operated 2 position): SS5Y3-20 C6 P->A/B C 0.72 b 0.29 Cv 0.18, A/B->EA/EB C 0.80 b 0.36 Cv 0.21; '
+           'SS5Y5-20 C8 P->A/B C 1.9 b 0.28 Cv 0.48, A/B->EA/EB C 2.2 b 0.20 Cv 0.53; PDF p.75 Manifold Option, Type 20 blanking plate '
+           'assembly SY3000-26-19A-Q, SY5000-26-1A-Q'),
     Source("festo-smt-8m-a", "Festo data sheet SMT-8M-A-PS-24V-E-0,3-M8D, part number 574334 (dated 10/8/26)",
            "https://ftp.festo.com/public/PNEUMATIC/SOFTWARE_SERVICE/DataSheet/EN_GB/574334.pdf",
            '"Design For T-slot"; "Switching output PNP"; "N/O contact"; "Max. output current 100 mA"; "Voltage drop 1.5 V"; "Rated operational '
@@ -103,6 +112,7 @@ class Series:
     sources: tuple[str, ...]
     strokes: tuple | None = None      # allowed strokes (a set of standard ones) or None
     stroke_range: tuple[float, float] | None = None
+    stations_range: tuple[int, int] | None = None
     figures: dict = field(default_factory=dict)        # catalogue figures the build compares with (forces at a pressure ...)
 
 
@@ -125,19 +135,30 @@ SERIES: list[Series] = [
            dict(cls="5/2", actuation="solenoid", returns="spring", C=0.76, b=0.30, C_exhaust=0.65, b_exhaust=0.39, min_bar=1.5, max_bar=7.0,
                 coil_V=24.0, coil_W=0.4, connector="L plug connector (lead wire 300 mm)", port="P, EA, EB M5 x 0.8; A, B one-touch 6 mm",
                 connections={"P": "M5", "R": "M5", "S": "M5", "A": "push-in 6", "B": "push-in 6"},
-                max_hz=10.0, manufacturer="SMC", description="SMC SY3000 5/2 single-solenoid valve, body ported, 24 VDC"),
+                max_hz=10.0, series="SY3000", manufacturer="SMC", description="SMC SY3000 5/2 single-solenoid valve, body ported, 24 VDC"),
            ("smc-sy",)),
     Series("valve", r"(?:SMC\s+)?SY3220-5L(?P<light>Z?)-C6",
            dict(cls="5/2", actuation="solenoid", returns="solenoid", C=0.76, b=0.30, C_exhaust=0.65, b_exhaust=0.39, min_bar=1.0, max_bar=7.0,
                 coil_V=24.0, coil_W=0.4, connector="L plug connector x 2 (lead wire 300 mm)", port="P, EA, EB M5 x 0.8; A, B one-touch 6 mm",
                 connections={"P": "M5", "R": "M5", "S": "M5", "A": "push-in 6", "B": "push-in 6"},
-                max_hz=10.0, manufacturer="SMC", description="SMC SY3000 5/2 double-solenoid valve (holds its position unpowered), 24 VDC"),
+                max_hz=10.0, series="SY3000", manufacturer="SMC", description="SMC SY3000 5/2 double-solenoid valve (holds its position unpowered), 24 VDC"),
            ("smc-sy",)),
     Series("valve", r"(?:SMC\s+)?SY5120-5L(?P<light>Z?)-01",
            dict(cls="5/2", actuation="solenoid", returns="spring", C=1.9, b=0.35, C_exhaust=2.4, b_exhaust=0.39, min_bar=1.5, max_bar=7.0,
                 coil_V=24.0, coil_W=0.4, connector="L plug connector (lead wire 300 mm)", port="all ports Rc1/8", connections={k: "Rc1/8" for k in ("P", "A", "B", "R", "S")}, max_hz=5.0,
-                manufacturer="SMC", description="SMC SY5000 5/2 single-solenoid valve, body ported, 24 VDC"),
+                series="SY5000", manufacturer="SMC", description="SMC SY5000 5/2 single-solenoid valve, body ported, 24 VDC"),
            ("smc-sy",)),
+    # ---------------------------------------------------------------- valve manifolds (Type 20, bar stock, individual wiring)
+    Series("manifold", r"(?:SMC\s+)?SS5Y3-20-(?P<stations>\d\d)(?P<thread>00F|00N|00T)?(?:-Q)?",
+           dict(series="SY3000", C=0.72, b=0.29, C_exhaust=0.80, b_exhaust=0.36, max_stations=20, both_sides_above=10, port="P, EA, EB 1/8",
+                blanking_plate="SMC SY3000-26-19A-Q", connections={"P": "Rc1/8", "R": "Rc1/8", "S": "Rc1/8"},
+                description="SMC SS5Y3-20 manifold base for SY3000, common SUP/EXH, 1/8 ports"),
+           ("smc-sy-manifold",), stations_range=(2, 20)),
+    Series("manifold", r"(?:SMC\s+)?SS5Y5-20-(?P<stations>\d\d)(?P<thread>00F|00N|00T)?(?:-Q)?",
+           dict(series="SY5000", C=1.9, b=0.28, C_exhaust=2.2, b_exhaust=0.20, max_stations=20, both_sides_above=10, port="P, EA, EB 1/4",
+                blanking_plate="SMC SY5000-26-1A-Q", connections={"P": "Rc1/4", "R": "Rc1/4", "S": "Rc1/4"},
+                description="SMC SS5Y5-20 manifold base for SY5000, common SUP/EXH, 1/4 ports"),
+           ("smc-sy-manifold",), stations_range=(2, 20)),
     # ---------------------------------------------------------------- tube, flow controls, silencers
     Series("tube", r"(?:SMC\s+)?TU0604", dict(id_mm=4.0, od_mm=6.0, max_bar=8.0, material="polyurethane",
                                                description="SMC TU polyurethane tube 6 x 4 mm"), ("smc-tu",)),
@@ -184,6 +205,14 @@ def lookup(kind: str, part: str) -> tuple[dict, Series]:
             f["stroke_mm"] = st
             if "piston_mass_per_mm_kg" in f:
                 f["piston_mass_kg"] = round(f["piston_mass_kg"] + f.pop("piston_mass_per_mm_kg") * st, 4)
+        if g.get("stations"):
+            n = int(g["stations"])
+            if s.stations_range and not s.stations_range[0] <= n <= s.stations_range[1]:
+                raise CatalogError(f"{part}: {n} stations is outside the series' {s.stations_range[0]}-{s.stations_range[1]}")
+            f["stations"] = n
+        if g.get("thread"):
+            t = {"00F": "G", "00N": "NPT", "00T": "NPTF"}[g["thread"].upper()]
+            f["connections"] = {k: v.replace("Rc", t) for k, v in f.get("connections", {}).items()}
         if "magnet" in g:
             f["magnet"] = bool(g["magnet"])
         if "light" in g and not g["light"]:

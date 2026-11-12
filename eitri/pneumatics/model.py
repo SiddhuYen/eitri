@@ -183,6 +183,9 @@ class Valve(Component):
     coil_V: float | None = None          # solenoid coil rated voltage (DC) and power, from the datasheet: the I/O list's outputs
     coil_W: float | None = None
     connector: str = ""                  # the coil's electrical entry (plug, M8 ...)
+    manifold: str = ""                   # the manifold it is mounted on (Circuit.mount) and its station
+    station: int | None = None
+    series: str = ""                     # its catalogue series (SY3000 ...), to match a manifold
     signal: str = ""                     # the control signal name for the coil (14 side); "" -> <name>_14
     signal_12: str = ""                  # the 12-side coil of a double-solenoid valve; "" -> <name>_12
     terminal: str = ""                   # where the coil lands (terminal / PLC output address), free text for the I/O list
@@ -342,6 +345,28 @@ class Node(Component):
 
 
 @dataclass(eq=False)
+class Manifold(Component):
+    """A valve manifold base (SMC SS5Y...): common supply P and exhausts R (EA) and S (EB) shared by the valves mounted on its
+    stations (Circuit.mount). Its C, b are the catalogue's figures for a valve mounted on it (they replace the valve's own)."""
+    stations: int = 2
+    series: str = ""                     # the valve series it takes (SY3000 ...): mount() checks it
+    C_exhaust: float | None = None
+    b_exhaust: float | None = None
+    blanking_plate: str = ""             # the blanking plate assembly part for an empty station
+    max_stations: int | None = None      # the catalogue's largest manifold; above `both_sides_above` the catalogue asks for supply and
+    both_sides_above: int | None = None  # exhaust on both sides
+
+    def __post_init__(self) -> None:
+        self.kind, self.ports = "manifold", ["P", "R", "S"]
+        super().__post_init__()
+        self.stations = int(self.stations)
+        if self.stations < 1:
+            raise PneumaticsError(f"manifold {self.name}: stations must be at least 1")
+        if self.C_exhaust is not None:
+            self.C_exhaust = _pos(self.C_exhaust, f"{self.name} C_exhaust")
+
+
+@dataclass(eq=False)
 class Tube:
     name: str
     a: PortRef
@@ -460,6 +485,7 @@ class Circuit:
         self.attached: dict[PortRef, PortRef] = {}   # a silencer screwed straight onto an exhaust port: port -> silencer.IN
         self.layout: dict[str, list[float]] = {}
         self.sensors: dict[str, Sensor] = {}
+        self.mounts: dict[str, tuple[str, int]] = {}     # valve name -> (manifold name, station)
         self.control_V: float | None = None          # the control voltage (DC) the coils and sensors run on (the I/O list's)
         self.meta: dict[str, str] = {}               # the drawing's title block (drawing_info)
 
@@ -531,9 +557,47 @@ class Circuit:
     def node(self, name: str, **kw) -> Node:
         return self.add(Node(name, **kw))
 
+    def manifold(self, name: str, stations: int | None = None, part: str | None = None, **kw) -> Manifold:
+        """A valve manifold base: ports P (common supply), R and S (common exhausts); mount valves on it with mount()."""
+        kw.update(name=name, stations=stations)
+        if part:
+            kw = _from_part("manifold", part, Manifold, kw)
+        if kw.get("stations") is None:
+            raise PneumaticsError(f"manifold {name}: give stations= (or part= a catalogue part number)")
+        return self.add(Manifold(**{k: v for k, v in kw.items() if v is not None}))
+
+    def mount(self, valve, manifold, station: int | None = None) -> None:
+        """Mount a valve on a manifold station: its P, R and S join the manifold's common supply and exhausts (no tubes, no
+        fittings, no silencers of its own) and it takes the catalogue's flow figures for a valve on that manifold."""
+        v = self.get(valve.name if isinstance(valve, Component) else str(valve))
+        m = self.get(manifold.name if isinstance(manifold, Component) else str(manifold))
+        if v.kind != "valve" or m.kind != "manifold":
+            raise PneumaticsError(f"mount(valve, manifold): {v.name} is a {v.kind}, {m.name} a {m.kind}")
+        if v.name in self.mounts:
+            raise PneumaticsError(f"{v.name} is already mounted on {self.mounts[v.name][0]}")
+        if m.series and v.series and m.series != v.series:
+            raise PneumaticsError(f"{v.name} is an {v.series} valve; manifold {m.name} takes {m.series} valves")
+        for p in ("P", "R", "S"):
+            if p in v.ports and (self._tubes_at(v.port(p)) or v.port(p) in self.attached or v.port(p) in self.vents):
+                raise PneumaticsError(f"{v.name}.{p} already has a connection: a mounted valve's P, R and S are the manifold's")
+        used = {st for (mn, st) in self.mounts.values() if mn == m.name}
+        if station is None:
+            station = next(i for i in range(1, len(used) + 2) if i not in used)
+        if station in used:
+            raise PneumaticsError(f"manifold {m.name}: station {station} is taken")
+        self.mounts[v.name] = (m.name, int(station))
+        v.manifold, v.station = m.name, int(station)
+        if m.C is not None:                                       # the catalogue gives the valve-on-manifold figures
+            v.catalog.setdefault("info", {})["body_ported_flow"] = (v.C, v.b, v.C_exhaust, v.b_exhaust)
+            v.C, v.b = m.C, m.b
+            if m.C_exhaust is not None:
+                v.C_exhaust, v.b_exhaust = m.C_exhaust, m.b_exhaust
+
     def silencer(self, port, name: str | None = None, C: float | None = None, b: float | None = None, part: str | None = None, **kw) -> Silencer:
         """A silencer screwed onto an exhaust port (no tube)."""
         ref = self._port(port)
+        if ref.component in self.mounts and ref.port in ("R", "S"):
+            raise PneumaticsError(f"{ref.component} is mounted on {self.mounts[ref.component][0]}: put the silencer on the manifold's {ref.port}")
         kw.update(name=name or f"S_{ref.component}_{ref.port}", C=C, b=b)
         if part:
             kw = _from_part("silencer", part, Silencer, kw)
@@ -558,6 +622,8 @@ class Circuit:
         if ra == rb:
             raise PneumaticsError(f"tube {name}: both ends are {ra}")
         for r in (ra, rb):
+            if r.component in self.mounts and r.port in ("P", "R", "S"):
+                raise PneumaticsError(f"tube {name}: {r} is fed by manifold {self.mounts[r.component][0]}; connect the manifold's {r.port} instead")
             if self.components[r.component].kind != "node" and (self._tubes_at(r) or r in self.attached or r in self.vents):
                 raise PneumaticsError(f"tube {name}: port {r} already has a connection (use a Node for a tee)")
         kw.update(id_mm=id_mm)
@@ -646,6 +712,13 @@ class Circuit:
         for port, s in self.attached.items():
             if s == ref:
                 out.append(("attached", None, port))
+        if ref.component in self.mounts and ref.port in ("P", "R", "S"):          # a mounted valve: into the manifold's gallery
+            out.append(("manifold", None, PortRef(self.mounts[ref.component][0], ref.port)))
+        comp = self.components.get(ref.component)
+        if comp is not None and comp.kind == "manifold":                          # the gallery: every mounted valve's same port
+            for vname, (mname, _st) in self.mounts.items():
+                if mname == comp.name and ref.port in self.components[vname].ports:
+                    out.append(("manifold", None, PortRef(vname, ref.port)))
         return out
 
     def __repr__(self) -> str:

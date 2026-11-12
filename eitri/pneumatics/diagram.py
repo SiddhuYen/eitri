@@ -12,7 +12,7 @@ MARGIN = 28
 ROW_GAP = 110
 TOP = 86
 SPACING = 170
-LEVEL = {"supply": 0, "regulator": 1, "frl": 1, "node": 1.3, "valve": 2, "flow_control": 3, "cylinder": 4, "silencer": 2}
+LEVEL = {"supply": 0, "regulator": 1, "frl": 1, "node": 1.3, "manifold": 1.6, "valve": 2, "flow_control": 3, "cylinder": 4, "silencer": 2}
 STUB = 14
 VBOX = 44.0                 # one valve position's square: wide enough for P between the exhausts R and S and their silencers
 LINE = "#2b3a4a"
@@ -35,6 +35,8 @@ def _size(comp) -> tuple[float, float]:
         return 30.0, 30.0
     if k == "silencer":
         return 14.0, 16.0
+    if k == "manifold":
+        return getattr(comp, "_draw_w", 120.0), 14.0
     return 8.0, 8.0
 
 
@@ -102,6 +104,8 @@ def _ports(comp, cx: float, cy: float) -> dict[str, tuple[float, float, str]]:
         return {"A": (cx, cy + h / 2, "down"), "B": (cx, cy - h / 2, "up")}
     if k == "silencer":
         return {"IN": (cx, cy - h / 2, "up")}
+    if k == "manifold":
+        return {"P": (cx, cy + h / 2, "down"), "R": (cx - w / 2 + 16, cy + h / 2, "down"), "S": (cx + w / 2 - 16, cy + h / 2, "down")}
     return {"N": (cx, cy, "up")}
 
 
@@ -138,6 +142,9 @@ def layout(c: Circuit) -> dict[str, tuple[float, float]]:
     for t in c.tubes:
         nbrs[t.a.component].add(t.b.component)
         nbrs[t.b.component].add(t.a.component)
+    for v, (m, _st) in c.mounts.items():
+        nbrs[v].add(m)
+        nbrs[m].add(v)
     lvl = {x.name: LEVEL.get(x.kind, 2) for x in comps}
     for _ in range(3):
         for x in comps:
@@ -156,6 +163,12 @@ def layout(c: Circuit) -> dict[str, tuple[float, float]]:
         for x in row:
             above = [xs[n] for n in nbrs[x.name] if n in xs and lvl[n] > level]
             xs[x.name] = sum(above) / len(above) if above else None
+        for x in row:                                             # a manifold spans the valves mounted on it
+            if x.kind == "manifold":
+                vx = [xs[v] for v, (m, _st) in c.mounts.items() if m == x.name and v in xs]
+                if vx:
+                    x._draw_w = max(vx) - min(vx) + 2 * VBOX + 60
+                    xs[x.name] = (max(vx) + min(vx)) / 2
         free = [x for x in row if xs[x.name] is None]
         for i, x in enumerate(free):
             xs[x.name] = MARGIN + 60 + i * SPACING
@@ -222,6 +235,18 @@ def build_scene(c: Circuit, rep=None, status: dict[str, str] | None = None, foot
     routes: dict[str, list] = {}
     for _sname, lpts in leaders:                                     # a tube may cross a silencer's leader, never run along it
         router.take(lpts)
+    galleries: list[tuple[str, list]] = []                           # a mounted valve's P, R, S into its manifold's bar
+    for vname, (mname, _st) in c.mounts.items():
+        if vname not in pos or mname not in pos:
+            continue
+        mx, my = pos[mname]
+        top = my - _size(c.components[mname])[1] / 2
+        for p in ("P", "R", "S"):
+            ref = PortRef(vname, p)
+            if ref in ports:
+                x, y, _d = ports[ref]
+                galleries.append((mname, [(x, y), (x, top)]))
+                router.take([(x, y), (x, top)])
     silenced = {p.component for p in c.attached}
 
     # a tee: each of its tubes leaves on its own side, the side facing its other end where it can
@@ -272,6 +297,8 @@ def build_scene(c: Circuit, rep=None, status: dict[str, str] | None = None, foot
         label = "screwed in" if t.direct else f"{t.name}  {t.id_mm:g} mm ID · {t.length_m:g} m"
         items.append({"t": "text", "x": pts[0][0], "y": pts[0][1], "s": label, "size": FONT - 2, "fill": col if st else MUTED, "anchor": "middle",
                       "g": g, "cls": "label", "bg": "#ffffff", "cands": _beside(pts, label, FONT - 2)})
+    for mname, pts in galleries:
+        items.append({"t": "polyline", "pts": pts, "stroke": INK, "sw": 1.2, "fill": "none", "dash": "4 3", "g": f"component:{mname}", "cls": "sym"})
     for sname, pts in leaders:                                       # a silencer screwed onto its exhaust port
         items.append({"t": "polyline", "pts": pts, "stroke": INK, "sw": 1.2, "fill": "none", "g": f"component:{sname}", "cls": "sym"})
     # vents: an open triangle at the port
@@ -376,6 +403,8 @@ def _short(comp) -> str:
         return f"{comp.pressure_bar:g} bar"
     if k == "flow_control":
         return f"meter-{comp.meter}"
+    if k == "manifold":
+        return f"manifold, {comp.stations} stations"
     return k
 
 
@@ -498,6 +527,12 @@ def _symbol(items, comp, cx, cy, w, h, col, g) -> None:
         items.append({"t": "polyline", "pts": [(cx + 3, cy - 10), (cx - 3, cy), (cx + 3, cy + 10)], "fill": "none", "stroke": col, "sw": 1.2, "g": g, "cls": "sym"})
         items.append({"t": "circle", "cx": cx + 9, "cy": cy, "r": 3.5, "fill": "none", "stroke": col, "sw": 1, "g": g, "cls": "sym"})
         items.append({"t": "line", "x1": cx + 6, "y1": cy + 4, "x2": cx + 12, "y2": cy + 4, "stroke": col, "sw": 1, "g": g, "cls": "sym"})
+        return
+    if k == "manifold":                                        # the manifold base: a bar, its outline dashed (an enclosure)
+        x0, y0 = cx - w / 2, cy - h / 2
+        items.append({"t": "rect", "x": x0, "y": y0, "w": w, "h": h, "rx": 0, "fill": "#eef2f6", "stroke": "none", "sw": 0, "g": g, "cls": "sym"})
+        items.append({"t": "polyline", "pts": [(x0, y0), (x0 + w, y0), (x0 + w, y0 + h), (x0, y0 + h)], "closed": True, "fill": "none", "stroke": col,
+                      "sw": 1.2, "dash": "8 3", "g": g, "cls": "sym"})
         return
     if k == "silencer":
         box(cx - w / 2, cy - h / 2, w, h)

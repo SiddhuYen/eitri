@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 
 from ..checks import Check, check as _check, level, switched_off
 from .flow import DEFAULT_C, consumption_per_cycle_l, cylinder_forces, drop_for_flow, flow_l_s, required_flow_l_s, series, tube_data
-from .model import EXHAUST_PORTS, LOAD_RATIOS, pressure_rating, P_ATM, Circuit, Cylinder, FlowControl, Node, PortRef, Regulator, Silencer, Supply, Tube, Valve
+from .model import Manifold, EXHAUST_PORTS, LOAD_RATIOS, pressure_rating, P_ATM, Circuit, Cylinder, FlowControl, Node, PortRef, Regulator, Silencer, Supply, Tube, Valve
 
 # The speed at the end of the stroke is higher than the mean speed (stroke / stroke time) a speed controller is set to. SMC Shock
 # Absorber Series RB catalogue (https://static.smc.eu/pdf/RB_EU.pdf, p.5 Model Selection, Note 1, fetched 2026-11-12): "The collision
@@ -184,7 +184,7 @@ def find_path(c: Circuit, start: PortRef, goal: str, positions: dict[str, int] |
                 if r is not None:
                     return r
             return None
-        if isinstance(comp, Node):
+        if isinstance(comp, (Node, Manifold)):                   # a tee, or a manifold's gallery: on to its other connections
             return _leave(c, ref, visited | {ref}, positions, steps, depth + 1, dfs, skip=None)
         return None
 
@@ -248,6 +248,7 @@ def _pressure_ratings(c: Circuit) -> list[Check]:
             nxt = [t.b if t.a == ref else t.a for t in c._tubes_at(ref)]
             if ref in c.attached:
                 nxt.append(c.attached[ref])
+            nxt += [o for k, _t, o in c.connections_at(ref) if k == "manifold"]
             comp = c.components[ref.component]
             if comp is not src:
                 reached[comp.name] = comp
@@ -325,7 +326,7 @@ def run_checks(c: Circuit) -> tuple[list[Check], list[CylinderInfo], list[Supply
                                      "", [cyl.name] + exh[port].names))
             else:
                 bare = [str(v.port(e)) for v in c.components.values() if v.kind == "valve" for e in EXHAUST_PORTS if e in v.ports
-                        and v.port(e) not in c.attached and v.port(e) not in c.vents and not c._tubes_at(v.port(e))]
+                        and v.port(e) not in c.attached and v.port(e) not in c.vents and not c._tubes_at(v.port(e)) and v.name not in c.mounts]
                 why = (f"; {', '.join(bare)} {'has' if len(bare) == 1 else 'have'} nothing on {'it' if len(bare) == 1 else 'them'}, and an "
                        "undeclared exhaust port counts as plugged: c.silencer(v[\"R\"]) or c.exhaust(v[\"R\"])") if bare else ""
                 checks.append(_check("circuit", f"{cyl.name}.{port} can exhaust", "fail", f"{ref} cannot vent in any valve position: the chamber is dead-headed{why}",
@@ -473,6 +474,7 @@ def run_checks(c: Circuit) -> tuple[list[Check], list[CylinderInfo], list[Supply
     checks += _pressure_ratings(c)
     checks += _catalog_checks(c, infos)
     checks += _failsafe_checks(c)
+    checks += _manifold_checks(c, infos)
     if estimated:
         checks.append(_check("flow data", "flow data estimated", "warn",
                              "no C, b from a datasheet for " + ", ".join(f"{k} ({v})" for k, v in list(estimated.items())[:8]) + ("..." if len(estimated) > 8 else "") + ": graded with conservative estimates",
@@ -576,6 +578,67 @@ def _catalog_checks(c: Circuit, infos: list[CylinderInfo]) -> list[Check]:
             sev = "pass" if lo <= c.control_V <= hi else "fail"
             out.append(_check("electrical", f"sensor {s.name} voltage", sev, f"{c.control_V:g} V DC control supply; the sensor runs on {lo:g}-{hi:g} V{src}",
                               f"{lo:g}-{hi:g} V", [s.cylinder]))
+    return out
+
+
+def simultaneous_groups(c: Circuit) -> tuple[list[set[str]], str]:
+    """Which cylinders' strokes may draw air at the same time: from the declared sequence (one group per step), else all of them
+    (the conservative assumption)."""
+    seq = getattr(c, "sequence", None)
+    if seq:
+        return [set(st.cylinders()) for st in seq], "per step of the declared sequence"
+    return [{cy.name for cy in c.cylinders}], "all cylinders at once (no sequence declared: c.step(...))"
+
+
+def _manifold_checks(c: Circuit, infos: list[CylinderInfo]) -> list[Check]:
+    """Each manifold: valves vs stations (empty stations take blanking plates), and the common supply against the air the valves on
+    it draw at the same time."""
+    out: list[Check] = []
+    by = {i.name: i for i in infos}
+    for m in [x for x in c.components.values() if isinstance(x, Manifold)]:
+        on = sorted((st, v) for v, (mn, st) in c.mounts.items() if mn == m.name)
+        src = f" [{m.part_number} catalogue]" if m.part_number else ""
+        name = f"manifold {m.name} stations"
+        bad = [f"station {st} ({v})" for st, v in on if st > m.stations]
+        if len(on) > m.stations or bad:
+            out.append(_check("manifold", name, "fail", f"{len(on)} valve(s) on a {m.stations}-station base" + (f"; {', '.join(bad)} beyond its stations" if bad else ""),
+                              f"<= {m.stations} valves (a base with more stations)", [m.name] + [v for _s, v in on]))
+        else:
+            empty = m.stations - len(on)
+            sev = "warn" if (m.both_sides_above and m.stations > m.both_sides_above) else "pass"
+            out.append(_check("manifold", name, sev, f"{len(on)} valve(s) on {m.stations} stations" + (f"; {empty} empty station(s) take a blanking plate"
+                              + (f" ({m.blanking_plate}, in the BOM)" if m.blanking_plate else "") if empty else "")
+                              + (f"; above {m.both_sides_above} stations the catalogue asks for supply and exhaust on both sides{src}" if sev == "warn" else ""),
+                              f"<= {m.stations} valves", [m.name] + [v for _s, v in on]))
+        # the common supply against the simultaneous demand
+        mounted = {v for _s, v in on}
+        demand_by_cyl: dict[str, float] = {}
+        for cyl in c.cylinders:
+            info = by.get(cyl.name)
+            if not info:
+                continue
+            for si in info.strokes:
+                if si.flow_required_l_s and si.fill is not None and si.fill.found and mounted & set(si.fill.names):
+                    demand_by_cyl[cyl.name] = max(demand_by_cyl.get(cyl.name, 0.0), si.flow_required_l_s)
+        if not demand_by_cyl:
+            continue
+        groups, how = simultaneous_groups(c)
+        q, worst = max(((sum(demand_by_cyl.get(n, 0.0) for n in g), g) for g in groups), key=lambda t: t[0])
+        path = find_path(c, m.port("P"), "supply")
+        cname = f"manifold {m.name} common supply"
+        if not path.found or path.pressure_bar is None:
+            out.append(_check("manifold", cname, "fail", f"{m.name}.P is not fed from a supply", "a tube from the air preparation to the manifold's P", [m.name]))
+            continue
+        p1 = path.pressure_bar + P_ATM
+        dp = drop_for_flow(path.C_eff, path.b_eff, p1, q) if q > 0 else 0.0
+        users = ", ".join(sorted(n for n in worst if n in demand_by_cyl)) or "none"
+        est = " (estimated C on: " + ", ".join(s.name for s in path.steps if s.estimated) + ")" if any(s.estimated for s in path.steps) else ""
+        if dp is None:
+            sev, meas = "fail", f"{q:.2f} L/s ANR drawn at once ({users}; {how}) is more than the supply path to {m.name} passes choked ({path.C_eff * p1:.2f} L/s, C_eff {path.C_eff:.2f}){est}"
+        else:
+            sev = "warn" if dp > max(DROP_WARN_BAR, 0.05 * path.pressure_bar) else "pass"
+            meas = f"{q:.2f} L/s ANR drawn at once ({users}; {how}) drops {dp:.2f} bar from {' -> '.join(path.names)} (C_eff {path.C_eff:.2f}){est}"
+        out.append(_check("manifold", cname, sev, meas, f"<= {DROP_WARN_BAR:g} bar drop at the simultaneous demand", [m.name] + path.names))
     return out
 
 
