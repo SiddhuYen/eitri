@@ -27,7 +27,8 @@ PRESSURE_DOCS = {
     "node": doc("SMC KQ2 one-touch fittings (KQ2T): -100 kPa to 1 MPa", "", "fetched 2026-10-26"),
 }
 FLOW_DOCS = {
-    "valve": doc("SMC SY3000 series: C 1.1 dm3/(s.bar), b 0.28-0.30 (default C 1.0)", "", "smcworld SY series list"),
+    "valve": doc("SMC SY3000 body ported, 2 position single, P->A/B: C 0.61-0.76, b 0.29-0.44; default the lowest, C 0.6 b 0.29",
+                 "https://static.smc.eu/pdf/SY_EU.pdf", "SMC CAT.EUS11-83 (SY_EU.pdf) p.3 Flow characteristics, re-read 2026-11-12"),
     "silencer": doc("SMC AN silencers: AN05-M5 C 1 dm3/(s.bar)", "https://content2.smcetech.com/pdf/AN.pdf", "SMC AN catalogue (re-read 2026-11-07)"),
     "flow_control": doc("SMC AS speed controllers: M5 S 1.5 mm2, C = S/5 = 0.3", "https://static.smc.eu/pdf/AS_EU.pdf",
                         "SMC AS_EU catalogue (re-read 2026-11-07)"),
@@ -174,6 +175,20 @@ def _failsafe(c, circ):
     return [requirement(f"{cyl.name if cyl is not None else ''} {attr}".strip()), SMC_VALVE_PRECAUTIONS, SMC_SY_SYMBOLS]
 
 
+def _manifold_doc(c, circ):
+    m = _ref_comp(c, circ, ("manifold",))
+    return _part_docs(m, "stations") if m is not None else []
+
+
+def _manifold_stations(c, circ):
+    return [rule("a manifold base holds at most its stations' valves; an empty station takes a blanking plate")] + _manifold_doc(c, circ)
+
+
+def _manifold_supply(c, circ):
+    return ([ISO_6358, DROP_LIMIT, rule("simultaneous demand: the declared sequence's steps, else every cylinder at once")]
+            + _manifold_doc(c, circ) + _flow_sources(c.refs[1:], circ))
+
+
 def _estimated(c, circ):
     return [rule("every component graded with estimated flow data is named")] + _flow_sources(c.refs, circ)
 
@@ -209,6 +224,12 @@ RULES = [
                                                                  model_file("magnet")), _sensor),
     Rule(P + "fail-safe", "fail-safe", r"on loss of ", (requirement("on_power_loss / on_air_loss"), SMC_VALVE_PRECAUTIONS,
                                                                                 SMC_SY_SYMBOLS), _failsafe),
+    Rule(P + "manifold-stations", "manifold", r"manifold .+ stations$",
+         (rule("a manifold base holds at most its stations' valves; an empty station takes a blanking plate"), _cat_doc("smc-sy-manifold"),
+          model_file("stations")), _manifold_stations),
+    Rule(P + "manifold-supply", "manifold", r"manifold .+ common supply$",
+         (ISO_6358, DROP_LIMIT, rule("simultaneous demand: the declared sequence's steps, else every cylinder at once"), _cat_doc("smc-sy-manifold"),
+          TUBE_ESTIMATE), _manifold_supply),
     Rule(P + "flow-data", "flow data", r"flow data estimated$", (rule("every component graded with estimated flow data is named"),) + tuple(FLOW_DOCS.values()),
          _estimated),
 ]

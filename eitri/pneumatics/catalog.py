@@ -87,7 +87,8 @@ _S = [
            'AS2201F-01-06 (R1/8, tube 6 mm): controlled-flow effective area 3.5 mm2 needle fully open; max operating pressure 1 MPa. SMC gives no '
            'C: C = S / 5 = 0.7 L/(s.bar) (SMC: S [mm2] = 5 x C); b not published (0.30 is an ESTIMATE)', fetched="2026-11-07"),
     Source("smc-an", "SMC Silencer Series AN (AN.pdf)", "https://content2.smcetech.com/pdf/AN.pdf",
-           'AN05-M5: sonic conductance C 1 dm3/(s.bar), max operating pressure 1.0 MPa; b not published (0.30 is an ESTIMATE)', fetched="2026-11-07"),
+           'Specifications: max operating pressure 1.0 MPa; performance table, sonic conductance C [dm3/(s.bar)]: AN05-M5 1, AN10-01 2 (R1/8); b not '
+           'published (0.30 is an ESTIMATE)', fetched="2026-11-07"),
     Source("smc-best-tech", "SMC Best Pneumatics technical data, Air Cylinders Model Selection (6-2-1-m21-43-tech_en.pdf)",
            "https://ca01.smcworld.com/catalog/BEST-technical-data-en/pdf/6-2-1-m21-43-tech_en.pdf",
            'Data 2 (p.1574): worked example "Operating pressure 0.5 MPa -> Piping length 2 m -> Bore 6 mm -> Air consumption = 0.56 L (ANR)" per '
@@ -164,6 +165,8 @@ SERIES: list[Series] = [
                                                description="SMC TU polyurethane tube 6 x 4 mm"), ("smc-tu",)),
     Series("flow_control", r"(?:SMC\s+)?AS2201F-01-06", dict(C=0.7, b=0.30, max_bar=10.0, port="R1/8, tube 6 mm", connections={"A": "push-in 6", "B": "R1/8 male"},
                                                          description="SMC AS speed controller, elbow, R1/8 x 6 mm"), ("smc-as",)),
+    Series("silencer", r"(?:SMC\s+)?AN10-01", dict(C=2.0, b=0.30, max_bar=10.0, port="R1/8", connections={"IN": "R1/8 male"},
+                                                  description="SMC AN silencer, R1/8"), ("smc-an",)),
     Series("silencer", r"(?:SMC\s+)?AN05-M5", dict(C=1.0, b=0.30, max_bar=10.0, port="M5", connections={"IN": "M5 male"}, description="SMC AN silencer, M5"), ("smc-an",)),
     # ---------------------------------------------------------------- position sensors (see also MALE_CONNECTORS below)
     Series("sensor", r"(?:SMC\s+)?D-M9B", dict(output="2-wire", V_min=10.0, V_max=28.0, load_mA_min=2.5, load_mA_max=40.0, drop_V=4.0,

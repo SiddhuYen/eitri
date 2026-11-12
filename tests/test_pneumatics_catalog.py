@@ -297,3 +297,98 @@ def test_drawing_svg_and_pdf(tmp_path):
     assert pdf.startswith(b"%PDF-1.4") and pdf.rstrip().endswith(b"%%EOF") and b"(Approved by) Tj" in pdf and b"/Helvetica-Bold" in pdf
     xref = int(pdf.rsplit(b"startxref", 1)[1].split()[0])
     assert pdf[xref:xref + 4] == b"xref"
+
+
+# ---------------------------------------------------------------------------- 0.8.1 item 2: valve manifolds (SMC SS5Y)
+
+
+def manifold_station(stations=4, valves=2, sup_id=6.0, sup_len=0.5, speed=200.0, bore_part="SMC CDQ2B32-20DZ", seq=None):
+    c = Circuit("manifold station")
+    c.control_voltage(24)
+    air = c.supply("AIR", pressure_bar=7.0, flow_l_min=500)
+    reg = c.regulator("REG", set_bar=6.0, C=2.0, b=0.35)
+    m = c.manifold("M1", part=f"SMC SS5Y3-20-{stations:02d}-Q")
+    c.tube("T0", air["OUT"], reg["IN"], id_mm=6, length_m=1)
+    c.tube("T1", reg["OUT"], m["P"], id_mm=sup_id, length_m=sup_len)
+    c.silencer(m["R"], part="SMC AN10-01")
+    c.silencer(m["S"], part="SMC AN10-01")
+    for i in range(1, valves + 1):
+        v = c.valve(f"V{i}", part="SMC SY3120-5LZ-C6", signal=f"Y{i}_EXTEND")
+        c.mount(v, m)
+        cy = c.cylinder(f"C{i}", part=bore_part, load_N=100, speed_mm_s=speed, cycles_per_min=6, duty="static", load_mass_kg=0.1,
+                        on_power_loss="retract", on_air_loss="release")         # a light pad: unthrottled, 1/2 x 0.1 x 1.4^2 < 0.29 J
+        c.tube(f"TA{i}", v["A"], cy["ROD"], part="SMC TU0604", length_m=1)
+        c.tube(f"TB{i}", v["B"], cy["CAP"], part="SMC TU0604", length_m=1)
+    return c
+
+
+def test_manifold_part_and_mount():
+    c = manifold_station()
+    m = c.get("M1")
+    assert (m.stations, m.series, m.C, m.b, m.C_exhaust, m.b_exhaust, m.blanking_plate) == (4, "SY3000", 0.72, 0.29, 0.80, 0.36, "SMC SY3000-26-19A-Q")
+    v = c.get("V1")
+    assert (v.manifold, v.station) == ("M1", 1) and (v.C, v.b, v.C_exhaust) == (0.72, 0.29, 0.80)   # the valve-on-manifold figures
+    assert c.get("V2").station == 2
+    with pytest.raises(PneumaticsError, match="SY5000"):
+        c.mount(c.valve("V9", part="SMC SY5120-5LZ-01"), m)
+    with pytest.raises(PneumaticsError, match="fed by manifold"):
+        c.tube("TX", c.get("V1")["P"], c.get("REG")["OUT"])
+    with pytest.raises(PneumaticsError, match="station 1 is taken"):
+        c.mount(c.valve("V8", part="SMC SY3120-5LZ-C6"), m, station=1)
+    with pytest.raises(catalog.CatalogError, match="stations"):
+        catalog.lookup("manifold", "SS5Y3-20-21")
+    assert catalog.lookup("manifold", "SS5Y3-20-0500F")[0]["connections"]["P"] == "G1/8"
+
+
+def test_manifold_circuit_feeds_and_exhausts_through_the_gallery():
+    rep = analyze(manifold_station())
+    assert rep.ok, summarize(rep)
+    fed = one(rep, "C1.CAP fed from supply")
+    assert fed.severity == "pass" and "T1 -> V1" in fed.measured           # T1 feeds the manifold's P; the gallery feeds V1 (no step of its own:
+                                                                             # the manifold's C, b replace the valve's)
+    ex = one(rep, "C1.ROD can exhaust")
+    assert "S_M1_R" in ex.measured or "S_M1_S" in ex.measured
+    assert one(rep, "pressure ratings downstream of REG").severity == "pass" and "V" in one(rep, "pressure ratings downstream of REG").measured
+
+
+def test_manifold_stations_check():
+    ok = one(analyze(manifold_station(stations=4, valves=2)), "manifold M1 stations")
+    assert ok.severity == "pass" and "2 empty station(s) take a blanking plate" in ok.measured
+    c = manifold_station(stations=2, valves=2)
+    c.mount(c.valve("V3", part="SMC SY3120-5LZ-C6"), "M1")
+    bad = one(analyze(c), "manifold M1 stations")
+    assert bad.severity == "fail" and "3 valve(s) on a 2-station base" in bad.measured
+    big = one(analyze(manifold_station(stations=12, valves=2)), "manifold M1 stations")
+    assert big.severity == "warn" and "both sides" in big.measured                   # SY_EU p.48 Note 1
+    rows = outputs.bom(manifold_station(stations=4, valves=2))
+    blank = next(r for r in rows if "blanking plate" in r["description"])
+    assert blank["qty"] == 2 and blank["part_number"] == "SMC SY3000-26-19A-Q"
+    assert next(r for r in rows if r["category"] == "manifold" and "base" in r["description"])["part_number"] == "SMC SS5Y3-20-04-Q"
+
+
+def test_manifold_common_supply_vs_simultaneous_demand():
+    # all cylinders at once (no sequence): 2 x CQ2-32 at 200 mm/s through 0.5 m of 6 mm bore passes
+    good = one(analyze(manifold_station(valves=2)), "manifold M1 common supply")
+    assert good.severity == "pass" and "all cylinders at once" in good.measured
+    # six cylinders at 500 mm/s through 4 m of 2.5 mm bore: the common supply chokes
+    bad = one(analyze(manifold_station(stations=6, valves=6, sup_id=2.5, sup_len=4.0, speed=500.0)), "manifold M1 common supply")
+    assert bad.severity == "fail" and "more than the supply path" in bad.measured
+    for name in ("manifold M1 stations", "manifold M1 common supply"):
+        assert one(analyze(manifold_station()), name).rule.startswith("pneumatics.manifold")
+
+
+def test_manifold_coils_in_the_io_list():
+    c = manifold_station(stations=4, valves=3)
+    rows = [r for r in outputs.io_rows(c) if r["io"] == "DO"]
+    assert [(r["signal"], r["location"]) for r in rows] == [("Y1_EXTEND", "M1 station 1"), ("Y2_EXTEND", "M1 station 2"), ("Y3_EXTEND", "M1 station 3")]
+    assert "location" in outputs.io_csv(outputs.io_rows(c)).splitlines()[0]
+
+
+def test_manifold_drawing_and_tags(tmp_path):
+    from eitri.pneumatics.drawing import tags, write_drawing
+    c = manifold_station(valves=2)
+    tg = tags(c)
+    assert tg["M1"].startswith("-XM") and tg["S_M1_R"].endswith(":R")
+    paths = write_drawing(c, analyze(c), tmp_path, "m")
+    svg = Path(paths["drawing_svg"]).read_text()
+    assert "SS5Y3-20-04-Q" in svg and "manifold" in svg

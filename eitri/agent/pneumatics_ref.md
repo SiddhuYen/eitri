@@ -32,6 +32,11 @@ c.silencer(valve["R"])                                           a silencer scre
 c.sensor(name, cylinder, "extended"|"retracted", part=None, signal="", terminal="")   a position switch on a cylinder: a PLC input
 c.control_voltage(24)                                            the DC control voltage the coils and sensors run on
 c.drawing_info(project="", ticket="", revision="", title="", drawn_by="", approved_by="")   the circuit drawing's title block
+m = c.manifold("M1", part="SMC SS5Y3-20-04-Q")                    a valve manifold base: ports P (common supply), R, S (common exhausts)
+c.mount(valve, m, station=None)                                  mount a valve on the next free station: its P, R, S are the manifold's
+    (no tubes or silencers on them; silence the manifold's R and S); it takes the catalogue's valve-on-manifold C, b. Checks: valves
+    vs stations (empty stations get blanking plates in the BOM), and the drop through the manifold's supply at the air the cylinders
+    on it draw at once (per sequence step when c.step(...) declares one, else all at once). The I/O list names each coil's station.
 every component also takes max_bar= and min_bar= (its working pressure range, from its datasheet) and part_number=; a tube max_bar=
 valves also take coil_V=, coil_W=, connector=, signal= / signal_12= (the PLC signal names of coils 14 / 12), terminal=,
   C_exhaust= / b_exhaust= (the A/B -> R/S passage when the datasheet gives it apart)
@@ -50,6 +55,8 @@ A figure you also give must agree with the part's. Known part numbers (the strok
 - cylinders: `FESTO DSNU-20-<stroke>-P-A` (ISO 6432, Ø20/8, 1-320 mm, 1-10 bar, G1/8, magnetic, elastic cushioning 0.2 J),
   `SMC CDQ2B32-<stroke>DZ` (compact Ø32/16, strokes 5-50 by 5, 75, 100; 0.5-10 bar; Rc1/8; magnet; bumper 0.29 J; 50-500 mm/s;
   `CQ2B32-...DZ` is the same without a magnet)
+- manifolds: `SMC SS5Y3-20-<stations>[00F|00N|00T]-Q` (SY3000, 2-20 stations, P/EA/EB 1/8, valve on base C 0.72 b 0.29, exhaust 0.80
+  / 0.36, blanking plate SY3000-26-19A-Q), `SMC SS5Y5-20-<stations>-Q` (SY5000, 1/4, C 1.9 / 2.2); silencer `SMC AN10-01` (R1/8, C 2)
 - valves: `SMC SY3120-5LZ-C6` (5/2 single solenoid, spring return, C 0.76 b 0.30 P->A/B, C 0.65 b 0.39 A/B->R/S, 1.5-7 bar,
   24 VDC 0.4 W, L plug), `SMC SY3220-5LZ-C6` (the same, double solenoid: holds its position unpowered, 1-7 bar),
   `SMC SY5120-5LZ-01` (C 1.9 / 2.4, all ports 1/8); drop the Z for the 0.35 W coil without indicator light
