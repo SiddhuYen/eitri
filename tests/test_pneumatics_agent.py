@@ -23,11 +23,11 @@ def build(p):
     cyl = c.cylinder("C1", bore_mm=p.bore_mm, rod_mm=12, stroke_mm=100, load_N=p.load_N, load_retract_N=100, speed_mm_s=200, cycles_per_min=20,
                      on_power_loss="extend", on_air_loss="release")   # V1's spring-return rest position feeds C1.CAP (0.8.0 fail-safe check)
     c.tube("T1", air["OUT"], frl["IN"], id_mm=8, length_m=2.0, C=3.0)
-    c.tube("T2", frl["OUT"], v["P"], id_mm=6, length_m=1.0, C=2.0)
-    c.tube("T3", v["A"], cyl["CAP"], id_mm=6, length_m=1.5, C=1.8)
-    c.tube("T4", v["B"], cyl["ROD"], id_mm=6, length_m=1.5, C=1.8)
-    c.silencer(v["R"], C=3, b=0.3)
-    c.silencer(v["S"], C=3, b=0.3)
+    c.tube("T2", frl["OUT"], v["1"], id_mm=6, length_m=1.0, C=2.0)
+    c.tube("T3", v["2"], cyl["CAP"], id_mm=6, length_m=1.5, C=1.8)
+    c.tube("T4", v["4"], cyl["ROD"], id_mm=6, length_m=1.5, C=1.8)
+    c.silencer(v["3"], C=3, b=0.3)
+    c.silencer(v["5"], C=3, b=0.3)
     return c
 
 
@@ -65,7 +65,7 @@ def test_failing_checks_do_not_fail_the_build(tmp_path):
     pr = project(tmp_path)
     res = build_model(pr.model_path, pr.out_dir, params={"load_N": "600"})
     assert res.ok and checks_of(res)["force C1 extend"]["severity"] == "fail"
-    bad = project(tmp_path, MODEL.replace('v["P"]', 'v["Q"]'), name="bad")
+    bad = project(tmp_path, MODEL.replace('v["1"]', 'v["Q"]'), name="bad")
     res = build_model(bad.model_path, bad.out_dir)
     assert not res.ok and "no port 'Q'" in res.error
 
@@ -108,7 +108,7 @@ def test_prompt_and_selection(tmp_path):
     from eitri.agent.hub import AgentHub
     text = AgentHub(pr, lambda h: None).compose("bigger", ["component:C1", "tube:T3", "component:V1", "tube:nope"])
     assert "- C1: cylinder Ø32/12 x 100 mm, double-acting, load 200 N, speed 200 mm/s, 20 cycles/min; 6 bar at the cylinder; extend 434 N usable vs 200 N" in text
-    assert "- tube T3: V1.A -> C1.CAP, 6 mm bore, 1.5 m, 2 fittings, C 1.8" in text and "- V1: 5/2 valve, solenoid / spring return, C 1.2 b 0.3" in text and "- tube:nope (no longer exists)" in text
+    assert "- tube T3: V1.2 -> C1.CAP, 6 mm bore, 1.5 m, 2 fittings, C 1.8" in text and "- V1: 5/2 valve, solenoid / spring return, C 1.2 b 0.3" in text and "- tube:nope (no longer exists)" in text
 
 
 def test_cli(tmp_path, capsys):

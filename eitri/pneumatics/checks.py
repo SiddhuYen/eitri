@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 
 from ..checks import Check, check as _check, level, switched_off
 from .flow import DEFAULT_C, consumption_per_cycle_l, cylinder_forces, drop_for_flow, flow_l_s, required_flow_l_s, series, tube_data
-from .model import EXHAUST_PORTS, LOAD_RATIOS, pressure_rating, P_ATM, Circuit, Cylinder, FlowControl, Node, PortRef, Regulator, Silencer, Supply, Tube, Valve
+from .model import Manifold, SUPPLY_PORT, WORK_PORTS, EXHAUST_PORTS, LOAD_RATIOS, pressure_rating, P_ATM, Circuit, Cylinder, FlowControl, Node, PortRef, Regulator, Silencer, Supply, Tube, Valve
 
 # The speed at the end of the stroke is higher than the mean speed (stroke / stroke time) a speed controller is set to. SMC Shock
 # Absorber Series RB catalogue (https://static.smc.eu/pdf/RB_EU.pdf, p.5 Model Selection, Note 1, fetched 2026-11-12): "The collision
@@ -184,7 +184,7 @@ def find_path(c: Circuit, start: PortRef, goal: str, positions: dict[str, int] |
                 if r is not None:
                     return r
             return None
-        if isinstance(comp, Node):
+        if isinstance(comp, (Node, Manifold)):                   # a tee, or a manifold's gallery: on to its other connections
             return _leave(c, ref, visited | {ref}, positions, steps, depth + 1, dfs, skip=None)
         return None
 
@@ -248,6 +248,7 @@ def _pressure_ratings(c: Circuit) -> list[Check]:
             nxt = [t.b if t.a == ref else t.a for t in c._tubes_at(ref)]
             if ref in c.attached:
                 nxt.append(c.attached[ref])
+            nxt += [o for k, _t, o in c.connections_at(ref) if k == "manifold"]
             comp = c.components[ref.component]
             if comp is not src:
                 reached[comp.name] = comp
@@ -296,7 +297,7 @@ def run_checks(c: Circuit) -> tuple[list[Check], list[CylinderInfo], list[Supply
                 checks.append(_check("circuit", f"{cyl.name}.CAP and {cyl.name}.ROD on separate lines", "fail",
                                      f"{cyl.name}'s CAP and ROD ports are on one line (joined by tubes" + (" and a tee" if any(x.kind == "node" for x in c.components.values()) else "")
                                      + "): both chambers always see the same pressure, so the piston cannot be driven either way",
-                                     "each port on its own line, each to its own valve port (A and B of a 5/2)", [cyl.name]))
+                                     "each port on its own line, each to its own valve working port (2 and 4 of a 5/2)", [cyl.name]))
             else:
                 checks.append(_check("circuit", f"{cyl.name}.CAP and {cyl.name}.ROD on separate lines", "pass",
                                      "the two chambers are fed by different lines", "", [cyl.name]))
@@ -325,9 +326,9 @@ def run_checks(c: Circuit) -> tuple[list[Check], list[CylinderInfo], list[Supply
                                      "", [cyl.name] + exh[port].names))
             else:
                 bare = [str(v.port(e)) for v in c.components.values() if v.kind == "valve" for e in EXHAUST_PORTS if e in v.ports
-                        and v.port(e) not in c.attached and v.port(e) not in c.vents and not c._tubes_at(v.port(e))]
+                        and v.port(e) not in c.attached and v.port(e) not in c.vents and not c._tubes_at(v.port(e)) and v.name not in c.mounts]
                 why = (f"; {', '.join(bare)} {'has' if len(bare) == 1 else 'have'} nothing on {'it' if len(bare) == 1 else 'them'}, and an "
-                       "undeclared exhaust port counts as plugged: c.silencer(v[\"R\"]) or c.exhaust(v[\"R\"])") if bare else ""
+                       "undeclared exhaust port counts as plugged: c.silencer(v[\"3\"]) or c.exhaust(v[\"3\"])") if bare else ""
                 checks.append(_check("circuit", f"{cyl.name}.{port} can exhaust", "fail", f"{ref} cannot vent in any valve position: the chamber is dead-headed{why}",
                                      "a valve position joining the port to an exhaust", [cyl.name]))
         p_cyl = next((f.pressure_bar for f in fed.values() if f.found and f.pressure_bar is not None), None)
@@ -449,14 +450,14 @@ def run_checks(c: Circuit) -> tuple[list[Check], list[CylinderInfo], list[Supply
         for port in v.ports:
             ref = v.port(port)
             has = bool(c.connections_at(ref)) or ref in c.vents
-            if port == "P" and not has:
-                bad.append("P (supply) is unconnected")
-            elif port in ("A", "B") and not has:
+            if port == SUPPLY_PORT and not has:
+                bad.append("1 (supply) is unconnected")
+            elif port in WORK_PORTS and not has:
                 bad.append(f"work port {port} is unconnected (it would blow air)")
         if bad:
-            checks.append(_check("circuit", f"valve {v.name} ports", "fail", "; ".join(bad), "P supplied, every work port connected", [v.name]))
+            checks.append(_check("circuit", f"valve {v.name} ports", "fail", "; ".join(bad), "1 supplied, every working port (2, 4) connected", [v.name]))
         else:
-            checks.append(_check("circuit", f"valve {v.name} ports", "pass", f"{v.cls} {v.actuation}/{v.returns}: P, {', '.join(p for p in v.ports if p in ('A', 'B'))} connected" + (", exhausts " + ", ".join(p for p in v.ports if p in EXHAUST_PORTS) if any(p in EXHAUST_PORTS for p in v.ports) else ""), "", [v.name]))
+            checks.append(_check("circuit", f"valve {v.name} ports", "pass", f"{v.cls} {v.actuation}/{v.returns}: 1, {', '.join(p for p in v.ports if p in WORK_PORTS)} connected" + (", exhausts " + ", ".join(p for p in v.ports if p in EXHAUST_PORTS) if any(p in EXHAUST_PORTS for p in v.ports) else ""), "", [v.name]))
     # dead-headed lines
     dead = []
     for comp in c.components.values():
@@ -473,6 +474,8 @@ def run_checks(c: Circuit) -> tuple[list[Check], list[CylinderInfo], list[Supply
     checks += _pressure_ratings(c)
     checks += _catalog_checks(c, infos)
     checks += _failsafe_checks(c)
+    checks += _manifold_checks(c, infos)
+    checks += _sequence_checks(c, infos)
     if estimated:
         checks.append(_check("flow data", "flow data estimated", "warn",
                              "no C, b from a datasheet for " + ", ".join(f"{k} ({v})" for k, v in list(estimated.items())[:8]) + ("..." if len(estimated) > 8 else "") + ": graded with conservative estimates",
@@ -545,10 +548,16 @@ def _catalog_checks(c: Circuit, infos: list[CylinderInfo]) -> list[Check]:
                                   f"{e:.3f} J = 1/2 x {m:.3f} kg x ({v_hit:.0f} mm/s)^2: impact speed {IMPACT_FACTOR:g} x the mean speed ({v:.0f} mm/s, {how}); "
                                   f"the cushioning absorbs {cyl.allowable_ke_J:g} J{src} [{IMPACT_SOURCE}]",
                                   f"<= {cyl.allowable_ke_J:g} J (a slower stroke, a speed controller, a bigger bore or an external stop)", [cyl.name]))
+    for r in [x for x in c.components.values() if isinstance(x, Regulator) and (x.set_min_bar is not None or x.set_max_bar is not None)]:
+        lo, hi = r.set_min_bar if r.set_min_bar is not None else 0.0, r.set_max_bar if r.set_max_bar is not None else float("inf")
+        sev = "pass" if lo <= r.set_bar <= hi else "fail"
+        out.append(_check("pressure", f"regulator {r.name} setting", sev,
+                          f"set to {r.set_bar:g} bar; it regulates {lo:g}-{hi:g} bar" + (f" [{r.part_number} datasheet]" if r.part_number else ""),
+                          f"{lo:g}-{hi:g} bar (a unit with a wider regulation range)", [r.name]))
     for v in [x for x in c.components.values() if isinstance(x, Valve)]:
         src = f" [{v.part_number} datasheet]" if v.part_number else ""
         if v.min_bar is not None:
-            path = find_path(c, v.port("P"), "supply")
+            path = find_path(c, v.port(SUPPLY_PORT), "supply")
             if path.found and path.pressure_bar is not None:
                 sev = "fail" if path.pressure_bar < v.min_bar else "pass"
                 out.append(_check("pressure", f"minimum pressure {v.name}", sev, f"{path.pressure_bar:g} bar at P; the internal pilot needs at least {v.min_bar:g} bar to shift{src}",
@@ -576,6 +585,121 @@ def _catalog_checks(c: Circuit, infos: list[CylinderInfo]) -> list[Check]:
             sev = "pass" if lo <= c.control_V <= hi else "fail"
             out.append(_check("electrical", f"sensor {s.name} voltage", sev, f"{c.control_V:g} V DC control supply; the sensor runs on {lo:g}-{hi:g} V{src}",
                               f"{lo:g}-{hi:g} V", [s.cylinder]))
+    return out
+
+
+def simultaneous_groups(c: Circuit) -> tuple[list[set[str]], str]:
+    """Which cylinders' strokes may draw air at the same time: from the declared sequence (one group per step), else all of them
+    (the conservative assumption)."""
+    seq = getattr(c, "sequence", None)
+    if seq:
+        return [set(st.cylinders()) for st in seq], "per step of the declared sequence"
+    return [{cy.name for cy in c.cylinders}], "all cylinders at once (no sequence declared: c.step(...))"
+
+
+def _manifold_checks(c: Circuit, infos: list[CylinderInfo]) -> list[Check]:
+    """Each manifold: valves vs stations (empty stations take blanking plates), and the common supply against the air the valves on
+    it draw at the same time."""
+    out: list[Check] = []
+    by = {i.name: i for i in infos}
+    for m in [x for x in c.components.values() if isinstance(x, Manifold)]:
+        on = sorted((st, v) for v, (mn, st) in c.mounts.items() if mn == m.name)
+        src = f" [{m.part_number} catalogue]" if m.part_number else ""
+        name = f"manifold {m.name} stations"
+        bad = [f"station {st} ({v})" for st, v in on if st > m.stations]
+        if len(on) > m.stations or bad:
+            out.append(_check("manifold", name, "fail", f"{len(on)} valve(s) on a {m.stations}-station base" + (f"; {', '.join(bad)} beyond its stations" if bad else ""),
+                              f"<= {m.stations} valves (a base with more stations)", [m.name] + [v for _s, v in on]))
+        else:
+            empty = m.stations - len(on)
+            sev = "warn" if (m.both_sides_above and m.stations > m.both_sides_above) else "pass"
+            out.append(_check("manifold", name, sev, f"{len(on)} valve(s) on {m.stations} stations" + (f"; {empty} empty station(s) take a blanking plate"
+                              + (f" ({m.blanking_plate}, in the BOM)" if m.blanking_plate else "") if empty else "")
+                              + (f"; above {m.both_sides_above} stations the catalogue asks for supply and exhaust on both sides{src}" if sev == "warn" else ""),
+                              f"<= {m.stations} valves", [m.name] + [v for _s, v in on]))
+        # the common supply against the simultaneous demand
+        mounted = {v for _s, v in on}
+        demand_by_cyl: dict[str, float] = {}
+        for cyl in c.cylinders:
+            info = by.get(cyl.name)
+            if not info:
+                continue
+            for si in info.strokes:
+                if si.flow_required_l_s and si.fill is not None and si.fill.found and mounted & set(si.fill.names):
+                    demand_by_cyl[cyl.name] = max(demand_by_cyl.get(cyl.name, 0.0), si.flow_required_l_s)
+        if not demand_by_cyl:
+            continue
+        groups, how = simultaneous_groups(c)
+        q, worst = max(((sum(demand_by_cyl.get(n, 0.0) for n in g), g) for g in groups), key=lambda t: t[0])
+        path = find_path(c, m.port(SUPPLY_PORT), "supply")
+        cname = f"manifold {m.name} common supply"
+        if not path.found or path.pressure_bar is None:
+            out.append(_check("manifold", cname, "fail", f"{m.name}.P is not fed from a supply", "a tube from the air preparation to the manifold's 1", [m.name]))
+            continue
+        p1 = path.pressure_bar + P_ATM
+        dp = drop_for_flow(path.C_eff, path.b_eff, p1, q) if q > 0 else 0.0
+        users = ", ".join(sorted(n for n in worst if n in demand_by_cyl)) or "none"
+        est = " (estimated C on: " + ", ".join(s.name for s in path.steps if s.estimated) + ")" if any(s.estimated for s in path.steps) else ""
+        if dp is None:
+            sev, meas = "fail", f"{q:.2f} L/s ANR drawn at once ({users}; {how}) is more than the supply path to {m.name} passes choked ({path.C_eff * p1:.2f} L/s, C_eff {path.C_eff:.2f}){est}"
+        else:
+            sev = "warn" if dp > max(DROP_WARN_BAR, 0.05 * path.pressure_bar) else "pass"
+            meas = f"{q:.2f} L/s ANR drawn at once ({users}; {how}) drops {dp:.2f} bar from {' -> '.join(path.names)} (C_eff {path.C_eff:.2f}){est}"
+        out.append(_check("manifold", cname, sev, meas, f"<= {DROP_WARN_BAR:g} bar drop at the simultaneous demand", [m.name] + path.names))
+    return out
+
+
+def _sequence_checks(c: Circuit, infos: list[CylinderInfo]) -> list[Check]:
+    """The declared step sequence (sequence.py): every step ends on a sensor that exists at the end its move reaches; no step commands
+    a state its valves cannot give; the cycle closes; the ESTIMATED cycle time against the cylinders' cycles_per_min. A circuit run by
+    a controller (a control voltage or position sensors) with no sequence gets one not-run notice."""
+    from . import sequence as seq
+    out: list[Check] = []
+    p = seq.plan(c, infos)
+    if p is None:
+        if c.control_V is not None or c.sensors:
+            out.append(switched_off(_check("sequence", "sequence declared", "warn",
+                                           "the circuit is controller-run (control voltage or sensors) but no step sequence is declared, so the steps' "
+                                           "sensors, valve commands and cycle time are not graded", "c.step(name, 'C1+', until='B2') per step", []),
+                                    "c.step"))
+        return out
+    for sp in p.steps:
+        k, st = sp.index, sp.step
+        refs = [m.cylinder for m in sp.moves] + [m.valve for m in sp.moves if m.valve]
+        sev = "fail" if any(e.severity == "fail" for e in sp.ends) else "warn" if any(e.severity == "warn" for e in sp.ends) else "pass"
+        what = "; ".join(e.why for e in sp.ends) or (f"ends after its {st.dwell_s:g} s dwell" if st.dwell_s else "")
+        out.append(_check("sequence", f"step {k} {st.name} ends on a sensor", sev, what,
+                          "every step with a move ends on a sensor that exists, at the end the move reaches", refs + list(st.until)))
+        if sp.moves:
+            bad = [m for m in sp.moves if m.problem]
+            idle = [m for m in sp.moves if m.already and not m.problem]
+            sev = "fail" if bad else "warn" if idle else "pass"
+            text = "; ".join([m.problem for m in bad] + [f"{m.cylinder} is {'extended' if m.motion == 'extend' else 'retracted'} already: the move does nothing"
+                                                          for m in idle] + [f"{m.cylinder}{'+' if m.motion == 'extend' else '-'}: {m.command}" for m in sp.moves if m.command])
+            out.append(_check("sequence", f"step {k} {st.name} valve commands", sev, text,
+                              "every move is a position its valve can be switched to by the controller (a solenoid valve; one position per valve per step)", refs))
+    if p.end != p.start:
+        diff = ", ".join(f"{k} ends {p.end[k]} (starts {p.start[k]})" for k in p.start if p.end.get(k) != p.start[k])
+        out.append(_check("sequence", "sequence returns to its start", "warn", f"{diff}: the next cycle does not start where this one did",
+                          "every cylinder back at its start position after the last step", [k for k in p.start if p.end.get(k) != p.start[k]]))
+    else:
+        out.append(_check("sequence", "sequence returns to its start", "pass", f"{len(p.steps)} steps; every cylinder ends where it started", ""))
+    rates = [cy.cycles_per_min for cy in c.cylinders if cy.cycles_per_min]
+    if p.cycle_s is None:
+        out.append(switched_off(_check("cycle time", "cycle time estimate", "warn", "the cycle time cannot be estimated: " + "; ".join(p.unknown),
+                                       "speed_mm_s= on the moves, response_ms= on the valves", [m.split(":")[0] for m in p.unknown]),
+                                *[u.split(" (")[0] for u in p.unknown]))
+    elif not rates:
+        out.append(switched_off(_check("cycle time", "cycle time estimate", "warn",
+                                       f"ESTIMATE {p.cycle_s:.2f} s per cycle; no cylinder gives cycles_per_min, so it is not graded", "cycles_per_min=", []),
+                                "cycles_per_min"))
+    else:
+        target = 60.0 / max(rates)
+        sev = level(p.cycle_s, target, 0.8)
+        out.append(_check("cycle time", "cycle time estimate", sev,
+                          f"ESTIMATE {p.cycle_s:.2f} s per cycle (a lower bound: " + "; ".join(seq.ASSUMPTIONS[1:3]) + f") against {target:.2f} s for "
+                          f"{max(rates):g} cycles/min", f"<= {target:.2f} s (within 80 % passes; the estimate leaves out pressure build-up)",
+                          [cy.name for cy in c.cylinders]))
     return out
 
 

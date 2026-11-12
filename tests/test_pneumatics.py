@@ -30,18 +30,18 @@ def pusher(load=350.0, speed=200.0, p_bar=6.0, bore=32.0, with_fc=True, supply_f
     frl = c.frl("FRL", set_bar=p_bar, C=2.5, b=0.35)
     v = c.valve("V1", "5/2", C=1.2, b=0.3)
     cyl = c.cylinder("C1", bore_mm=bore, rod_mm=12, stroke_mm=100, load_N=load, speed_mm_s=speed, cycles_per_min=cycles,
-                     on_power_loss="extend", on_air_loss="release")     # V1 at rest joins P-A, A feeds CAP
+                     on_power_loss="extend", on_air_loss="release")     # V1 at rest joins 1-2, port 2 feeds CAP
     c.tube("T1", air["OUT"], frl["IN"], id_mm=8, length_m=2.0, C=3.0)
-    c.tube("T2", frl["OUT"], v["P"], id_mm=6, length_m=1.0, C=2.0)
-    c.tube("T3", v["A"], cyl["CAP"], id_mm=6, length_m=1.5, C=1.8)
+    c.tube("T2", frl["OUT"], v["1"], id_mm=6, length_m=1.0, C=2.0)
+    c.tube("T3", v["2"], cyl["CAP"], id_mm=6, length_m=1.5, C=1.8)
     if with_fc:
         fc = c.flow_control("FC1", meter="out", C=0.6, b=0.3)
-        c.tube("T4", v["B"], fc["A"], id_mm=6, length_m=1.0, C=2.0)
+        c.tube("T4", v["4"], fc["A"], id_mm=6, length_m=1.0, C=2.0)
         c.tube("T5", fc["B"], cyl["ROD"], id_mm=6, length_m=0.5, C=2.5)
     else:
-        c.tube("T4", v["B"], cyl["ROD"], id_mm=6, length_m=1.5, C=1.8)
-    c.silencer(v["R"], C=3.0, b=0.3)
-    c.silencer(v["S"], C=3.0, b=0.3)
+        c.tube("T4", v["4"], cyl["ROD"], id_mm=6, length_m=1.5, C=1.8)
+    c.silencer(v["3"], C=3.0, b=0.3)
+    c.silencer(v["5"], C=3.0, b=0.3)
     return c
 
 
@@ -61,31 +61,31 @@ def test_api_validation():
     assert cyl.ports == ["CAP", "ROD"] and c.cylinder("C2", 25, 10, 25, acting="single").ports == ["CAP"]
     with pytest.raises(PneumaticsError, match="rod_mm must be smaller"):
         c.cylinder("C3", 20, 25, 10)
-    c.tube("T1", v["A"], cyl["CAP"])
+    c.tube("T1", v["2"], cyl["CAP"])
     with pytest.raises(PneumaticsError, match="already has a connection"):
-        c.tube("T2", v["A"], cyl["ROD"])
+        c.tube("T2", v["2"], cyl["ROD"])
     with pytest.raises(PneumaticsError, match="already defined"):
-        c.tube("T1", v["B"], cyl["ROD"])
+        c.tube("T1", v["4"], cyl["ROD"])
     with pytest.raises(PneumaticsError, match="both ends"):
-        c.tube("T9", v["B"], v["B"])
+        c.tube("T9", v["4"], v["4"])
     n = c.node("N1")
-    c.tube("T3", v["B"], n)                                                 # a node takes many tubes
+    c.tube("T3", v["4"], n)                                                 # a node takes many tubes
     c.tube("T4", n, cyl["ROD"])
     assert len(c.connections_at(n.port("N"))) == 2
     with pytest.raises(PneumaticsError, match="b must be"):
         c.valve("V3", "3/2", C=1, b=1.2)
     with pytest.raises(PneumaticsError, match="positive"):
         c.supply("S", pressure_bar=0)
-    c.silencer(v["R"])
+    c.silencer(v["3"])
     with pytest.raises(PneumaticsError, match="already has something"):
-        c.exhaust(v["R"])
+        c.exhaust(v["3"])
 
 
 def test_valve_positions():
     from eitri.pneumatics.model import Valve
-    assert Valve("v", cls="5/2").positions == [[("P", "A"), ("B", "S")], [("P", "B"), ("A", "R")]]
-    assert Valve("v", cls="3/2").positions == [[("A", "R")], [("P", "A")]] and Valve("v", cls="3/2", normally="open").positions == [[("P", "A")], [("A", "R")]]
-    assert Valve("v", cls="5/3", center="exhaust").positions[1] == [("A", "R"), ("B", "S")] and Valve("v", cls="5/3").rest_position == 1
+    assert Valve("v", cls="5/2").positions == [[("1", "2"), ("4", "5")], [("1", "4"), ("2", "3")]]
+    assert Valve("v", cls="3/2").positions == [[("2", "3")], [("1", "2")]] and Valve("v", cls="3/2", normally="open").positions == [[("1", "2")], [("2", "3")]]
+    assert sorted(Valve("v", cls="5/3", center="exhaust").positions[1]) == [("2", "3"), ("4", "5")] and Valve("v", cls="5/3").rest_position == 1
 
 
 # ---------------------------------------------------------------------------- formulas, hand computed
@@ -139,7 +139,7 @@ def test_good_pusher_passes():
     assert cy.pressure_bar == 6.0 and cy.strokes[0].usable_N == pytest.approx(434.3, abs=0.2) and cy.strokes[0].status == "pass"
     fill = cy.strokes[0].fill
     assert fill.names == ["T1", "FRL", "T2", "V1", "T3"] and fill.valve_positions == {"V1": 0} and fill.pressure_bar == 6.0
-    assert cy.strokes[0].exhaust.names == ["T5", "FC1", "T4", "V1", "S_V1_S"] and cy.strokes[0].exhaust.valve_positions == {"V1": 0}
+    assert cy.strokes[0].exhaust.names == ["T5", "FC1", "T4", "V1", "S_V1_5"] and cy.strokes[0].exhaust.valve_positions == {"V1": 0}
     assert cy.strokes[1].fill.names == ["T1", "FRL", "T2", "V1", "T4", "FC1", "T5"] and cy.strokes[1].fill.valve_positions == {"V1": 1}
 
 
@@ -177,9 +177,9 @@ def test_single_acting_retract():
     air = c.supply("AIR", 7.0, 300)
     v = c.valve("V1", "3/2", C=0.8, b=0.3)
     cyl = c.cylinder("C1", 25, 10, 25, acting="single", load_N=150, spring_N=25, load_retract_N=10)
-    c.tube("T1", air["OUT"], v["P"], id_mm=6, length_m=1, C=2.0)
-    c.tube("T2", v["A"], cyl["CAP"], id_mm=6, length_m=1, C=2.0)
-    c.silencer(v["R"], C=3, b=0.3)
+    c.tube("T1", air["OUT"], v["1"], id_mm=6, length_m=1, C=2.0)
+    c.tube("T2", v["2"], cyl["CAP"], id_mm=6, length_m=1, C=2.0)
+    c.silencer(v["3"], C=3, b=0.3)
     rep = analyze(c)
     assert rep.ok, summarize(rep)
     assert one(rep, "force C1 retract").measured == "spring 25 N returns against 10 N"
@@ -246,7 +246,7 @@ def test_circuit_validity():
     c.tubes = [t for t in c.tubes if t.name != "T3"]                       # the cap side is not fed, and V1's A is open
     rep = analyze(c)
     assert one(rep, "C1.CAP fed from supply").severity == "fail" and one(rep, "C1.CAP can exhaust").severity == "fail"
-    assert one(rep, "valve V1 ports").severity == "fail" and "work port A is unconnected" in one(rep, "valve V1 ports").measured
+    assert one(rep, "valve V1 ports").severity == "fail" and "work port 2 is unconnected" in one(rep, "valve V1 ports").measured
     # a tee with one tube is dead-headed; a regulator connected on one side only too
     c2 = pusher(load=200)
     n = c2.node("N1")
@@ -261,8 +261,8 @@ def test_circuit_validity():
     air = c3.supply("AIR", 7, 300)
     v = c3.valve("V1", "2/2", C=1, b=0.3)
     cyl = c3.cylinder("C1", 25, 10, 25, acting="single", load_N=50, spring_N=20)
-    c3.tube("T1", air["OUT"], v["P"], C=2)
-    c3.tube("T2", v["A"], cyl["CAP"], C=2)
+    c3.tube("T1", air["OUT"], v["1"], C=2)
+    c3.tube("T2", v["2"], cyl["CAP"], C=2)
     rep3 = analyze(c3)
     assert one(rep3, "C1.CAP fed from supply").severity == "pass" and one(rep3, "C1.CAP can exhaust").severity == "fail"
     empty = analyze(Circuit("e"))
@@ -290,7 +290,7 @@ def test_verify_and_summary():
     assert text.startswith("Pneumatic circuit 'pusher': 7 components, 5 tubes, 1 cylinder(s)") and "C1: Ø32/12 x 100 mm double-acting at 6 bar; extend 434 N usable vs 200 N" in text
     data = circuit_data(c, rep)
     cyl = next(x for x in data["components"] if x["name"] == "C1")
-    assert cyl["strokes"][0]["usable_N"] == pytest.approx(434.3, abs=0.2) and data["tubes"][0]["a"] == "AIR.OUT" and data["attached"]["V1.R"] == "S_V1_R.IN"
+    assert cyl["strokes"][0]["usable_N"] == pytest.approx(434.3, abs=0.2) and data["tubes"][0]["a"] == "AIR.OUT" and data["attached"]["V1.3"] == "S_V1_3.IN"
 
 
 # ---------------------------------------------------------------------------- outputs and the schematic
@@ -323,7 +323,7 @@ def test_schematic_svg_and_png(tmp_path):
     root = ET.fromstring(svg)
     ns = "{http://www.w3.org/2000/svg}"
     ids = {(g.get("data-kind"), g.get("data-id")) for g in root.iter(ns + "g") if g.get("data-id")}
-    assert {("component", "C1"), ("component", "V1"), ("component", "FRL"), ("component", "AIR"), ("component", "FC1"), ("tube", "T3"), ("component", "S_V1_R")} <= ids
+    assert {("component", "C1"), ("component", "V1"), ("component", "FRL"), ("component", "AIR"), ("component", "FC1"), ("tube", "T3"), ("component", "S_V1_3")} <= ids
     texts = " ".join("".join(t.itertext()) for t in root.iter(ns + "text"))
     assert "C1 · D32x100" in texts and "V1 · 5/2 solenoid" in texts and "T3  6 mm ID · 1.5 m" in texts
     assert sc.nodes["C1"]["kind"] == "component" and sc.nodes["AIR"]["y"] > sc.nodes["C1"]["y"]      # supply below the cylinder
@@ -344,14 +344,14 @@ def test_edits():
         {"op": "set_component", "component": "V1", "cls": "4/2", "C": 1.5},
         {"op": "set_component", "component": "FRL", "set_bar": 5.5},
         {"op": "set_tube", "tube": "T3", "id_mm": 8, "length_m": 2.0, "C": None},
-        {"op": "add_tube", "name": "T9", "a": "V1.R", "b": "C1.CAP"},
+        {"op": "add_tube", "name": "T9", "a": "V1.3", "b": "C1.CAP"},
         {"op": "set_component", "component": "ghost", "bore_mm": 1},
         {"op": "remove_tube", "tube": "T5"},
         {"op": "set_vent", "port": "FC1.B"},
     ])
     assert [n.ok for n in notes] == [True, True, True, True, False, False, True, True]
     assert "already has a connection" in notes[4].detail and "ghost" in notes[5].detail
-    assert c.get("C1").bore_mm == 40 and c.get("V1").cls == "4/2" and c.get("V1").ports == ["P", "A", "B", "R"] and c.get("FRL").set_bar == 5.5
+    assert c.get("C1").bore_mm == 40 and c.get("V1").cls == "4/2" and c.get("V1").ports == ["1", "2", "3", "4"] and c.get("FRL").set_bar == 5.5
     assert c.get_tube("T3").id_mm == 8 and c.get_tube("T3").C is None and not any(t.name == "T5" for t in c.tubes)
     assert E.describe({"op": "set_component", "component": "C1", "bore_mm": 40}) == "C1: bore_mm = 40"
     assert E.merge_edit({"op": "set_tube", "tube": "T3", "id_mm": 8}, {"op": "set_tube", "tube": "T3", "length_m": 2}) == {"op": "set_tube", "tube": "T3", "id_mm": 8, "length_m": 2}

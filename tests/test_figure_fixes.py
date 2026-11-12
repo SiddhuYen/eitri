@@ -207,9 +207,9 @@ def test_other_domains_list_their_switched_off_checks():
     air = pc.supply("AIR", pressure_bar=6.0)                      # no flow_l_min
     v = pc.valve("V1", "3/2", C=0.8, b=0.3)
     cyl = pc.cylinder("C1", 25, 10, 25, acting="single", load_N=50, cycles_per_min=10)       # no spring_N
-    pc.tube("T1", air["OUT"], v["P"], id_mm=6, length_m=1, C=2.0)
-    pc.tube("T2", v["A"], cyl["CAP"], id_mm=6, length_m=1, C=2.0)
-    pc.silencer(v["R"], C=1, b=0.3)
+    pc.tube("T1", air["OUT"], v["1"], id_mm=6, length_m=1, C=2.0)
+    pc.tube("T2", v["2"], cyl["CAP"], id_mm=6, length_m=1, C=2.0)
+    pc.silencer(v["3"], C=1, b=0.3)
     inputs = sorted(i for x in p_analyze(pc).to_dict()["checks_not_run"] for i in x["inputs"])
     assert inputs == ["AIR.flow_l_min", "C1.on_air_loss", "C1.on_power_loss", "C1.spring_N"]       # + the fail-safe declarations (pneu-catalog)
 

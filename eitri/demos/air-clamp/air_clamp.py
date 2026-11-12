@@ -15,12 +15,12 @@ def build(p):
                      duty="static",                                       # a clamp: SMC's static operation, load ratio up to 0.7
                      on_power_loss="extend", on_air_loss="release")       # V1's rest position feeds CAP: the clamp stays shut on a power cut
     c.tube("T1", air["OUT"], frl["IN"], id_mm=8, length_m=2.0)
-    c.tube("T2", frl["OUT"], v["P"], id_mm=6, length_m=1.0)
-    c.tube("T3", v["A"], cyl["CAP"], id_mm=6, length_m=1.5)
-    c.tube("T4", v["B"], fc["A"], id_mm=6, length_m=1.0)
+    c.tube("T2", frl["OUT"], v["1"], id_mm=6, length_m=1.0)
+    c.tube("T3", v["2"], cyl["CAP"], id_mm=6, length_m=1.5)
+    c.tube("T4", v["4"], fc["A"], id_mm=6, length_m=1.0)
     c.tube("T5", fc["B"], cyl["ROD"], id_mm=6, length_m=0.5)
-    c.silencer(v["R"])
-    c.silencer(v["S"])
+    c.silencer(v["3"])
+    c.silencer(v["5"])
     return c
 
 

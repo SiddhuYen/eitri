@@ -11,13 +11,16 @@
         v = c.valve("V1", "5/2", actuation="solenoid", C=1.2, b=0.3)
         cyl = c.cylinder("C1", bore_mm=p.bore_mm, rod_mm=12, stroke_mm=p.stroke_mm, load_N=350, speed_mm_s=200, cycles_per_min=20)
         c.tube("T1", air["OUT"], frl["IN"], id_mm=8, length_m=2.0)
-        c.tube("T2", frl["OUT"], v["P"], id_mm=6, length_m=1.0)
-        c.tube("T3", v["A"], cyl["CAP"], id_mm=6, length_m=1.5)
-        c.tube("T4", v["B"], cyl["ROD"], id_mm=6, length_m=1.5)
-        c.silencer(v["R"]); c.silencer(v["S"])
+        c.tube("T2", frl["OUT"], v["1"], id_mm=6, length_m=1.0)
+        c.tube("T3", v["2"], cyl["ROD"], id_mm=6, length_m=1.5)      # 2: pressurised at rest (spring side): the rod is held in
+        c.tube("T4", v["4"], cyl["CAP"], id_mm=6, length_m=1.5)      # 4: pressurised when coil 14 is on: the rod extends
+        c.silencer(v["3"]); c.silencer(v["5"])
         return c
 
-Components have named ports (a valve's P, A, B, R, S by ISO 5599 convention; a cylinder's CAP and ROD; IN / OUT; a node's N).
+Components have named ports: a valve's ISO 5599 port numbers (1 supply, 2 and 4 working, 3 and 5 exhaust; coil 14 connects 1-4,
+coil 12 / the spring connects 1-2), a cylinder's CAP and ROD, IN / OUT, a node's N. Letters (P, A, B, EA, EB) are accepted only
+on a catalogue valve whose manufacturer prints them, with that manufacturer's meaning (SMC: A = 4, B = 2): letter conventions
+differ between makers, so a generic valve takes the numbers.
 A tube joins two ports; a port takes one tube, a Node any number (a tee). Flow data per component is the ISO 6358 pair:
 C, the sonic conductance in L/(s·bar) ANR, and b, the critical pressure ratio; a component without them gets a conservative
 estimate and the checks say so. Pressures are gauge bar unless named _abs.
@@ -29,15 +32,30 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable
 
 P_ATM = 1.01325           # bar, standard atmosphere (ISO 6358 uses ANR: 1.01325 bar abs, 20 C, 65 % RH)
+# Valve ports are the ISO 5599 numbers: 1 supply, 2 and 4 working, 3 and 5 exhaust; pilot / coil 14 connects 1 with 4, 12 (or the
+# return spring) connects 1 with 2. As printed by both makers in the catalogue (fetched 2026-11-12):
+# - SMC CAT.EUS11-83 SY series (https://static.smc.eu/pdf/SY_EU.pdf), PDF p.14 (printed p.5) "Construction", JIS symbols: 2 position
+#   single, rest box (spring side, ports drawn) 1->2 and 4->5 with 3 blocked; solenoid box 1->4 and 2->3; ports marked "4 (A), 2 (B),
+#   5 (EA), 1 (P), 3 (EB)"; 2 position double: the same boxes, a solenoid each side; 3 position: closed centre all blocked, exhaust
+#   centre 4->5 and 2->3 with 1 blocked, pressure centre 1->4 and 1->2 with 3, 5 blocked; left (14 side) box 1->4, 2->3; right box
+#   1->2, 4->5. PDF p.12 (printed 3) flow table "1->4/2 (P->A/B)", "4/2->5/3 (A/B->EA/EB)".
+# - Festo VUVG catalogue 2010/08 (https://ftp.festo.com/public/pneumatic/SOFTWARE_SERVICE/Documentation/2023/US/VUVG_ENUS.PDF)
+#   p.12 symbol "5/2-way valve with internal pilot air supply and ... spring return": coil labelled 14; spring box 1->2, 4->5, 3
+#   blocked; coil box 1->4, 2->3; connection designations "1, 2, 3, 4, 5, 14" (numbers only).
+# Position 0 is the rest position of a 2-position valve (the spring / 12 side); a 5/3's positions are [12 side, centre, 14 side].
 VALVE_CLASSES = {
     # ways/positions: ports, and the passages of each position as (from, to) pairs (both directions flow)
-    "2/2": {"ports": ["P", "A"], "positions": [[], [("P", "A")]]},
-    "3/2": {"ports": ["P", "A", "R"], "positions": [[("A", "R")], [("P", "A")]]},
-    "4/2": {"ports": ["P", "A", "B", "R"], "positions": [[("P", "A"), ("B", "R")], [("P", "B"), ("A", "R")]]},
-    "5/2": {"ports": ["P", "A", "B", "R", "S"], "positions": [[("P", "A"), ("B", "S")], [("P", "B"), ("A", "R")]]},
-    "5/3": {"ports": ["P", "A", "B", "R", "S"], "positions": [[("P", "A"), ("B", "S")], [], [("P", "B"), ("A", "R")]]},
+    "2/2": {"ports": ["1", "2"], "positions": [[], [("1", "2")]]},
+    "3/2": {"ports": ["1", "2", "3"], "positions": [[("2", "3")], [("1", "2")]]},
+    "4/2": {"ports": ["1", "2", "3", "4"], "positions": [[("1", "2"), ("4", "3")], [("1", "4"), ("2", "3")]]},
+    "5/2": {"ports": ["1", "2", "3", "4", "5"], "positions": [[("1", "2"), ("4", "5")], [("1", "4"), ("2", "3")]]},
+    "5/3": {"ports": ["1", "2", "3", "4", "5"], "positions": [[("1", "2"), ("4", "5")], [], [("1", "4"), ("2", "3")]]},
 }
-EXHAUST_PORTS = ("R", "S")
+EXHAUST_PORTS = ("3", "5")
+SUPPLY_PORT = "1"
+WORK_PORTS = ("2", "4")
+# What a letter meant in eitri up to 0.8.0 (A = the rest-position working port), to explain a model that still uses them.
+LEGACY_LETTERS = {"P": "1", "A": "2", "B": "4", "R": "3", "S": "5"}
 
 # The largest load ratio (load / theoretical force) per kind of duty: SMC Best Pneumatics technical data, "Air Cylinders Model
 # Selection", Step 1 "Determine the load factor in accordance with the purpose" (and Data 1: Bore Size Selection, catalogue
@@ -127,9 +145,18 @@ class Component:
 
     def port(self, name: str) -> PortRef:
         name = str(name).upper()
-        if name not in self.ports:
-            raise PneumaticsError(f"{self.name} has no port {name!r}; its ports are {self.ports}")
-        return PortRef(self.name, name)
+        if name in self.ports:
+            return PortRef(self.name, name)
+        letters = (self.catalog or {}).get("info", {}).get("letters") or {}
+        if name in letters:                                   # the manufacturer's own letter for one of its ISO numbers
+            return PortRef(self.name, letters[name])
+        if self.kind in ("valve", "manifold") and name in LEGACY_LETTERS:
+            maker = f"; {self.part_number} marks " + ", ".join(f"{k} = {v}" for k, v in letters.items()) if letters else ""
+            raise PneumaticsError(f"{self.name}: valve ports are the ISO 5599 numbers {self.ports} (1 supply, 2 and 4 working, 3 and 5 "
+                                  f"exhaust; coil 14 connects 1-4, the spring / coil 12 connects 1-2). {name!r} is ambiguous: makers "
+                                  f"letter them differently (SMC: A = 4, B = 2){maker}. Up to eitri 0.8.0 {name!r} meant port "
+                                  f"{LEGACY_LETTERS[name]}.")
+        raise PneumaticsError(f"{self.name} has no port {name!r}; its ports are {self.ports}")
 
     __getitem__ = port
 
@@ -161,6 +188,8 @@ class Regulator(Component):
     set_bar: float = 6.0
     frl: bool = False
     lubricator: bool = False
+    set_min_bar: float | None = None     # the datasheet's pressure regulation range (the set pressure must lie inside it)
+    set_max_bar: float | None = None
 
     def __post_init__(self) -> None:
         self.kind, self.ports = ("frl" if self.frl else "regulator"), ["IN", "OUT"]
@@ -178,11 +207,15 @@ class Valve(Component):
     returns: str = "spring"              # spring | solenoid | detent
     normally: str = "closed"             # 3/2 and 2/2: closed | open (which position is the rest position)
     center: str = "closed"               # 5/3: closed | exhaust | pressure (the middle position)
-    C_exhaust: float | None = None       # ISO 6358 C, b of the work-to-exhaust passages (A/B -> R/S) when the datasheet gives them apart
+    C_exhaust: float | None = None       # ISO 6358 C, b of the work-to-exhaust passages (4/2 -> 5/3) when the datasheet gives them apart
     b_exhaust: float | None = None
     coil_V: float | None = None          # solenoid coil rated voltage (DC) and power, from the datasheet: the I/O list's outputs
     coil_W: float | None = None
     connector: str = ""                  # the coil's electrical entry (plug, M8 ...)
+    manifold: str = ""                   # the manifold it is mounted on (Circuit.mount) and its station
+    station: int | None = None
+    series: str = ""                     # its catalogue series (SY3000 ...), to match a manifold
+    response_ms: float | None = None     # the datasheet's response time (switching), for the cycle-time estimate
     signal: str = ""                     # the control signal name for the coil (14 side); "" -> <name>_14
     signal_12: str = ""                  # the 12-side coil of a double-solenoid valve; "" -> <name>_12
     terminal: str = ""                   # where the coil lands (terminal / PLC output address), free text for the I/O list
@@ -226,7 +259,7 @@ class Valve(Component):
     def positions(self) -> list[list[tuple[str, str]]]:
         pos = [list(p) for p in VALVE_CLASSES[self.cls]["positions"]]
         if self.cls == "5/3":
-            pos[1] = [] if self.center == "closed" else [("A", "R"), ("B", "S")] if self.center == "exhaust" else [("P", "A"), ("P", "B")]
+            pos[1] = [] if self.center == "closed" else [("4", "5"), ("2", "3")] if self.center == "exhaust" else [("1", "4"), ("1", "2")]
         if self.cls in ("3/2", "2/2") and self.normally == "open":
             pos = list(reversed(pos))
         return pos
@@ -342,6 +375,42 @@ class Node(Component):
 
 
 @dataclass(eq=False)
+class SeqStep:
+    """One step of the machine's sequence: the cylinder motions it commands ("C1+" extend, "C1-" retract) and what ends it: a
+    position sensor (until=) or, for a step without motion (machining, loading), a dwell time."""
+    name: str
+    moves: list[tuple[str, str]] = field(default_factory=list)      # (cylinder, "extend" | "retract")
+    until: list[str] = field(default_factory=list)                   # the sensors that end the step (all of them)
+    dwell_s: float = 0.0
+    note: str = ""
+
+    def cylinders(self) -> list[str]:
+        return [c for c, _m in self.moves]
+
+
+@dataclass(eq=False)
+class Manifold(Component):
+    """A valve manifold base (SMC SS5Y...): common supply 1 (P) and exhausts 5 (EA) and 3 (EB) shared by the valves mounted on its
+    stations (Circuit.mount). Its C, b are the catalogue's figures for a valve mounted on it (they replace the valve's own)."""
+    stations: int = 2
+    series: str = ""                     # the valve series it takes (SY3000 ...): mount() checks it
+    C_exhaust: float | None = None
+    b_exhaust: float | None = None
+    blanking_plate: str = ""             # the blanking plate assembly part for an empty station
+    max_stations: int | None = None      # the catalogue's largest manifold; above `both_sides_above` the catalogue asks for supply and
+    both_sides_above: int | None = None  # exhaust on both sides
+
+    def __post_init__(self) -> None:
+        self.kind, self.ports = "manifold", ["1", "3", "5"]
+        super().__post_init__()
+        self.stations = int(self.stations)
+        if self.stations < 1:
+            raise PneumaticsError(f"manifold {self.name}: stations must be at least 1")
+        if self.C_exhaust is not None:
+            self.C_exhaust = _pos(self.C_exhaust, f"{self.name} C_exhaust")
+
+
+@dataclass(eq=False)
 class Tube:
     name: str
     a: PortRef
@@ -402,6 +471,7 @@ class Sensor:
     part_number: str = ""
     notes: str = ""
     fits: tuple = ()                     # cylinder series the sensor mounts on (from the catalogue)
+    response_ms: float | None = None     # switch-on time from the datasheet (the cycle-time estimate)
     catalog: dict = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -460,7 +530,11 @@ class Circuit:
         self.attached: dict[PortRef, PortRef] = {}   # a silencer screwed straight onto an exhaust port: port -> silencer.IN
         self.layout: dict[str, list[float]] = {}
         self.sensors: dict[str, Sensor] = {}
+        self.mounts: dict[str, tuple[str, int]] = {}     # valve name -> (manifold name, station)
+        self.sequence: list[SeqStep] = []                # the declared step sequence (step())
+        self.start_state: dict[str, str] = {}            # cylinder -> "retracted" | "extended" at the start of the cycle
         self.control_V: float | None = None          # the control voltage (DC) the coils and sensors run on (the I/O list's)
+        self.meta: dict[str, str] = {}               # the drawing's title block (drawing_info)
 
     # -- building ----------------------------------------------------------
     def add(self, comp: Component) -> Component:
@@ -472,11 +546,17 @@ class Circuit:
     def supply(self, name: str, pressure_bar: float, flow_l_min: float | None = None, **kw) -> Supply:
         return self.add(Supply(name, pressure_bar=pressure_bar, flow_l_min=flow_l_min, **kw))
 
-    def regulator(self, name: str, set_bar: float, C: float | None = None, b: float | None = None, **kw) -> Regulator:
-        return self.add(Regulator(name, set_bar=set_bar, C=C, b=b, **kw))
+    def regulator(self, name: str, set_bar: float, C: float | None = None, b: float | None = None, part: str | None = None, **kw) -> Regulator:
+        kw.update(name=name, set_bar=set_bar, C=C, b=b)
+        if part:
+            kw = _from_part("frl", part, Regulator, kw)
+        return self.add(Regulator(**{k: v for k, v in kw.items() if v is not None}))
 
-    def frl(self, name: str, set_bar: float, C: float | None = None, b: float | None = None, lubricator: bool = False, **kw) -> Regulator:
-        return self.add(Regulator(name, set_bar=set_bar, C=C, b=b, frl=True, lubricator=lubricator, **kw))
+    def frl(self, name: str, set_bar: float, C: float | None = None, b: float | None = None, lubricator: bool = False, part: str | None = None, **kw) -> Regulator:
+        kw.update(name=name, set_bar=set_bar, C=C, b=b, frl=True, lubricator=lubricator)
+        if part:
+            kw = _from_part("frl", part, Regulator, kw)
+        return self.add(Regulator(**{k: v for k, v in kw.items() if v is not None}))
 
     def valve(self, name: str, cls: str | None = None, actuation: str | None = None, returns: str | None = None, C: float | None = None,
               b: float | None = None, part: str | None = None, **kw) -> Valve:
@@ -517,6 +597,43 @@ class Circuit:
         self.sensors[name] = s
         return s
 
+    def drawing_info(self, project: str = "", ticket: str = "", revision: str = "", title: str = "", drawn_by: str = "", approved_by: str = "") -> None:
+        """The circuit drawing's title block: project, ticket id, revision, title; drawn by (default "eitri <version>"); approved by
+        (left blank for the customer's signature unless given)."""
+        self.meta.update({k: str(v) for k, v in dict(project=project, ticket=ticket, revision=revision, title=title, drawn_by=drawn_by,
+                                                      approved_by=approved_by).items() if v})
+
+    def step(self, name: str, *moves: str, until=None, dwell_s: float = 0.0, note: str = "") -> SeqStep:
+        """A step of the sequence, in order: moves in the usual notation, "C1+" (extend) and "C1-" (retract); until= the sensor (or
+        list of sensors) that ends it; a step with no moves waits dwell_s (loading, machining). Checks: every step ends on a sensor
+        that exists, at the end its move reaches; no step commands a state its valves cannot give; the estimated cycle time against
+        the cylinders' cycles_per_min."""
+        parsed = []
+        for m in moves:
+            m = str(m).strip()
+            if len(m) < 2 or m[-1] not in "+-":
+                raise PneumaticsError(f"step {name}: move {m!r} must be a cylinder name and + (extend) or - (retract), e.g. 'C1+'")
+            cyl = m[:-1]
+            if cyl not in self.components or self.components[cyl].kind != "cylinder":
+                raise PneumaticsError(f"step {name}: {cyl!r} is not a cylinder of this circuit")
+            parsed.append((cyl, "extend" if m[-1] == "+" else "retract"))
+        if any(s.name == name for s in self.sequence):
+            raise PneumaticsError(f"step {name!r} is already defined")
+        u = [] if until is None else [until] if isinstance(until, str) else [str(x) for x in until]
+        dwell_s = float(dwell_s)
+        if dwell_s < 0:
+            raise PneumaticsError(f"step {name}: dwell_s must not be negative")
+        st = SeqStep(str(name), parsed, u, dwell_s, note)
+        self.sequence.append(st)
+        return st
+
+    def start(self, **states: str) -> None:
+        """The cylinders' positions at the start of the cycle (default: every cylinder retracted)."""
+        for k, v in states.items():
+            if v not in ("retracted", "extended"):
+                raise PneumaticsError(f"start: {k} must be 'retracted' or 'extended'")
+            self.start_state[k] = v
+
     def control_voltage(self, volts: float) -> None:
         """The DC control voltage the valve coils and sensors are switched with (usually the PLC's 24 V)."""
         self.control_V = _pos(volts, "control voltage")
@@ -524,9 +641,47 @@ class Circuit:
     def node(self, name: str, **kw) -> Node:
         return self.add(Node(name, **kw))
 
+    def manifold(self, name: str, stations: int | None = None, part: str | None = None, **kw) -> Manifold:
+        """A valve manifold base: ports 1 (common supply), 3 and 5 (common exhausts); mount valves on it with mount()."""
+        kw.update(name=name, stations=stations)
+        if part:
+            kw = _from_part("manifold", part, Manifold, kw)
+        if kw.get("stations") is None:
+            raise PneumaticsError(f"manifold {name}: give stations= (or part= a catalogue part number)")
+        return self.add(Manifold(**{k: v for k, v in kw.items() if v is not None}))
+
+    def mount(self, valve, manifold, station: int | None = None) -> None:
+        """Mount a valve on a manifold station: its 1, 3 and 5 join the manifold's common supply and exhausts (no tubes, no
+        fittings, no silencers of its own) and it takes the catalogue's flow figures for a valve on that manifold."""
+        v = self.get(valve.name if isinstance(valve, Component) else str(valve))
+        m = self.get(manifold.name if isinstance(manifold, Component) else str(manifold))
+        if v.kind != "valve" or m.kind != "manifold":
+            raise PneumaticsError(f"mount(valve, manifold): {v.name} is a {v.kind}, {m.name} a {m.kind}")
+        if v.name in self.mounts:
+            raise PneumaticsError(f"{v.name} is already mounted on {self.mounts[v.name][0]}")
+        if m.series and v.series and m.series != v.series:
+            raise PneumaticsError(f"{v.name} is an {v.series} valve; manifold {m.name} takes {m.series} valves")
+        for p in ("1", "3", "5"):
+            if p in v.ports and (self._tubes_at(v.port(p)) or v.port(p) in self.attached or v.port(p) in self.vents):
+                raise PneumaticsError(f"{v.name}.{p} already has a connection: a mounted valve's 1, 3 and 5 are the manifold's")
+        used = {st for (mn, st) in self.mounts.values() if mn == m.name}
+        if station is None:
+            station = next(i for i in range(1, len(used) + 2) if i not in used)
+        if station in used:
+            raise PneumaticsError(f"manifold {m.name}: station {station} is taken")
+        self.mounts[v.name] = (m.name, int(station))
+        v.manifold, v.station = m.name, int(station)
+        if m.C is not None:                                       # the catalogue gives the valve-on-manifold figures
+            v.catalog.setdefault("info", {})["body_ported_flow"] = (v.C, v.b, v.C_exhaust, v.b_exhaust)
+            v.C, v.b = m.C, m.b
+            if m.C_exhaust is not None:
+                v.C_exhaust, v.b_exhaust = m.C_exhaust, m.b_exhaust
+
     def silencer(self, port, name: str | None = None, C: float | None = None, b: float | None = None, part: str | None = None, **kw) -> Silencer:
         """A silencer screwed onto an exhaust port (no tube)."""
         ref = self._port(port)
+        if ref.component in self.mounts and ref.port in EXHAUST_PORTS:
+            raise PneumaticsError(f"{ref.component} is mounted on {self.mounts[ref.component][0]}: put the silencer on the manifold's {ref.port}")
         kw.update(name=name or f"S_{ref.component}_{ref.port}", C=C, b=b)
         if part:
             kw = _from_part("silencer", part, Silencer, kw)
@@ -551,6 +706,8 @@ class Circuit:
         if ra == rb:
             raise PneumaticsError(f"tube {name}: both ends are {ra}")
         for r in (ra, rb):
+            if r.component in self.mounts and r.port in ("1", "3", "5"):
+                raise PneumaticsError(f"tube {name}: {r} is fed by manifold {self.mounts[r.component][0]}; connect the manifold's {r.port} instead")
             if self.components[r.component].kind != "node" and (self._tubes_at(r) or r in self.attached or r in self.vents):
                 raise PneumaticsError(f"tube {name}: port {r} already has a connection (use a Node for a tee)")
         kw.update(id_mm=id_mm)
@@ -639,6 +796,13 @@ class Circuit:
         for port, s in self.attached.items():
             if s == ref:
                 out.append(("attached", None, port))
+        if ref.component in self.mounts and ref.port in ("1", "3", "5"):          # a mounted valve: into the manifold's gallery
+            out.append(("manifold", None, PortRef(self.mounts[ref.component][0], ref.port)))
+        comp = self.components.get(ref.component)
+        if comp is not None and comp.kind == "manifold":                          # the gallery: every mounted valve's same port
+            for vname, (mname, _st) in self.mounts.items():
+                if mname == comp.name and ref.port in self.components[vname].ports:
+                    out.append(("manifold", None, PortRef(vname, ref.port)))
         return out
 
     def __repr__(self) -> str:

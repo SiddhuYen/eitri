@@ -27,7 +27,8 @@ PRESSURE_DOCS = {
     "node": doc("SMC KQ2 one-touch fittings (KQ2T): -100 kPa to 1 MPa", "", "fetched 2026-10-26"),
 }
 FLOW_DOCS = {
-    "valve": doc("SMC SY3000 series: C 1.1 dm3/(s.bar), b 0.28-0.30 (default C 1.0)", "", "smcworld SY series list"),
+    "valve": doc("SMC SY3000 body ported, 2 position single, P->A/B: C 0.61-0.76, b 0.29-0.44; default the lowest, C 0.6 b 0.29",
+                 "https://static.smc.eu/pdf/SY_EU.pdf", "SMC CAT.EUS11-83 (SY_EU.pdf) p.3 Flow characteristics, re-read 2026-11-12"),
     "silencer": doc("SMC AN silencers: AN05-M5 C 1 dm3/(s.bar)", "https://content2.smcetech.com/pdf/AN.pdf", "SMC AN catalogue (re-read 2026-11-07)"),
     "flow_control": doc("SMC AS speed controllers: M5 S 1.5 mm2, C = S/5 = 0.3", "https://static.smc.eu/pdf/AS_EU.pdf",
                         "SMC AS_EU catalogue (re-read 2026-11-07)"),
@@ -153,6 +154,11 @@ def _cushioning(c, circ):
     return out + (_part_docs(cyl, "allowable_ke_J") if cyl is not None else [])
 
 
+def _regulator_setting(c, circ):
+    r = _ref_comp(c, circ, ("regulator", "frl"))
+    return [requirement(f"{r.name} set_bar" if r is not None else "set_bar")] + (_part_docs(r, "set_min_bar, set_max_bar") if r is not None else [])
+
+
 def _coil(c, circ):
     v = _ref_comp(c, circ, ("valve",))
     return [requirement("control_voltage")] + (_part_docs(v, "coil_V") if v is not None else [])
@@ -174,6 +180,20 @@ def _failsafe(c, circ):
     return [requirement(f"{cyl.name if cyl is not None else ''} {attr}".strip()), SMC_VALVE_PRECAUTIONS, SMC_SY_SYMBOLS]
 
 
+def _manifold_doc(c, circ):
+    m = _ref_comp(c, circ, ("manifold",))
+    return _part_docs(m, "stations") if m is not None else []
+
+
+def _manifold_stations(c, circ):
+    return [rule("a manifold base holds at most its stations' valves; an empty station takes a blanking plate")] + _manifold_doc(c, circ)
+
+
+def _manifold_supply(c, circ):
+    return ([ISO_6358, DROP_LIMIT, rule("simultaneous demand: the declared sequence's steps, else every cylinder at once")]
+            + _manifold_doc(c, circ) + _flow_sources(c.refs[1:], circ))
+
+
 def _estimated(c, circ):
     return [rule("every component graded with estimated flow data is named")] + _flow_sources(c.refs, circ)
 
@@ -185,7 +205,7 @@ RULES = [
     Rule(P + "separate-lines", "circuit", r".+\.CAP and .+\.ROD on separate lines$", (rule("a double-acting cylinder's two chambers are on separate lines"),)),
     Rule(P + "fed", "circuit", r".+ fed from supply$", (ISO_1219,)),
     Rule(P + "exhaust", "circuit", r".+ can exhaust$", (ISO_1219,)),
-    Rule(P + "valve-ports", "circuit", r"valve .+ ports$", (rule("a valve's P is supplied and every work port connected"),)),
+    Rule(P + "valve-ports", "circuit", r"valve .+ ports$", (rule("a valve's supply port (1) is fed and every work port (2, 4) connected"),)),
     Rule(P + "dead-headed", "circuit", r"no dead-headed lines$", (rule("every line leads somewhere (no tee or inline part with one connection)"),)),
     Rule(P + "force", "force", r"force ", (requirement("load_N"), SMC_LOAD_RATIO, FRICTION, model_file("spring_N")), _force),
     Rule(P + "speed", "speed", r"speed ", (requirement("speed_mm_s"), ISO_6358, TUBE_ESTIMATE, B_ESTIMATE) + tuple(FLOW_DOCS.values()), _speed),
@@ -194,10 +214,14 @@ RULES = [
                                      _cat_doc("smc-best-tech"))),
     Rule(P + "supply-capacity", "air", r"supply .+ capacity$", (model_file("supply flow_l_min"),)),
     Rule(P + "pressure-ratings", "pressure", r"pressure ratings downstream of ", tuple(PRESSURE_DOCS.values()) + (model_file("max_bar"),), _pressure),
-    Rule(P + "datasheet-force", "force", r"datasheet force ", (THEORETICAL_FORCE, _cat_doc("festo-dsnu-20-50-p-a"), _cat_doc("smc-cq2")),
+    Rule(P + "datasheet-force", "force", r"datasheet force ", (THEORETICAL_FORCE, _cat_doc("festo-dsnu-20-50-p-a"), _cat_doc("smc-cq2"),
+                                                               _cat_doc("festo-dsnu-cat"), _cat_doc("festo-dsbc"), _cat_doc("smc-mgp-z")),
          _datasheet_force),
     Rule(P + "minimum-pressure", "pressure", r"minimum pressure ", (_cat_doc("smc-cq2-z"), _cat_doc("festo-dsnu-20-50-p-a"), _cat_doc("smc-sy"),
+                                                                   _cat_doc("festo-dsnu-cat"), _cat_doc("festo-dsbc"), _cat_doc("smc-mgp-z"),
                                                                    model_file("min_bar")), _min_pressure),
+    Rule(P + "regulator-setting", "pressure", r"regulator .+ setting$", (requirement("set_bar"), _cat_doc("smc-aw"), _cat_doc("festo-ms4-lfr"),
+                                                                      model_file("set_min_bar, set_max_bar")), _regulator_setting),
     Rule(P + "piston-speed-range", "speed", r"piston speed range ", (requirement("speed_mm_s"), _cat_doc("smc-cq2-z"), model_file("speed range")),
          _piston_speed),
     Rule(P + "cushioning", "cushioning", r"end-of-stroke energy ", (model_file("load_mass_kg"), SMC_RB, _cat_doc("smc-cq2-z"),
@@ -209,6 +233,24 @@ RULES = [
                                                                  model_file("magnet")), _sensor),
     Rule(P + "fail-safe", "fail-safe", r"on loss of ", (requirement("on_power_loss / on_air_loss"), SMC_VALVE_PRECAUTIONS,
                                                                                 SMC_SY_SYMBOLS), _failsafe),
+    Rule(P + "manifold-stations", "manifold", r"manifold .+ stations$",
+         (rule("a manifold base holds at most its stations' valves; an empty station takes a blanking plate"), _cat_doc("smc-sy-manifold"),
+          model_file("stations")), _manifold_stations),
+    Rule(P + "manifold-supply", "manifold", r"manifold .+ common supply$",
+         (ISO_6358, DROP_LIMIT, rule("simultaneous demand: the declared sequence's steps, else every cylinder at once"), _cat_doc("smc-sy-manifold"),
+          TUBE_ESTIMATE), _manifold_supply),
+    Rule(P + "sequence-declared", "sequence", r"sequence declared$", (requirement("c.step(...) sequence"),
+                                                                       rule("a controller-run circuit declares its step sequence"))),
+    Rule(P + "step-ends-on-sensor", "sequence", r"step .+ ends on a sensor$",
+         (requirement("the step sequence (c.step until=)"), rule("a step ends on a sensor that exists, at the end its move reaches"))),
+    Rule(P + "step-valve-commands", "sequence", r"step .+ valve commands$",
+         (requirement("the step sequence (c.step moves)"), SMC_VALVE_PRECAUTIONS, SMC_SY_SYMBOLS,
+          rule("a move is a valve position the controller can switch to; one position per valve per step"))),
+    Rule(P + "sequence-closes", "sequence", r"sequence returns to its start$", (rule("every cylinder ends the cycle where it started"),)),
+    Rule(P + "cycle-time", "cycle time", r"cycle time estimate$",
+         (requirement("cycles_per_min"), _cat_doc("smc-sy"), _cat_doc("festo-smt-8m-a"), ISO_6358,
+          assumption("cycle time is a lower bound: pressure build-up, load acceleration, controller scan and cushioning are left out; a sensor "
+                     "with no switch-on time is taken at 1.3 ms (Festo SMT-8M-A)"))),
     Rule(P + "flow-data", "flow data", r"flow data estimated$", (rule("every component graded with estimated flow data is named"),) + tuple(FLOW_DOCS.values()),
          _estimated),
 ]

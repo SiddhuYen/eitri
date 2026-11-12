@@ -17,21 +17,21 @@ def cyl25(joined: bool = False) -> Circuit:
     v = c.valve("V1", "5/2", actuation="solenoid", returns="spring")
     cyl = c.cylinder("C1", bore_mm=25, rod_mm=10, stroke_mm=50, load_N=120, speed_mm_s=200, cycles_per_min=10)
     c.tube("T1", air["OUT"], frl["IN"], id_mm=6, length_m=2.0)
-    c.tube("T2", frl["OUT"], v["P"], id_mm=6, length_m=0.5)
+    c.tube("T2", frl["OUT"], v["1"], id_mm=6, length_m=0.5)
     if joined:                                                  # the CAP and ROD lines tee'd together: a cylinder that cannot move
         t = c.node("TEE")
-        c.tube("T3", v["A"], t["N"], id_mm=4, length_m=1.0)
+        c.tube("T3", v["2"], t["N"], id_mm=4, length_m=1.0)
         c.tube("T4", t["N"], cyl["CAP"], id_mm=4, length_m=0.3)
         c.tube("T6", t["N"], cyl["ROD"], id_mm=4, length_m=0.3)
-        c.exhaust(v["B"])
+        c.exhaust(v["4"])
     else:
         fc1, fc2 = c.flow_control("FC1", meter="out"), c.flow_control("FC2", meter="out")
-        c.tube("T3", v["A"], fc1["A"], id_mm=4, length_m=1.0)
+        c.tube("T3", v["2"], fc1["A"], id_mm=4, length_m=1.0)
         c.tube("T4", fc1["B"], cyl["CAP"], id_mm=4, length_m=0.3)
-        c.tube("T5", v["B"], fc2["A"], id_mm=4, length_m=1.0)
+        c.tube("T5", v["4"], fc2["A"], id_mm=4, length_m=1.0)
         c.tube("T6", fc2["B"], cyl["ROD"], id_mm=4, length_m=0.3)
-    c.silencer(v["R"])
-    c.silencer(v["S"])
+    c.silencer(v["3"])
+    c.silencer(v["5"])
     return c
 
 
@@ -121,15 +121,15 @@ def two_cylinders() -> Circuit:
     c2 = c.cylinder("C2", bore_mm=25, rod_mm=10, stroke_mm=100, load_N=80, speed_mm_s=250, cycles_per_min=10)
     c.tube("T1", air["OUT"], frl["IN"], id_mm=8, length_m=2.0)
     c.tube("T2", frl["OUT"], tee["N"], id_mm=8, length_m=0.3)
-    c.tube("T3", tee["N"], v1["P"], id_mm=6, length_m=0.3)
-    c.tube("T4", tee["N"], v2["P"], id_mm=6, length_m=0.3)
-    c.tube("T5", v1["A"], c1["CAP"], id_mm=4, length_m=1.0)
-    c.tube("T6", v1["B"], c1["ROD"], id_mm=4, length_m=1.0)
-    c.tube("T7", v2["A"], c2["CAP"], id_mm=4, length_m=1.2)
-    c.tube("T8", v2["B"], c2["ROD"], id_mm=4, length_m=1.2)
+    c.tube("T3", tee["N"], v1["1"], id_mm=6, length_m=0.3)
+    c.tube("T4", tee["N"], v2["1"], id_mm=6, length_m=0.3)
+    c.tube("T5", v1["2"], c1["CAP"], id_mm=4, length_m=1.0)
+    c.tube("T6", v1["4"], c1["ROD"], id_mm=4, length_m=1.0)
+    c.tube("T7", v2["2"], c2["CAP"], id_mm=4, length_m=1.2)
+    c.tube("T8", v2["4"], c2["ROD"], id_mm=4, length_m=1.2)
     for v in (v1, v2):
-        c.silencer(v["R"])
-        c.silencer(v["S"])
+        c.silencer(v["3"])
+        c.silencer(v["5"])
     return c
 
 
@@ -184,13 +184,13 @@ def test_an_undeclared_exhaust_port_is_named_when_a_chamber_cannot_vent():
     air = c.supply("AIR", pressure_bar=6, flow_l_min=200)
     v = c.valve("V1", "5/2", actuation="solenoid", returns="spring")
     cyl = c.cylinder("C1", bore_mm=25, rod_mm=10, stroke_mm=50, load_N=50, speed_mm_s=100, cycles_per_min=10)
-    c.tube("T1", air["OUT"], v["P"], id_mm=4, length_m=1)
-    c.tube("T2", v["A"], cyl["CAP"], id_mm=4, length_m=1)
-    c.tube("T3", v["B"], cyl["ROD"], id_mm=4, length_m=1)
+    c.tube("T1", air["OUT"], v["1"], id_mm=4, length_m=1)
+    c.tube("T2", v["2"], cyl["CAP"], id_mm=4, length_m=1)
+    c.tube("T3", v["4"], cyl["ROD"], id_mm=4, length_m=1)
     vent = next(x for x in analyze(c).checks if x.name == "C1.CAP can exhaust")
-    assert vent.severity == "fail" and "V1.R, V1.S have nothing on them" in vent.measured and "c.silencer" in vent.measured
-    c.silencer(v["R"])
-    c.silencer(v["S"])
+    assert vent.severity == "fail" and "V1.3, V1.5 have nothing on them" in vent.measured and "c.silencer" in vent.measured
+    c.silencer(v["3"])
+    c.silencer(v["5"])
     assert next(x for x in analyze(c).checks if x.name == "C1.CAP can exhaust").severity == "pass"
 
 
@@ -205,11 +205,11 @@ def _straight(supply_bar, regulator_bar=None, regulator_max_bar=None, **valve_kw
         src = reg["OUT"]
     v = c.valve("V1", "5/2", actuation="solenoid", returns="spring", **valve_kw)
     cyl = c.cylinder("C1", bore_mm=25, rod_mm=10, stroke_mm=50, load_N=50, speed_mm_s=100, cycles_per_min=10)
-    c.tube("T1", src, v["P"], id_mm=6, length_m=1)
-    c.tube("T2", v["A"], cyl["CAP"], id_mm=4, length_m=1)
-    c.tube("T3", v["B"], cyl["ROD"], id_mm=4, length_m=1)
-    c.silencer(v["R"])
-    c.silencer(v["S"])
+    c.tube("T1", src, v["1"], id_mm=6, length_m=1)
+    c.tube("T2", v["2"], cyl["CAP"], id_mm=4, length_m=1)
+    c.tube("T3", v["4"], cyl["ROD"], id_mm=4, length_m=1)
+    c.silencer(v["3"])
+    c.silencer(v["5"])
     return c
 
 

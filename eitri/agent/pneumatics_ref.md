@@ -17,9 +17,13 @@ c.supply(name, pressure_bar, flow_l_min=None)                  the source: gauge
 c.frl(name, set_bar, C=None, b=None, lubricator=False)           filter-regulator(-lubricator) unit; ports IN, OUT
 c.regulator(name, set_bar, C=None, b=None)                       a bare regulator; ports IN, OUT
 c.valve(name, "5/2", actuation="solenoid", returns="spring", C=None, b=None, normally="closed", center="closed")
-    classes "2/2", "3/2", "4/2", "5/2", "5/3"; ports P (supply), A, B (work), R, S (exhausts) by ISO 5599; actuation solenoid |
-    manual | pilot | lever | pedal | roller; returns spring | solenoid | detent; 3/2 and 2/2 take normally closed | open; 5/3 takes
-    center closed | exhaust | pressure. Position 1 of a 5/2 joins P-A and B-S, position 2 joins P-B and A-R.
+    classes "2/2", "3/2", "4/2", "5/2", "5/3"; ports are the ISO 5599 numbers: "1" supply, "2" and "4" working, "3" and "5"
+    exhausts (a 3/2: 1, 2, 3). actuation solenoid | manual | pilot | lever | pedal | roller; returns spring | solenoid | detent;
+    3/2 and 2/2 take normally closed | open; 5/3 takes center closed | exhaust | pressure. As SMC and Festo print the symbols: at
+    rest (spring / coil 12) a 5/2 joins 1-2 and 4-5; coil 14 joins 1-4 and 2-3. A 5/3's centre: closed (all blocked), exhaust
+    (4-5, 2-3), pressure (1-4, 1-2). So port 2 is the one fed when the power is off: plumb it to the end that must be held then.
+    Letters only on a catalogue valve whose maker prints them, with the maker's meaning: on an SMC valve v["A"] is port 4 and
+    v["B"] port 2 (EA = 5, EB = 3, P = 1). A generic valve refuses letters (makers differ).
 c.cylinder(name, bore_mm, rod_mm, stroke_mm, acting="double", load_N=0, load_retract_N=None, speed_mm_s=None,
            speed_retract_mm_s=None, cycles_per_min=0, spring_N=None, friction_fraction=0.10, duty="moving")
     ports CAP and ROD (a single-acting cylinder: CAP only, spring return of spring_N); duty sets the load-ratio limit:
@@ -28,12 +32,25 @@ c.cylinder(name, bore_mm, rod_mm, stroke_mm, acting="double", load_N=0, load_ret
 c.flow_control(name, meter="out", C=None, b=None)                a speed controller (throttle-check); ports A (valve side), B (cylinder side)
 c.node(name)                                                     a tee: any number of tubes meet at its port N
 c.tube(name, from_port, to_port, id_mm=6, length_m=1, fittings=2, C=None)    a run of tube; ports are comp["PORT"] or "NAME.PORT"
-c.silencer(valve["R"])                                           a silencer screwed onto an exhaust port;  c.exhaust(port) leaves it open
+c.silencer(valve["3"])                                           a silencer screwed onto an exhaust port;  c.exhaust(port) leaves it open
 c.sensor(name, cylinder, "extended"|"retracted", part=None, signal="", terminal="")   a position switch on a cylinder: a PLC input
 c.control_voltage(24)                                            the DC control voltage the coils and sensors run on
+c.drawing_info(project="", ticket="", revision="", title="", drawn_by="", approved_by="")   the circuit drawing's title block
+c.step(name, "C1+", "C2-", until="B2", dwell_s=0)                one step of the machine's sequence, in order: moves ("C1+" extend,
+    "C1-" retract), the sensor(s) that end it; a step with no move waits dwell_s (machining, loading). c.start(C1="extended") sets
+    a start position (default retracted). Checks: every step ends on a sensor that exists, at the end its move reaches; no step
+    commands a state its valves cannot give (a hand valve, one valve in two positions); the cycle returns to its start; the
+    ESTIMATED cycle time (valve response + stroke / mean speed + sensor + dwell: a lower bound) against cycles_per_min. A circuit
+    with a control voltage or sensors and no sequence gets a "not run" notice. Outputs <name>.sequence.pdf/.svg (the
+    displacement-step diagram with the coil signals) and <name>.sequence.md (the step table with times and assumptions).
+m = c.manifold("M1", part="SMC SS5Y3-20-04-Q")                    a valve manifold base: ports 1 (common supply), 3, 5 (common exhausts)
+c.mount(valve, m, station=None)                                  mount a valve on the next free station: its 1, 3, 5 are the manifold's
+    (no tubes or silencers on them; silence the manifold's 3 and 5); it takes the catalogue's valve-on-manifold C, b. Checks: valves
+    vs stations (empty stations get blanking plates in the BOM), and the drop through the manifold's supply at the air the cylinders
+    on it draw at once (per sequence step when c.step(...) declares one, else all at once). The I/O list names each coil's station.
 every component also takes max_bar= and min_bar= (its working pressure range, from its datasheet) and part_number=; a tube max_bar=
 valves also take coil_V=, coil_W=, connector=, signal= / signal_12= (the PLC signal names of coils 14 / 12), terminal=,
-  C_exhaust= / b_exhaust= (the A/B -> R/S passage when the datasheet gives it apart)
+  C_exhaust= / b_exhaust= (the 4/2 -> 5/3 passage when the datasheet gives it apart)
 cylinders also take load_mass_kg= (the mass the rod moves), allowable_ke_J=, piston_mass_kg=, speed_min_mm_s= / speed_max_mm_s=, magnet=,
   on_power_loss= / on_air_loss= (what it must do: "hold" | "extend" | "retract" | "release"; graded against its valves)
 c.screw_in(port_a, port_b)                                       two parts screwed straight together (a speed controller in a cylinder port): no tube, no fitting
@@ -49,9 +66,16 @@ A figure you also give must agree with the part's. Known part numbers (the strok
 - cylinders: `FESTO DSNU-20-<stroke>-P-A` (ISO 6432, Ø20/8, 1-320 mm, 1-10 bar, G1/8, magnetic, elastic cushioning 0.2 J),
   `SMC CDQ2B32-<stroke>DZ` (compact Ø32/16, strokes 5-50 by 5, 75, 100; 0.5-10 bar; Rc1/8; magnet; bumper 0.29 J; 50-500 mm/s;
   `CQ2B32-...DZ` is the same without a magnet)
-- valves: `SMC SY3120-5LZ-C6` (5/2 single solenoid, spring return, C 0.76 b 0.30 P->A/B, C 0.65 b 0.39 A/B->R/S, 1.5-7 bar,
+- manifolds: `SMC SS5Y3-20-<stations>[00F|00N|00T]-Q` (SY3000, 2-20 stations, P/EA/EB 1/8, valve on base C 0.72 b 0.29, exhaust 0.80
+  / 0.36, blanking plate SY3000-26-19A-Q), `SMC SS5Y5-20-<stations>-Q` (SY5000, 1/4, C 1.9 / 2.2); silencer `SMC AN10-01` (R1/8, C 2)
+- valves: `SMC SY3120-5LZ-C6` (5/2 single solenoid, spring return, C 0.76 b 0.30 1->4/2, C 0.65 b 0.39 4/2->5/3 (SMC prints these P->A/B, A/B->EA/EB: SMC's A is port 4), 1.5-7 bar,
   24 VDC 0.4 W, L plug), `SMC SY3220-5LZ-C6` (the same, double solenoid: holds its position unpowered, 1-7 bar),
   `SMC SY5120-5LZ-01` (C 1.9 / 2.4, all ports 1/8); drop the Z for the 0.35 W coil without indicator light
+- more cylinders: `FESTO DSNU-<16|20|25|32|40|50|63>-<stroke>-P-A`, `SMC C[D]Q2B<12..100>-<stroke>DZ` (standard strokes per bore),
+  `FESTO DSBC-<32..100>-<stroke>-PPVA-N3` (ISO 15552, 0.4/0.6-12 bar), `SMC MGPM<20|25|32>-<stroke>Z` (guided, no allowable energy printed)
+- filter regulators: `SMC AW20-02BG` (10 bar, regulates 0.5-8.5 bar), `FESTO MS4-LFR-1/4-D6-CRM-AS` (14 bar, regulates 0.3-7 bar):
+  the set pressure is checked against the regulation range
+- `SMC TU0425` / `TU0805` tube, `SMC AS1201F-M5-04` (C 0.3) / `AS2201F-02-08` (C 1.4) speed controllers for 4 / 8 mm tube
 - `SMC TU0604` tube (6 x 4 mm polyurethane, 8 bar), `SMC AS2201F-01-06` speed controller (C 0.7), `SMC AN05-M5` silencer (C 1.0)
 - sensors: `SMC D-M9B` (2-wire, 10-28 V, 2.5-40 mA, for CQ2), `FESTO SMT-8M-A-PS-24V-E-0,3-M8D` (PNP, 5-30 V, M8, for DSNU with SMBR-8-20)
 
@@ -65,7 +89,7 @@ is used (the smallest of those sizes: valve 0.6, silencer 1.0, flow control 0.3)
 ## The checks every build runs
 
 - circuit: every cylinder port fed from a supply through a valve in some position and able to exhaust in another (a chamber that
-  cannot vent is dead-headed); every valve's P supplied and work ports connected; no tee or inline component with a single connection.
+  cannot vent is dead-headed); every valve's supply port 1 fed and work ports 2 / 4 connected; no tee or inline component with a single connection.
 - force per stroke (FAIL below the load, WARN above the duty's load ratio: 0.5 moving, 0.7 static, 1.0 guided): usable force = pressure at the cylinder x area x (1 -
   friction allowance), the pressure being the lowest regulator on the supply path (or the supply's); the load ratio is load / theoretical
   force. A single-acting cylinder retracts by its spring (spring_N), graded against load_retract_N.
@@ -106,6 +130,10 @@ is used (the smallest of those sizes: valve 0.6, silencer 1.0, flow control 0.3)
 tube by bore with a 10% service loop, fittings, sensors), `<name>.cylinders.md` / `.csv` (per stroke: pressure, load, usable force, load
 ratio, required and achievable speed, air per minute, status), `<name>.io.md` / `.io.csv` (the I/O list for the PLC programmer: every
 solenoid coil a DO and every position sensor a DI, with signal name, function, part, voltage, current, connector and terminal).
+`<name>.drawing.pdf` / `.drawing.svg`: the circuit diagram for the customer: a device tag on every component (EN 81346-2 codes as
+Festo uses them: -MM cylinder, -QM valve, -BG sensor, -AZ air preparation, -XM tee, -RZ flow control), the sensors on their
+cylinders, the coil signals (14 / 12) on the valves, a parts table keyed by tag and a title block (project, ticket, revision, date,
+drawn by eitri, approved by: blank).
 
 ## Direct edits and layout
 
@@ -131,9 +159,9 @@ def build(p):
                      spring_N=25, speed_mm_s=100, cycles_per_min=p.cycles_per_min, duty="static",   # clamping: load ratio up to 0.7
                      on_power_loss="retract", on_air_loss="retract")      # the 3/2 vents and the spring opens the clamp
     c.tube("T1", air["OUT"], frl["IN"], id_mm=8, length_m=1.5)
-    c.tube("T2", frl["OUT"], v["P"], id_mm=6, length_m=0.8)
-    c.tube("T3", v["A"], cyl["CAP"], id_mm=6, length_m=1.0)
-    c.silencer(v["R"])
+    c.tube("T2", frl["OUT"], v["1"], id_mm=6, length_m=0.8)
+    c.tube("T3", v["2"], cyl["CAP"], id_mm=6, length_m=1.0)
+    c.silencer(v["3"])
     return c
 
 
@@ -162,13 +190,13 @@ def build(p):
                      speed_mm_s=p.speed, cycles_per_min=p.cycles_per_min,
                      on_power_loss="extend", on_air_loss="release")       # V1 at rest feeds A -> CAP: it pushes out on a power cut
     c.tube("T1", air["OUT"], frl["IN"], id_mm=8, length_m=2.0)
-    c.tube("T2", frl["OUT"], v["P"], id_mm=6, length_m=1.0)
-    c.tube("T3", v["A"], fc2["A"], id_mm=6, length_m=1.0)
+    c.tube("T2", frl["OUT"], v["1"], id_mm=6, length_m=1.0)
+    c.tube("T3", v["2"], fc2["A"], id_mm=6, length_m=1.0)
     c.tube("T4", fc2["B"], cyl["CAP"], id_mm=6, length_m=0.5)
-    c.tube("T5", v["B"], fc1["A"], id_mm=6, length_m=1.0)
+    c.tube("T5", v["4"], fc1["A"], id_mm=6, length_m=1.0)
     c.tube("T6", fc1["B"], cyl["ROD"], id_mm=6, length_m=0.5)
-    c.silencer(v["R"])
-    c.silencer(v["S"])
+    c.silencer(v["3"])
+    c.silencer(v["5"])
     return c
 
 

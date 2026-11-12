@@ -39,6 +39,8 @@ def _desc(comp) -> str:
         return "exhaust silencer"
     if k == "node":
         return "union tee / junction (push-in)"
+    if k == "manifold":
+        return f"valve manifold base, {comp.stations} stations, common supply and exhaust" + (f" ({comp.series})" if comp.series else "")
     return k
 
 
@@ -63,6 +65,10 @@ def bom(c: Circuit) -> list[dict]:
         groups.setdefault((comp.kind, desc, pn), []).append(comp.name)
     for (kind, desc, pn), names in groups.items():
         add(kind, desc, len(names), part_number=pn, notes=", ".join(names))
+    for m in [x for x in c.components.values() if x.kind == "manifold"]:
+        empty = m.stations - sum(1 for mn, _st in c.mounts.values() if mn == m.name)
+        if empty > 0:
+            add("manifold", f"blanking plate assembly for an empty station of {m.name}", empty, part_number=m.blanking_plate, notes=m.name)
     sens: OrderedDict[tuple, list] = OrderedDict()
     for s in c.sensors.values():
         sens.setdefault((f"position sensor, {s.output}" + (f", {s.V_min:g}-{s.V_max:g} V" if s.V_min is not None and s.V_max is not None else ""), s.part_number), []).append(f"{s.name} ({s.cylinder} {s.position})")
@@ -171,7 +177,30 @@ def cylinders_markdown(c: Circuit, rep: CircuitReport) -> str:
 
 # --------------------------------------------------------------------------- the I/O list
 
-_IO_COLS = ["tag", "io", "signal", "device", "function", "part_number", "voltage_V", "current_mA", "connector", "terminal", "notes"]
+_IO_COLS = ["tag", "io", "signal", "device", "function", "part_number", "voltage_V", "current_mA", "connector", "location", "terminal", "notes"]
+
+
+def reaches(c: Circuit, ref) -> str:
+    """The cylinder port a valve working port's line leads to (through tubes, tees and flow controls), "" when none."""
+    seen, todo = {ref}, [ref]
+    while todo:
+        r = todo.pop()
+        for kind, _t, other in c.connections_at(r):
+            if other in seen:
+                continue
+            seen.add(other)
+            comp = c.components.get(other.component)
+            if comp is None:
+                continue
+            if comp.kind == "cylinder":
+                return f"{comp.name} {other.port}"
+            if comp.kind == "node":
+                todo.append(other)
+            elif comp.kind == "flow_control":
+                o = comp.port("B" if other.port == "A" else "A")
+                seen.add(o)
+                todo.append(o)
+    return ""
 
 
 def io_rows(c: Circuit) -> list[dict]:
@@ -184,10 +213,12 @@ def io_rows(c: Circuit) -> list[dict]:
             continue
         for pilot, signal, terminal in v.coils:
             cur = round(v.coil_W / v.coil_V * 1000.0, 1) if v.coil_W and v.coil_V else None
-            what = "shifts to position 2 (P-B, A-R)" if v.cls in ("5/2", "4/2") else "energises"
-            if pilot == "12":
-                what = "shifts back to position 1 (P-A, B-S)" if v.cls in ("5/2", "4/2") else "energises the 12 side"
+            pos = v.positions[-1] if pilot == "14" else v.positions[0]
+            fed = [b if a == "1" else a for a, b in pos if "1" in (a, b)]
+            what = ("connects " + ", ".join(f"{a}-{b}" for a, b in pos) if pos else "centre") + "".join(
+                f"; pressurises {w}" + (f" ({where})" if (where := reaches(c, v.port(w))) else "") for w in fed)
             rows.append({"io": "DO", "signal": signal, "device": f"{v.name} coil {pilot}", "function": f"{v.cls} valve {v.name} {what}",
+                         "location": f"{v.manifold} station {v.station}" if v.manifold else "",
                          "part_number": v.part_number, "voltage_V": v.coil_V, "current_mA": cur, "connector": v.connector, "terminal": terminal,
                          "notes": (f"{v.coil_W:g} W at {v.coil_V:g} V DC (rated); " if cur else "coil figures not given; ")
                                   + ("spring return: de-energised = position 1" if v.returns == "spring" else f"{v.returns} return")})
@@ -202,6 +233,7 @@ def io_rows(c: Circuit) -> list[dict]:
             note = (f"{s.output} output to a {'sinking' if s.output == 'PNP' else 'sourcing'} PLC input"
                     + (f"; max {s.load_mA_max:g} mA" if s.load_mA_max is not None else "") + (f"; drop {s.drop_V:g} V" if s.drop_V is not None else ""))
         rows.append({"io": "DI", "signal": s.signal, "device": s.name, "function": f"{s.cylinder} {s.position}", "part_number": s.part_number,
+                     "location": f"on {s.cylinder}",
                      "voltage_V": c.control_V if c.control_V is not None else (f"{s.V_min:g}-{s.V_max:g}" if s.V_min is not None and s.V_max is not None else None),
                      "current_mA": cur, "connector": s.connector, "terminal": s.terminal, "notes": note})
     rows.sort(key=lambda r: (r["io"] != "DI", r["signal"]))
@@ -228,9 +260,9 @@ def io_markdown(c: Circuit, rows: list[dict] | None = None) -> str:
     out += (f"Control voltage: {c.control_V:g} V DC.\n\n" if c.control_V is not None else "Control voltage: not given (c.control_voltage(24)).\n\n")
     if not rows:
         return out + "No solenoid coils or position sensors in the circuit.\n"
-    out += _md_table(["tag", "I/O", "signal", "device", "function", "part number", "V", "mA", "connector", "terminal", "notes"],
+    out += _md_table(["tag", "I/O", "signal", "device", "function", "part number", "V", "mA", "connector", "location", "terminal", "notes"],
                      [[r["tag"], r["io"], r["signal"], r["device"], r["function"], r["part_number"], fmt(r["voltage_V"]), fmt(r["current_mA"]),
-                       r["connector"], r["terminal"], r["notes"]] for r in rows]) + "\n"
+                       r["connector"], r.get("location", ""), r["terminal"], r["notes"]] for r in rows]) + "\n"
     coils = [r for r in rows if r["io"] == "DO" and isinstance(r["current_mA"], float)]
     if coils:
         out += f"\nAll coils on at once: {sum(r['current_mA'] for r in coils):.0f} mA from the control supply (sensors' own supply current not included).\n"

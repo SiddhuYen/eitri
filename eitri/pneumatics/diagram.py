@@ -12,7 +12,7 @@ MARGIN = 28
 ROW_GAP = 110
 TOP = 86
 SPACING = 170
-LEVEL = {"supply": 0, "regulator": 1, "frl": 1, "node": 1.3, "valve": 2, "flow_control": 3, "cylinder": 4, "silencer": 2}
+LEVEL = {"supply": 0, "regulator": 1, "frl": 1, "node": 1.3, "manifold": 1.6, "valve": 2, "flow_control": 3, "cylinder": 4, "silencer": 2}
 STUB = 14
 VBOX = 44.0                 # one valve position's square: wide enough for P between the exhausts R and S and their silencers
 LINE = "#2b3a4a"
@@ -35,6 +35,8 @@ def _size(comp) -> tuple[float, float]:
         return 30.0, 30.0
     if k == "silencer":
         return 14.0, 16.0
+    if k == "manifold":
+        return getattr(comp, "_draw_w", 120.0), 14.0
     return 8.0, 8.0
 
 
@@ -81,19 +83,8 @@ def _ports(comp, cx: float, cy: float) -> dict[str, tuple[float, float, str]]:
     if k == "valve":
         n = len(comp.positions)
         box = VBOX
-        x0 = cx - n * box / 2 + comp.rest_position * box        # the rest position's box carries the ports
-        out = {"P": (x0 + box / 2, cy + h / 2, "down")}
-        if "A" in comp.ports:
-            out["A"] = (x0 + box * 0.25, cy - h / 2, "up")
-        if "B" in comp.ports:
-            out["B"] = (x0 + box * 0.75, cy - h / 2, "up")
-        if "R" in comp.ports:
-            out["R"] = (x0 + box * 0.2, cy + h / 2, "down")
-        if "S" in comp.ports:
-            out["S"] = (x0 + box * 0.8, cy + h / 2, "down")
-        if comp.cls == "3/2":
-            out["A"] = (x0 + box / 2, cy - h / 2, "up")
-        return out
+        x0 = cx - n * box / 2 + display_index(comp, comp.rest_position) * box     # the rest position's box carries the ports
+        return {p: (x0 + box * fx, cy + (h / 2 if fy > 0 else -h / 2), "down" if fy > 0 else "up") for p, (fx, fy) in _port_spots(comp).items()}
     if k in ("frl", "regulator"):
         return {"IN": (cx - w / 2, cy, "left"), "OUT": (cx + w / 2, cy, "right")}
     if k == "supply":
@@ -102,7 +93,33 @@ def _ports(comp, cx: float, cy: float) -> dict[str, tuple[float, float, str]]:
         return {"A": (cx, cy + h / 2, "down"), "B": (cx, cy - h / 2, "up")}
     if k == "silencer":
         return {"IN": (cx, cy - h / 2, "up")}
+    if k == "manifold":
+        return {"1": (cx, cy + h / 2, "down"), "5": (cx - w / 2 + 16, cy + h / 2, "down"), "3": (cx + w / 2 - 16, cy + h / 2, "down")}
     return {"N": (cx, cy, "up")}
+
+
+def _port_spots(comp) -> dict[str, tuple[float, float]]:
+    """Where each ISO 5599 port sits on a valve box, as a fraction of the box width and top (-1) / bottom (+1), laid out as the makers
+    draw them (SMC SY_EU.pdf PDF p.14; Festo VUVG catalogue p.12): 4 and 2 on top (4 left), 5, 1, 3 underneath (5 left)."""
+    if comp.cls in ("2/2", "3/2"):
+        spots = {"1": (0.5, 1), "2": (0.5, -1), "3": (0.8, 1)}
+    else:
+        spots = {"1": (0.5, 1), "4": (0.25, -1), "2": (0.75, -1), "5": (0.2, 1), "3": (0.8, 1)}
+    return {p: v for p, v in spots.items() if p in comp.ports}
+
+
+def display_index(comp, position: int) -> int:
+    """The box a valve position is drawn in, counted from the left. ISO 1219 draws each actuator beside the box it switches the
+    valve to: the coil 14 (eitri draws it on the left) beside the 1-4 box, the spring / coil 12 (right) beside the 1-2 box. eitri's
+    positions run [rest / 12 side, (centre), 14 side], so they are drawn right to left."""
+    return len(comp.positions) - 1 - position
+
+
+def port_label(comp, p: str) -> str:
+    """A port's label: its ISO number, with the maker's own letter after it when the catalogue part has one (SMC: "4(A)")."""
+    letters = ((getattr(comp, "catalog", None) or {}).get("info") or {}).get("letters") or {}
+    inv = {v: k for k, v in letters.items()}
+    return f"{p}({inv[p]})" if p in inv else p
 
 
 def _route(p1, p2) -> list[tuple[float, float]]:
@@ -138,6 +155,9 @@ def layout(c: Circuit) -> dict[str, tuple[float, float]]:
     for t in c.tubes:
         nbrs[t.a.component].add(t.b.component)
         nbrs[t.b.component].add(t.a.component)
+    for v, (m, _st) in c.mounts.items():
+        nbrs[v].add(m)
+        nbrs[m].add(v)
     lvl = {x.name: LEVEL.get(x.kind, 2) for x in comps}
     for _ in range(3):
         for x in comps:
@@ -156,6 +176,12 @@ def layout(c: Circuit) -> dict[str, tuple[float, float]]:
         for x in row:
             above = [xs[n] for n in nbrs[x.name] if n in xs and lvl[n] > level]
             xs[x.name] = sum(above) / len(above) if above else None
+        for x in row:                                             # a manifold spans the valves mounted on it
+            if x.kind == "manifold":
+                vx = [xs[v] for v, (m, _st) in c.mounts.items() if m == x.name and v in xs]
+                if vx:
+                    x._draw_w = max(vx) - min(vx) + 2 * VBOX + 60
+                    xs[x.name] = (max(vx) + min(vx)) / 2
         free = [x for x in row if xs[x.name] is None]
         for i, x in enumerate(free):
             xs[x.name] = MARGIN + 60 + i * SPACING
@@ -189,7 +215,10 @@ def layout(c: Circuit) -> dict[str, tuple[float, float]]:
     return pos
 
 
-def build_scene(c: Circuit, rep=None, status: dict[str, str] | None = None, footer: list[tuple[str, str]] | None = None, title: str | None = None) -> Scene:
+def build_scene(c: Circuit, rep=None, status: dict[str, str] | None = None, footer: list[tuple[str, str]] | None = None, title: str | None = None,
+                labels: dict[str, str] | None = None, decorate=None) -> Scene:
+    """The schematic. `labels` replaces a component's label text (the drawing's device tags); `decorate(scene, pos)` adds items
+    (sensors, coil signals) before the labels are placed, so they take part in the collision-free placement."""
     status = status or {}
     pos = layout(c)
     ports: dict[PortRef, tuple[float, float, str]] = {}
@@ -201,7 +230,7 @@ def build_scene(c: Circuit, rep=None, status: dict[str, str] | None = None, foot
     for port, sref in c.attached.items():
         if port in ports:
             x, y, _d = ports[port]
-            off = -12.0 if port.port == "R" else 12.0 if port.port == "S" else 0.0      # exhausts either side of P: room for its tube
+            off = -12.0 if port.port == "5" else 12.0 if port.port == "3" else 0.0      # exhausts either side of 1: room for its tube
             sx, sy = x + off, y + 14 + _size(c.components[sref.component])[1] / 2
             pos[sref.component] = (sx, sy)
             leaders.append((sref.component, [(x, y), (x, y + 6), (sx, y + 6), (sx, y + 14)] if off else [(x, y), (x, y + 14)]))
@@ -219,6 +248,18 @@ def build_scene(c: Circuit, rep=None, status: dict[str, str] | None = None, foot
     routes: dict[str, list] = {}
     for _sname, lpts in leaders:                                     # a tube may cross a silencer's leader, never run along it
         router.take(lpts)
+    galleries: list[tuple[str, list]] = []                           # a mounted valve's P, R, S into its manifold's bar
+    for vname, (mname, _st) in c.mounts.items():
+        if vname not in pos or mname not in pos:
+            continue
+        mx, my = pos[mname]
+        top = my - _size(c.components[mname])[1] / 2
+        for p in ("1", "3", "5"):
+            ref = PortRef(vname, p)
+            if ref in ports:
+                x, y, _d = ports[ref]
+                galleries.append((mname, [(x, y), (x, top)]))
+                router.take([(x, y), (x, top)])
     silenced = {p.component for p in c.attached}
 
     # a tee: each of its tubes leaves on its own side, the side facing its other end where it can
@@ -253,7 +294,7 @@ def build_scene(c: Circuit, rep=None, status: dict[str, str] | None = None, foot
         comp = c.components[ref.component]
         if comp.kind == "node":
             d = node_side.get((tube, comp.name), d)
-        stub = 34.0 if (comp.kind == "valve" and ref.port == "P" and ref.component in silenced) else 10.0 if comp.kind == "node" else 14.0
+        stub = 34.0 if (comp.kind == "valve" and ref.port == "1" and ref.component in silenced) else 10.0 if comp.kind == "node" else 14.0
         return (x, y, d, stub)
 
     for t in order:
@@ -266,9 +307,11 @@ def build_scene(c: Circuit, rep=None, status: dict[str, str] | None = None, foot
         col = FAIL if st == "fail" else WARN if st == "warn" else TUBE
         g = f"tube:{t.name}"
         items.append({"t": "polyline", "pts": pts, "stroke": col, "sw": 2.2 if not st else 3.2, "fill": "none", "g": g, "cls": "tube"})
-        label = f"{t.name}  {t.id_mm:g} mm ID · {t.length_m:g} m"
+        label = "screwed in" if t.direct else f"{t.name}  {t.id_mm:g} mm ID · {t.length_m:g} m"
         items.append({"t": "text", "x": pts[0][0], "y": pts[0][1], "s": label, "size": FONT - 2, "fill": col if st else MUTED, "anchor": "middle",
                       "g": g, "cls": "label", "bg": "#ffffff", "cands": _beside(pts, label, FONT - 2)})
+    for mname, pts in galleries:
+        items.append({"t": "polyline", "pts": pts, "stroke": INK, "sw": 1.2, "fill": "none", "dash": "4 3", "g": f"component:{mname}", "cls": "sym"})
     for sname, pts in leaders:                                       # a silencer screwed onto its exhaust port
         items.append({"t": "polyline", "pts": pts, "stroke": INK, "sw": 1.2, "fill": "none", "g": f"component:{sname}", "cls": "sym"})
     # vents: an open triangle at the port
@@ -287,7 +330,7 @@ def build_scene(c: Circuit, rep=None, status: dict[str, str] | None = None, foot
         sc.nodes[name] = {"kind": "component", "x": cx, "y": cy, "w": w, "h": h}
         bx, by, bw, bh = _body(comp, cx, cy)
         if comp.kind != "silencer":
-            label = name if comp.kind in ("node",) else f"{name} · {_short(comp)}"
+            label = (labels or {}).get(name) or (name if comp.kind in ("node",) else f"{name} · {_short(comp)}")
             lw = text_w(label, FONT - 1)
             items.append({"t": "text", "x": cx, "y": by - 6, "s": label, "size": FONT - 1, "weight": "700", "fill": col, "anchor": "middle", "g": g, "cls": "label",
                           "bg": "#ffffff", "cands": [(cx, by - 6, "middle"), (bx - 8, cy + 4, "end"), (bx + bw + 8, cy + 4, "start"),
@@ -306,8 +349,11 @@ def build_scene(c: Circuit, rep=None, status: dict[str, str] | None = None, foot
         for p, (px, py, _d) in _ports(comp, cx, cy).items():
             if comp.kind in ("node", "silencer"):
                 continue
-            items.append({"t": "text", "x": px, "y": py, "s": p, "size": FONT - 4, "fill": MUTED, "anchor": "middle", "g": g, "cls": "port",
-                          "cands": _port_cands(px, py, _d, p)})
+            lab = port_label(comp, p) if comp.kind in ("valve", "manifold") else p
+            items.append({"t": "text", "x": px, "y": py, "s": lab, "size": FONT - 4, "fill": MUTED, "anchor": "middle", "g": g, "cls": "port",
+                          "cands": _port_cands(px, py, _d, lab)})
+    if decorate is not None:
+        decorate(sc, pos)
     place_labels(sc)
     sc.height = max(sc.height, max((it.get("y", 0) for it in items if it["t"] == "text"), default=0) + 12)
     if footer:
@@ -343,9 +389,9 @@ def _beside(pts, label: str, size: float) -> list[tuple[float, float, str]]:
 def _port_cands(px: float, py: float, d: str, name: str = "") -> list[tuple[float, float, str]]:
     """A port's name beside the point where its tube enters: off the tube's line, toward the outside of the symbol (a valve's
     exhausts R and S outward, past their silencers)."""
-    if d == "down" and name == "R":
+    if d == "down" and name.startswith("5"):
         return [(px - 22, py + 20, "end"), (px - 22, py + 30, "end"), (px - 5, py + 11, "end")]
-    if d == "down" and name == "S":
+    if d == "down" and name.startswith("3"):
         return [(px + 22, py + 20, "start"), (px + 22, py + 30, "start"), (px + 5, py + 11, "start")]
     if d == "down":
         return [(px - 5, py + 11, "end"), (px + 5, py + 11, "start"), (px - 5, py + 20, "end"), (px + 5, py + 20, "start"),
@@ -371,6 +417,8 @@ def _short(comp) -> str:
         return f"{comp.pressure_bar:g} bar"
     if k == "flow_control":
         return f"meter-{comp.meter}"
+    if k == "manifold":
+        return f"manifold, {comp.stations} stations"
     return k
 
 
@@ -427,11 +475,9 @@ def _symbol(items, comp, cx, cy, w, h, col, g) -> None:
         bw = VBOX
         x0 = cx - n * bw / 2
         for i, pos in enumerate(comp.positions):
-            bx = x0 + i * bw
+            bx = x0 + display_index(comp, i) * bw
             box(bx, cy - h / 2, bw, h)
-            at = {"P": (bx + bw / 2, cy + h / 2 - 3), "A": (bx + bw * 0.25, cy - h / 2 + 3), "B": (bx + bw * 0.75, cy - h / 2 + 3), "R": (bx + bw * 0.2, cy + h / 2 - 3), "S": (bx + bw * 0.8, cy + h / 2 - 3)}
-            if comp.cls == "3/2":
-                at["A"] = (bx + bw / 2, cy - h / 2 + 3)
+            at = {p: (bx + bw * fx, cy + (h / 2 - 3 if fy > 0 else -h / 2 + 3)) for p, (fx, fy) in _port_spots(comp).items()}
             used = set()
             for a, b in pos:
                 if a in at and b in at:
@@ -493,6 +539,12 @@ def _symbol(items, comp, cx, cy, w, h, col, g) -> None:
         items.append({"t": "polyline", "pts": [(cx + 3, cy - 10), (cx - 3, cy), (cx + 3, cy + 10)], "fill": "none", "stroke": col, "sw": 1.2, "g": g, "cls": "sym"})
         items.append({"t": "circle", "cx": cx + 9, "cy": cy, "r": 3.5, "fill": "none", "stroke": col, "sw": 1, "g": g, "cls": "sym"})
         items.append({"t": "line", "x1": cx + 6, "y1": cy + 4, "x2": cx + 12, "y2": cy + 4, "stroke": col, "sw": 1, "g": g, "cls": "sym"})
+        return
+    if k == "manifold":                                        # the manifold base: a bar, its outline dashed (an enclosure)
+        x0, y0 = cx - w / 2, cy - h / 2
+        items.append({"t": "rect", "x": x0, "y": y0, "w": w, "h": h, "rx": 0, "fill": "#eef2f6", "stroke": "none", "sw": 0, "g": g, "cls": "sym"})
+        items.append({"t": "polyline", "pts": [(x0, y0), (x0 + w, y0), (x0 + w, y0 + h), (x0, y0 + h)], "closed": True, "fill": "none", "stroke": col,
+                      "sw": 1.2, "dash": "8 3", "g": g, "cls": "sym"})
         return
     if k == "silencer":
         box(cx - w / 2, cy - h / 2, w, h)
