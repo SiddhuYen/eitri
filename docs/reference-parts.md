@@ -55,7 +55,8 @@ The full example is `examples/motor-bracket/` (`eitri build examples/motor-brack
 - **Clearance** (with `clearance=`). Every designed part not listed in `contact=` keeps at least that gap.
 - **Mounts.** For each `mount(...)`: the designed part has a hole coaxial with the reference hole (axis offset and
   angle within your stated tolerances; the smallest coaxial hole is taken as the clearance bore), and its diameter
-  is the ISO 273 clearance for the screw and series (fine / medium / coarse) within `dia_tol` (default 0.01 mm).
+  is the ISO 273 clearance for the screw and series (fine / medium / coarse) as published by Albany County Fasteners
+  (the one ISO-labelled table read; ISO 273 itself is paywalled), within `dia_tol` (default 0.01 mm).
   The table is in `eitri/lib/fasteners.py` with its source.
 - **Kept.** Once a model declared a reference, a later build that drops it, or declares fewer mounts on it, fails.
   A person removes one with `eitri reference remove <project> inputs/motor.step`.

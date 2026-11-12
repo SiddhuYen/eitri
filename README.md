@@ -357,9 +357,9 @@ arduino-cli lib install ESP32Servo               # if an ESP32 sketch drives a s
 eitri finds `arduino-cli` on `PATH`, at the path in `EITRI_ARDUINO_CLI`, or in `~/.local/bin`, `/opt/homebrew/bin` or `/usr/local/bin`.
 
 ```bash
-eitri build eitri/demos/pan-tilt/pan_tilt.py         # 11 pass, 0 warn, 0 FAIL
-eitri build eitri/demos/air-clamp/air_clamp.py       # 20 pass, 1 warn, 0 FAIL
-eitri build eitri/demos/servo-sweep/servo_sweep.py   # 11 pass, 0 warn, 0 FAIL with arduino-cli and arduino:avr installed
+eitri build eitri/demos/pan-tilt/pan_tilt.py         # 12 pass, 0 warn, 0 FAIL
+eitri build eitri/demos/air-clamp/air_clamp.py       # 25 pass, 1 warn, 0 FAIL
+eitri build eitri/demos/servo-sweep/servo_sweep.py   # 12 pass, 0 warn, 0 FAIL with arduino-cli and arduino:avr installed
 eitri bom ~/eitri-projects/clamp                     # pneumatics: the bill of materials (--csv)
 ```
 
@@ -415,7 +415,7 @@ def build(p):
 
 ```bash
 eitri build eitri/demos/uno-arm-circuit/uno_arm_circuit.py                 # 32 pass, 0 warn, 0 FAIL
-eitri build eitri/demos/uno-arm-circuit/uno_arm_circuit.py --config bad    # 28 pass, 0 warn, 2 FAIL (on purpose)
+eitri build eitri/demos/uno-arm-circuit/uno_arm_circuit.py --config bad    # 29 pass, 0 warn, 2 FAIL (on purpose)
 eitri bom eitri/demos/uno-arm-circuit/uno_arm_circuit.py                   # the bill of materials (--csv)
 ```
 

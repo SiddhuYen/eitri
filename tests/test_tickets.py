@@ -344,6 +344,29 @@ def test_new_design_package_has_no_diff_sections(tmp_path):
     _validate(out / "package.json")
 
 
+def _export_sample(pkg_dir: Path) -> None:
+    """EITRI_PACKAGE_SAMPLE_DIR=<folder>: copy the package (folder + zip) there (how the report's sample packages are made)."""
+    import os
+    dest = os.environ.get("EITRI_PACKAGE_SAMPLE_DIR")
+    if not dest:
+        return
+    out = Path(dest) / pkg_dir.name
+    shutil.rmtree(out, ignore_errors=True)
+    shutil.copytree(pkg_dir, out)
+    if Path(str(pkg_dir) + ".zip").exists():
+        shutil.copyfile(str(pkg_dir) + ".zip", str(out) + ".zip")
+
+
+def _sources_are_structured(pkg: dict) -> None:
+    """Every check row with a rule carries its structured sources, and none falls back to "no document cited"."""
+    for r in pkg["checks"]["rows"]:
+        if r["category"] == "geometry":
+            continue                                         # CAD geometry findings are report issues, not ruled checks
+        assert r["rule"] and r["sources"], r["name"]
+        assert "no document cited" not in r["source"], (r["name"], r["source"])
+        assert all(x["basis"] in ("document", "requirement", "model", "rule", "tool", "assumption") for x in r["sources"])
+
+
 def _validate(path: Path) -> None:
     jsonschema = pytest.importorskip("jsonschema")
     schema = json.loads((ROOT / "eitri" / "tickets" / "package.schema.json").read_text())
@@ -411,6 +434,10 @@ def test_end_to_end_pan_tilt_servo_change(tmp_path):
     assert rows["torque joint tilt (SG90)"]["change"] == "removed" and rows["torque joint tilt (MG996R)"]["change"] == "added"
     assert "torque joint tilt (SG90)" in pkg["removed_checks"]
     assert all(r["source"] for r in pkg["checks"]["rows"])
+    _sources_are_structured(pkg)
+    tilt = rows["torque joint tilt (MG996R)"]
+    assert tilt["rule"] == "mechanism.joint-load" and tilt["sources"], tilt
+    assert "rule" in (pkg_dir / "checks.csv").read_text().splitlines()[0]
     assert pkg["checks"]["summary"]["to"]["fail"] == 0 and pkg["checks"]["summary"]["to"]["not_run"] == 0
     kinds = {n["kind"] for n in pkg["not_checked"]}
     assert {"plan", "human_verify", "removed_check", "domain", "scope"} <= kinds
@@ -438,6 +465,7 @@ def test_end_to_end_pan_tilt_servo_change(tmp_path):
     assert [r["letter"] for r in revs["files"]["pan_tilt.py"]] == ["A", "B"]
     assert T.load(p, "T-0001").status == "packaged"
     T.close(p, "T-0001", confirm=_person)
+    _export_sample(pkg_dir)
     # the next ticket starts from Rev B and would make Rev C
     t2 = T.new_ticket(p, "next", "a later change")
     assert t2.base_revision == pkg["revisions"]["to"]["build"]
@@ -484,3 +512,39 @@ def test_cad_hole_pattern_package_has_step_stl_3mf_and_drawing(tmp_path):
     assert part["change"] == "changed" and "hole_centres" in part["fields"]
     assert pkg["unplanned_changes"] == ["width"]
     assert "did not list it: width" in Path(pkg["folder"], "report.md").read_text()
+    _sources_are_structured(pkg)
+    _export_sample(Path(pkg["folder"]))
+
+
+def test_harness_package_refuses_a_fuse_check_not_run_until_a_person_waives_it(tmp_path):
+    """The overcurrent checks' "not run" (a supply that publishes no short-circuit current) is a first-class status: the package
+    refuses on it, a person waives it with a reason, and every protection row cites its datasheet with its URL."""
+    folder = tmp_path / "servo-arm"
+    folder.mkdir()
+    shutil.copy(ROOT / "eitri" / "demos" / "servo-arm" / "servo_arm_harness.py", folder / "servo_arm_harness.py")
+    p = Project(folder)
+    tools = Tools(p)
+    assert p.build("as delivered").ok
+    T.new_ticket(p, "Longer shoulder lead", "The shoulder servo moves 80 mm further out: lengthen its lead to 400 mm.",
+                 acceptance=["the lead still carries the servo => ampacity SH_V*", "the fuse still protects it => F1 rating within the wire it protects",
+                             "routing in the arm => human"], customer="Example Robotics")
+    T.set_plan(p, "T-0001", {"summary": "lead_mm 320 -> 400.", "parameters": [{"name": "lead_mm", "from": 320, "to": 400}],
+                             "checks_affected": ["voltage drop V5", "F1 continuous load"]})
+    T.approve(p, "T-0001", by="Pat Person", confirm=_person)
+    assert not tools.set_params({"lead_mm": 400}).is_error
+    with pytest.raises(T.PackageRefused, match="F1 interrupting rating"):
+        T.make_package(p, "T-0001")
+    T.waive(p, "T-0001", "F1 interrupting rating", "Mean Well publishes no short-circuit current for the LRS-50-5; its hiccup "
+            "protection limits the fault, accepted by the customer", by="Pat Person", confirm=_person)
+    pkg = T.make_package(p, "T-0001")
+    _validate(Path(pkg["folder"]) / "package.json")
+    rows = {r["name"]: r for r in pkg["checks"]["rows"]}
+    assert rows["F1 interrupting rating"]["to"]["status"] == "not_run" and pkg["waivers"][0]["check"] == "F1 interrupting rating"
+    assert pkg["checks"]["summary"]["to"]["not_run"] == 1 and pkg["checks"]["summary"]["to"]["fail"] == 0
+    cont = rows["F1 continuous load"]
+    assert cont["rule"] == "harness.fuse-continuous-load"
+    assert any(x["basis"] == "document" and x["url"].startswith("https://") and "Littelfuse" in x["text"] for x in cont["sources"]), cont
+    assert "Littelfuse" in cont["source"] and "https://" in cont["source"]
+    _sources_are_structured(pkg)
+    assert "F1 interrupting rating" in Path(pkg["folder"], "report.md").read_text().split("## Acceptance criteria")[0]
+    _export_sample(Path(pkg["folder"]))

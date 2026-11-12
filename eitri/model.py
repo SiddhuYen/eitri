@@ -292,6 +292,11 @@ class CheckResult:
         return f"[{mark}] {self.name}: {self.measured}{exp}{source_tag(self, numbers)}"
 
 
+def _verify_result(*args, **kwargs) -> CheckResult:
+    """A verify() result: the model's own requirement, rule id "verify"."""
+    return CheckResult(*args, rule="verify", **kwargs)
+
+
 class Checker:
     """Collects verification results; never raises on a failing check."""
 
@@ -307,38 +312,38 @@ class Checker:
 
     def equal(self, name: str, actual: float, expected: float, tol: float = 0.01) -> bool:
         ok = abs(float(actual) - float(expected)) <= tol
-        self.results.append(CheckResult(name, ok, self._fmt(actual), f"{self._fmt(expected)} ±{tol:g}"))
+        self.results.append(_verify_result(name, ok, self._fmt(actual), f"{self._fmt(expected)} ±{tol:g}"))
         return ok
 
     def between(self, name: str, actual: float, lo: float, hi: float) -> bool:
         ok = lo <= float(actual) <= hi
-        self.results.append(CheckResult(name, ok, self._fmt(actual), f"{lo:g}..{hi:g}"))
+        self.results.append(_verify_result(name, ok, self._fmt(actual), f"{lo:g}..{hi:g}"))
         return ok
 
     def at_least(self, name: str, actual: float, minimum: float) -> bool:
         ok = float(actual) >= minimum
-        self.results.append(CheckResult(name, ok, self._fmt(actual), f">= {minimum:g}"))
+        self.results.append(_verify_result(name, ok, self._fmt(actual), f">= {minimum:g}"))
         return ok
 
     def at_most(self, name: str, actual: float, maximum: float) -> bool:
         ok = float(actual) <= maximum
-        self.results.append(CheckResult(name, ok, self._fmt(actual), f"<= {maximum:g}"))
+        self.results.append(_verify_result(name, ok, self._fmt(actual), f"<= {maximum:g}"))
         return ok
 
     def count(self, name: str, items: Any, expected: int) -> bool:
         n = items if isinstance(items, int) else len(list(items))
         ok = n == expected
-        self.results.append(CheckResult(name, ok, str(n), str(expected)))
+        self.results.append(_verify_result(name, ok, str(n), str(expected)))
         return ok
 
     def true(self, name: str, condition: Any, detail: str = "") -> bool:
         ok = bool(condition)
-        self.results.append(CheckResult(name, ok, detail or ("yes" if ok else "no")))
+        self.results.append(_verify_result(name, ok, detail or ("yes" if ok else "no")))
         return ok
 
     def note(self, name: str, value: Any) -> None:
         """Record a measurement without judging it."""
-        self.results.append(CheckResult(name, True, self._fmt(value)))
+        self.results.append(_verify_result(name, True, self._fmt(value)))
 
     @property
     def failed(self) -> list[CheckResult]:

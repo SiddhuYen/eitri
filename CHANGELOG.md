@@ -3,13 +3,41 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
-## Unreleased (planned 0.7.1): sourced figure fixes, two new electronics checks, checks switched off are reported
+## 0.8.0: tickets and checked change packages, a source on every check, fuses, pneumatic catalogue parts, reference parts
+
+eitri for a shop that takes a ticket and hands back a checked change package. A ticket holds the customer's request and
+acceptance criteria; the agent writes a plan; **only a person approves it**, in their own terminal; the package is a fresh
+rebuild of the base and the result with every check's status and source, the diffs, the outputs and a draft change order,
+and it is refused while any check fails or did not run unwaived. Every check in every domain now carries a structured
+source. This release replaces the planned 0.7.1: its sourced figure fixes are here too.
 
 Every changed figure cites its document, revision and page in the code. Where sources disagree the conservative figure
 is used (the lower for a limit, the higher for a draw).
 
 ### Added
 
+- **"Not run" is a check status.** Every check (and every `verify()` / reference check) has `status`: `pass | warn | fail |
+  not_run`, in `result.json` (each check's `"status"`) and in `checks_not_run` (now in the CAD report too). The older
+  form still works: a not-run check keeps severity `warn` and text starting "not run: ". The fuse, pneumatic fail-safe and
+  cushioning, reference-clearance and other switched-off checks use it, and so does the package's refusal rule.
+- **Change packages cite the structured sources**: each check row of `package.json` has `source` (text, revision, URL),
+  `sources` (the records) and `rule`; `checks.csv` adds `rule`, `source_basis` and `source_urls`; report.md/html print
+  the same text. No row with a rule says "no document cited" any more, in any domain.
+- **Rules and sources for the new checks**: harness overcurrent protection (Littelfuse ATOF / MINI / 487 / 477, Bourns
+  MF-R, Blue Sea Systems / ABYC E-11, Arduino's 20 mA pin rating, each with the address it was read at), pneumatic
+  catalogue checks (each part's catalogue page), end-of-stroke energy (SMC RB), fail-safe (SMC M-E03-3-02, SY symbols),
+  and the reference-part checks (`cad.reference-*`). `tests/test_check_sources.py` scans every module that makes checks.
+- **One person-only confirmation**: `eitri reference add|accept|remove` use the same barriers as `eitri ticket approve`
+  (refused in an agent's process, a one-time code typed back on `/dev/tty`, a signed record in `eitri.json`);
+  `eitri reference list` says who accepted each file and whether the record's signature verifies.
+- **Agent prompt**: a static section on tickets (plan first, a person approves with `eitri ticket approve`, never claim
+  approval), sources, waivers and customer files in every domain's prompt and plugin skill; pneumatics: declare
+  `on_power_loss=` / `on_air_loss=`.
+- **Public API for hosts**: `eitri.electronics.checks.rail_loads`, `rail_limit`, `gate_voltage` (the `_`-prefixed names
+  stay as aliases). `Actuator(stall_A=)` and `Actuator.stall_current()`: the model's figure, else the catalogue's sourced one
+  (MG996R 2.5 A; SG90 2 A, an ASSUMPTION), else None (a check that needs it does not run). In the mechanism JSON.
+- **MCP registry**: the `eitri-hardware` command (no arguments, or `mcp`: the local MCP server with the kernel loaded
+  lazily, for `uvx eitri-hardware mcp`); `mcp-name: io.github.SiddhuYen/eitri` in the README; `glama.json`.
 - **Pneumatics catalogue parts** (`part=`): Festo DSNU-20-...-P-A, SMC CDQ2B32-...DZ / CQ2B32, SMC SY3120 / SY3220 /
   SY5120 5/2 valves, SMC TU0604 tube, AS2201F-01-06 speed controller, AN05-M5 silencer, SMC D-M9B and Festo SMT-8M-A
   position sensors; every figure cited in `eitri/pneumatics/catalog.py` (datasheet URL, revision, page).
@@ -26,35 +54,6 @@ is used (the lower for a limit, the higher for a draw).
   `on_power_loss=` / `on_air_loss=` (hold | extend | retract | release); "not run" when undeclared.
 - `c.screw_in(a, b)` (a speed controller screwed into a cylinder port) and per-port `connections=`: the BOM counts a fitting
   only where a threaded port needs one (KQ2H part numbers from the KQ2 catalogue), a tee once (KQ2T).
-
-### Changed
-
-- **Fasteners**: countersinks take the ISO 10642:2020 head diameter (M3 6.72, M5 11.2, M6 13.44, M8 17.92, M10 22.4,
-  M12 26.88 mm; M4 8.96). Heat-set insert holes follow ruthex: M2.5 4.0 mm, M8 9.6 mm.
-- **Bearings**: a bare miniature bearing name is the open bearing (683 is 2 mm wide); `683ZZ` / `-2RS` give the
-  shielded width (3 mm). Eleven sizes changed (NSK E126i).
-- **Harness**: Micro-Fit 3.0 is rated by wire size and by the number of powered circuits (Molex PS-43045 Rev P,
-  wire-to-wire: 18 AWG 7 A at 2 circuits down to 5 A at 24). 40 AWG chassis rating 0.09 A. FASTON cites Rev C and
-  adds 10 AWG 24 A.
-- **Pneumatics**: the load-ratio limit follows the cylinder's new `duty=`: `"moving"` 0.5 (the default),
-  `"static"` 0.7 (clamping), `"guided"` 1.0 (SMC). A regulator with no rating defaults to 10 bar (SMC AR). Default
-  flow estimates: silencer C 1.0 (SMC AN05), flow control C 0.3 (SMC AS M5); a speed controller's free-flow
-  direction passes no more than its throttle.
-- **Pneumatics, air consumption**: the lines between valve and cylinder are refilled from atmospheric, so they take
-  V x p_gauge / p_atm per stroke, not x p_abs / p_atm (SMC Best Pneumatics technical data, Data 2: 2 m of 6 mm bore at
-  0.5 MPa is 0.56 L ANR per cycle; eitri gave 0.67). The swept-volume and required-flow formulas already matched SMC.
-- **Pneumatics, end-of-stroke energy**: the impact speed is 2 x the mean speed (SMC RB catalogue p.5: "collision speed
-  = 2 x average speed" when the speed comes from the stroke time); it was the mean speed.
-- **Pneumatics, BOM fittings**: no more fitting per tube end on built-in push-in ports and tees (they were double-counted).
-- **Pneumatics, default valve C**: 0.6, b 0.29 (the smallest body-ported SMC SY3000, CAT.EUS11-83 p.3); the old 1.0 came
-  from the series' best-case cover figure.
-- **Servos**: SG90 draws 2 A at stall (the higher of TowerPro's "0.5A - 2A"). STS3215 16.5 kg·cm stall, 4 rated at
-  6 V (Feetech spec sheet). An actuator with no published continuous rating is assumed at 1/5 of stall (was 1/3).
-- **Uno on VIN**: the 5 V regulator's heat uses 85 °C/W, the worst board in the SPX1117 datasheet's Table 1 (was 46,
-  its best case). At 9 V on VIN the 5V pin gives about 0.29 A (was 0.54 A).
-
-### Added
-
 - **Reference parts: design around a customer's existing part.** `reference_step("inputs/motor.step", name="motor",
   clearance=1.0, contact=["bracket"])` in a CAD model loads a STEP file as immutable geometry that joins the assembly,
   the viewer, the review image, the exports and the BOM (never a print plate). Helpers: `.bbox`, `.holes()` /
@@ -62,7 +61,7 @@ is used (the lower for a limit, the higher for a draw).
   `.shape` (a copy for booleans). Each build checks: the file still has the SHA-256 recorded in `eitri.json` (a
   changed file fails the build until a person runs `eitri reference accept`), the geometry is unmodified after direct
   edits (edits naming it are refused), no designed part overlaps it, parts not in `contact` keep `clearance`, and
-  every `motor.mount(hole, part=, screw=, series=)` is coaxial within its stated tolerance with an ISO 273 clearance
+  every `motor.mount(hole, part=, screw=, series=)` is coaxial within its stated tolerance with an ISO 273 clearance (as published by Albany County Fasteners)
   diameter. A declared reference, and its mounts, cannot be dropped (`eitri reference remove`). The file is treated
   as untrusted: it must be in `inputs/`, is capped (20 MB, 500k entities, 20k faces) and pre-scanned before it is
   parsed inside the build. New `eitri reference list|add|accept|remove`; example `examples/motor-bracket/`; docs
@@ -119,6 +118,56 @@ is used (the lower for a limit, the higher for a draw).
   `eitri/demos/servo-arm/servo_arm_harness.py` (one ATO 5 A fuse at a Mean Well 5 V supply).
   Existing harnesses that declare no source now show one "not run" warning for their supply nets (`quad-power`: 28
   pass, 6 warn).
+
+### Changed
+
+- **Fasteners**: countersinks take the ISO 10642:2020 head diameter (M3 6.72, M5 11.2, M6 13.44, M8 17.92, M10 22.4,
+  M12 26.88 mm; M4 8.96). Heat-set insert holes follow ruthex: M2.5 4.0 mm, M8 9.6 mm.
+- **Bearings**: a bare miniature bearing name is the open bearing (683 is 2 mm wide); `683ZZ` / `-2RS` give the
+  shielded width (3 mm). Eleven sizes changed (NSK E126i).
+- **Harness**: Micro-Fit 3.0 is rated by wire size and by the number of powered circuits (Molex PS-43045 Rev P,
+  wire-to-wire: 18 AWG 7 A at 2 circuits down to 5 A at 24). 40 AWG chassis rating 0.09 A. FASTON cites Rev C and
+  adds 10 AWG 24 A.
+- **Pneumatics**: the load-ratio limit follows the cylinder's new `duty=`: `"moving"` 0.5 (the default),
+  `"static"` 0.7 (clamping), `"guided"` 1.0 (SMC). A regulator with no rating defaults to 10 bar (SMC AR). Default
+  flow estimates: silencer C 1.0 (SMC AN05), flow control C 0.3 (SMC AS M5); a speed controller's free-flow
+  direction passes no more than its throttle.
+- **Pneumatics, air consumption**: the lines between valve and cylinder are refilled from atmospheric, so they take
+  V x p_gauge / p_atm per stroke, not x p_abs / p_atm (SMC Best Pneumatics technical data, Data 2: 2 m of 6 mm bore at
+  0.5 MPa is 0.56 L ANR per cycle; eitri gave 0.67). The swept-volume and required-flow formulas already matched SMC.
+- **Pneumatics, end-of-stroke energy**: the impact speed is 2 x the mean speed (SMC RB catalogue p.5: "collision speed
+  = 2 x average speed" when the speed comes from the stroke time); it was the mean speed.
+- **Pneumatics, BOM fittings**: no more fitting per tube end on built-in push-in ports and tees (they were double-counted).
+- **Pneumatics, default valve C**: 0.6, b 0.29 (the smallest body-ported SMC SY3000, CAT.EUS11-83 p.3); the old 1.0 came
+  from the series' best-case cover figure.
+- **Servos**: SG90 draws 2 A at stall (the higher of TowerPro's "0.5A - 2A"). STS3215 16.5 kg·cm stall, 4 rated at
+  6 V (Feetech spec sheet). An actuator with no published continuous rating is assumed at 1/5 of stall (was 1/3).
+- **Uno on VIN**: the 5 V regulator's heat uses 85 °C/W, the worst board in the SPX1117 datasheet's Table 1 (was 46,
+  its best case). At 9 V on VIN the 5V pin gives about 0.29 A (was 0.54 A).
+
+### Fixed
+
+- `curl -fsSL https://eitri.io/install | sh -s -- --plugin` on a machine with no agent app: eitri installs and the script
+  exits 0 with "install Claude Code, Codex or Cursor, then run eitri plugin install" (it exited 1 pointing at FAIL lines
+  that did not exist). A real registration failure still exits 1.
+
+### Known limits
+
+- Approval is a barrier against an agent approving by accident or through eitri's tools, not a security boundary against
+  code running as the same user (it can unset the markers or read the signing key). A signed approval verifies only on the
+  machine that made it. The real-terminal flow (a person typing the code) is tested with a stand-in terminal.
+- One model file per ticket; combined (multi-domain) projects are hosted-only and have no tickets. A removed check (a servo
+  swap renames it) is flagged on page one, not refused. A firmware package is refused wherever arduino-cli is missing.
+- A harness that declares no source gets a "not run" warning, not a fail, so a package for it is refused until a person
+  waives it or the source is declared. The quad-power demo declares none (it would need fuses past the catalogue's 40 A).
+- The ISO 273 table is one manufacturer's ISO-labelled chart (Albany County Fasteners); the standard itself is paywalled
+  and was not read. The check says so. Optimas differs at M12-M16.
+- A reference file is accepted on its first build (trust on first use); hosted builds cap inputs at 8 MB and have no
+  upload or accept UI yet. Hole detection finds full-round cylinders only.
+- Pneumatic catalogue: about 11 part numbers. The schematic has no device tags, sensors or title block; no manifolds, no
+  cycle time. The end-of-stroke speed uses SMC's 2x factor, possibly over-conservative without a speed controller.
+- CAD geometry findings (thin wall, knife edge) are report issues with no sourced figure (1.5 mm, 30 deg).
+- Board and module outlines are not in `eitri.electronics.catalog` yet (hosted keeps them).
 
 ## 0.7.0: eitri as a plugin in your own agent
 
