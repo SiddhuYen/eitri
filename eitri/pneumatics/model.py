@@ -103,11 +103,19 @@ class Component:
     C: float | None = None               # ISO 6358 sonic conductance, L/(s·bar) ANR
     b: float | None = None               # ISO 6358 critical pressure ratio
     max_bar: float | None = None         # maximum working pressure from the part's datasheet (default: PRESSURE_RATINGS by kind)
+    min_bar: float | None = None         # minimum operating pressure from the part's datasheet (None: not graded)
+    catalog: dict = field(default_factory=dict)   # filled from a catalogue part (part=): sources, catalogue figures, extra facts
+    connections: dict = field(default_factory=dict)  # port -> its connection: "push-in 6" (a built-in fitting for 6 mm tube),
+                                                     # a female thread "M5" / "Rc1/8" / "G1/8", or a male thread "R1/8 male"
 
     def __post_init__(self) -> None:
         if not self.name or any(ch in str(self.name) for ch in ". \t\n"):
             raise PneumaticsError(f"component name {self.name!r} must be non-empty and contain no dots or spaces")
         self.name = str(self.name)
+        if self.min_bar is not None:
+            self.min_bar = float(self.min_bar)
+            if self.min_bar < 0:
+                raise PneumaticsError(f"{self.name}: min_bar must not be negative")
         if self.C is not None:
             self.C = _pos(self.C, f"{self.name} C")
         if self.b is not None:
@@ -170,6 +178,15 @@ class Valve(Component):
     returns: str = "spring"              # spring | solenoid | detent
     normally: str = "closed"             # 3/2 and 2/2: closed | open (which position is the rest position)
     center: str = "closed"               # 5/3: closed | exhaust | pressure (the middle position)
+    C_exhaust: float | None = None       # ISO 6358 C, b of the work-to-exhaust passages (A/B -> R/S) when the datasheet gives them apart
+    b_exhaust: float | None = None
+    coil_V: float | None = None          # solenoid coil rated voltage (DC) and power, from the datasheet: the I/O list's outputs
+    coil_W: float | None = None
+    connector: str = ""                  # the coil's electrical entry (plug, M8 ...)
+    signal: str = ""                     # the control signal name for the coil (14 side); "" -> <name>_14
+    signal_12: str = ""                  # the 12-side coil of a double-solenoid valve; "" -> <name>_12
+    terminal: str = ""                   # where the coil lands (terminal / PLC output address), free text for the I/O list
+    terminal_12: str = ""
 
     def __post_init__(self) -> None:
         if self.cls not in VALVE_CLASSES:
@@ -178,6 +195,32 @@ class Valve(Component):
         super().__post_init__()
         if self.normally not in ("closed", "open") or self.center not in ("closed", "exhaust", "pressure"):
             raise PneumaticsError(f"valve {self.name}: normally must be closed|open and center closed|exhaust|pressure")
+        if self.C_exhaust is not None:
+            self.C_exhaust = _pos(self.C_exhaust, f"{self.name} C_exhaust")
+        if self.b_exhaust is not None and not 0 <= float(self.b_exhaust) < 1:
+            raise PneumaticsError(f"{self.name}: b_exhaust must be in [0, 1)")
+        for k in ("coil_V", "coil_W"):
+            if getattr(self, k) is not None:
+                setattr(self, k, _pos(getattr(self, k), f"{self.name} {k}"))
+
+    @property
+    def coils(self) -> list[tuple[str, str, str]]:
+        """The solenoid coils as (ISO 5599 pilot number, signal name, terminal): 14 drives position 2; 12 is the return side of a
+        double-solenoid valve (or a 5/3's other side)."""
+        if self.actuation != "solenoid":
+            return []
+        out = [("14", self.signal or f"{self.name}_14", self.terminal)]
+        if self.returns == "solenoid" or self.cls == "5/3":
+            out.append(("12", self.signal_12 or f"{self.name}_12", self.terminal_12))
+        return out
+
+    def flow_data(self, from_port: str, to_port: str) -> tuple[float, float] | None:
+        """(C, b) for a passage: the exhaust figures for a work port to an exhaust port when given, else the valve's C, b."""
+        if to_port in EXHAUST_PORTS and self.C_exhaust is not None:
+            return self.C_exhaust, (self.b_exhaust if self.b_exhaust is not None else (self.b if self.b is not None else 0.0))
+        if self.has_flow_data:
+            return self.C, self.b
+        return None
 
     @property
     def positions(self) -> list[list[tuple[str, str]]]:
@@ -212,6 +255,14 @@ class Cylinder(Component):
     spring_N: float | None = None        # single-acting: the return spring's force at full extension
     friction_fraction: float = 0.10      # ESTIMATE: seal friction and losses as a fraction of the theoretical force (10 % is the usual sizing allowance)
     duty: str = "moving"                 # what the load does, for the load-ratio limit (LOAD_RATIOS): moving | static | guided
+    load_mass_kg: float | None = None    # the mass the rod moves (for the end-of-stroke kinetic energy against the cushioning)
+    piston_mass_kg: float = 0.0          # the cylinder's own moving mass (piston + rod), from the datasheet
+    allowable_ke_J: float | None = None  # the cushioning's allowable kinetic energy, from the datasheet
+    speed_min_mm_s: float | None = None  # the catalogue's piston speed range
+    speed_max_mm_s: float | None = None
+    magnet: bool | None = None           # a magnetic piston (needed by reed / magnetic position sensors); None: not stated
+    on_power_loss: str | None = None     # what it must do when the electrical power is lost: hold | extend | retract | release
+    on_air_loss: str | None = None       # ... and when the air supply is lost (failsafe.py grades both against the valves)
 
     def __post_init__(self) -> None:
         self.kind, self.ports = "cylinder", (["CAP", "ROD"] if self.acting == "double" else ["CAP"])
@@ -231,7 +282,14 @@ class Cylinder(Component):
         if self.load_retract_N is None:
             self.load_retract_N = 0.0 if self.acting == "single" else self.load_N
         self.load_retract_N = float(self.load_retract_N)
-        for k in ("speed_mm_s", "speed_retract_mm_s", "spring_N"):
+        for k in ("on_power_loss", "on_air_loss"):
+            v = getattr(self, k)
+            if v is not None:
+                v = str(v).strip().lower()
+                if v not in ("hold", "extend", "retract", "release"):
+                    raise PneumaticsError(f"cylinder {self.name}: {k} must be hold, extend, retract or release, got {v!r}")
+                setattr(self, k, v)
+        for k in ("speed_mm_s", "speed_retract_mm_s", "spring_N", "load_mass_kg", "allowable_ke_J", "speed_min_mm_s", "speed_max_mm_s"):
             if getattr(self, k) is not None:
                 setattr(self, k, _pos(getattr(self, k), f"{self.name} {k}"))
 
@@ -295,10 +353,20 @@ class Tube:
     b_ratio: float | None = None
     part_number: str = ""
     notes: str = ""
+    max_bar: float | None = None         # the tube's maximum working pressure (graded with the components it carries air to)
+    catalog: dict = field(default_factory=dict)
+    od_mm: float | None = None           # outside diameter (push-in fittings are sized by it)
+    direct: bool = False                 # no tube: the two ports are screwed straight together (a speed controller in a cylinder port)
 
     def __post_init__(self) -> None:
         if not self.name or any(ch in str(self.name) for ch in ". \t\n"):
             raise PneumaticsError(f"tube name {self.name!r} must be non-empty and contain no dots or spaces")
+        if self.max_bar is not None:
+            self.max_bar = _pos(self.max_bar, f"tube {self.name} max_bar")
+        if self.od_mm is not None:
+            self.od_mm = _pos(self.od_mm, f"tube {self.name} od_mm")
+            if self.od_mm <= self.id_mm:
+                raise PneumaticsError(f"tube {self.name}: od_mm must be larger than id_mm")
         self.id_mm, self.length_m = _pos(self.id_mm, f"tube {self.name} id_mm"), _pos(self.length_m, f"tube {self.name} length_m")
         self.fittings = int(self.fittings)
         if self.fittings < 0:
@@ -309,6 +377,74 @@ class Tube:
     @property
     def area_mm2(self) -> float:
         return math.pi / 4 * self.id_mm ** 2
+
+
+SENSOR_POSITIONS = ("extended", "retracted")
+SENSOR_OUTPUTS = ("2-wire", "PNP", "NPN", "reed")
+
+
+@dataclass(eq=False)
+class Sensor:
+    """A cylinder position sensor (a reed or solid-state switch on the cylinder's slot): an input of the I/O list."""
+    name: str
+    cylinder: str
+    position: str = "extended"           # extended | retracted: where on the stroke it switches
+    output: str = "PNP"                  # 2-wire | PNP | NPN | reed
+    V_min: float | None = None           # supply / load voltage range from the datasheet
+    V_max: float | None = None
+    load_mA_min: float | None = None
+    load_mA_max: float | None = None
+    drop_V: float | None = None
+    leakage_mA: float | None = None
+    connector: str = ""
+    signal: str = ""                     # "" -> <cylinder>_<EXTENDED|RETRACTED>
+    terminal: str = ""
+    part_number: str = ""
+    notes: str = ""
+    fits: tuple = ()                     # cylinder series the sensor mounts on (from the catalogue)
+    catalog: dict = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not self.name or any(ch in str(self.name) for ch in ". \t\n"):
+            raise PneumaticsError(f"sensor name {self.name!r} must be non-empty and contain no dots or spaces")
+        self.position = str(self.position).strip().lower()
+        if self.position not in SENSOR_POSITIONS:
+            raise PneumaticsError(f"sensor {self.name}: position must be one of {SENSOR_POSITIONS}")
+        if self.output not in SENSOR_OUTPUTS:
+            raise PneumaticsError(f"sensor {self.name}: output must be one of {SENSOR_OUTPUTS}")
+        if not self.signal:
+            self.signal = f"{self.cylinder}_{self.position.upper()}"
+
+
+def _same(a, b) -> bool:
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)) and not isinstance(a, bool) and not isinstance(b, bool):
+        return abs(float(a) - float(b)) <= 1e-6 * max(1.0, abs(float(b)))
+    return a == b
+
+
+def _from_part(kind: str, part: str, cls, kw: dict) -> dict:
+    """Fill a component's keyword arguments from a catalogue part number (eitri.pneumatics.catalog). A figure the model also gives
+    must agree with the part's."""
+    from . import catalog as _cat
+    try:
+        fields, series = _cat.lookup(kind, part)
+    except _cat.CatalogError as e:
+        raise PneumaticsError(str(e)) from None
+    names = set(cls.__dataclass_fields__)
+    extra = {}
+    for k, v in fields.items():
+        if k not in names:
+            extra[k] = v
+            continue
+        if kw.get(k) is not None and not _same(kw[k], v):
+            raise PneumaticsError(f"{kw.get('name', '')}: {part} has {k}={v!r} (datasheet) but the model gives {kw[k]!r}; drop the "
+                                  f"argument or pick the part that matches")
+        kw[k] = v
+    if not kw.get("part_number"):
+        kw["part_number"] = str(part).strip()
+    kw["catalog"] = {"series": series.pattern, "sources": [ _cat.cite(s) for s in series.sources], "source_ids": list(series.sources),
+                     "figures": dict(series.figures), "info": extra}
+    return kw
 
 
 # --------------------------------------------------------------------------- the circuit
@@ -323,6 +459,8 @@ class Circuit:
         self.vents: set[PortRef] = set()             # ports open to atmosphere (an exhaust without a silencer)
         self.attached: dict[PortRef, PortRef] = {}   # a silencer screwed straight onto an exhaust port: port -> silencer.IN
         self.layout: dict[str, list[float]] = {}
+        self.sensors: dict[str, Sensor] = {}
+        self.control_V: float | None = None          # the control voltage (DC) the coils and sensors run on (the I/O list's)
 
     # -- building ----------------------------------------------------------
     def add(self, comp: Component) -> Component:
@@ -340,22 +478,59 @@ class Circuit:
     def frl(self, name: str, set_bar: float, C: float | None = None, b: float | None = None, lubricator: bool = False, **kw) -> Regulator:
         return self.add(Regulator(name, set_bar=set_bar, C=C, b=b, frl=True, lubricator=lubricator, **kw))
 
-    def valve(self, name: str, cls: str = "5/2", actuation: str = "solenoid", returns: str = "spring", C: float | None = None, b: float | None = None, **kw) -> Valve:
-        return self.add(Valve(name, cls=cls, actuation=actuation, returns=returns, C=C, b=b, **kw))
+    def valve(self, name: str, cls: str | None = None, actuation: str | None = None, returns: str | None = None, C: float | None = None,
+              b: float | None = None, part: str | None = None, **kw) -> Valve:
+        kw.update(name=name, cls=cls, actuation=actuation, returns=returns, C=C, b=b)
+        if part:
+            kw = _from_part("valve", part, Valve, kw)
+        kw = {k: v for k, v in kw.items() if v is not None}
+        kw.setdefault("cls", "5/2")
+        return self.add(Valve(**kw))
 
-    def cylinder(self, name: str, bore_mm: float, rod_mm: float, stroke_mm: float, acting: str = "double", load_N: float = 0.0, **kw) -> Cylinder:
-        return self.add(Cylinder(name, bore_mm=bore_mm, rod_mm=rod_mm, stroke_mm=stroke_mm, acting=acting, load_N=load_N, **kw))
+    def cylinder(self, name: str, bore_mm: float | None = None, rod_mm: float | None = None, stroke_mm: float | None = None,
+                 acting: str | None = None, load_N: float = 0.0, part: str | None = None, **kw) -> Cylinder:
+        kw.update(name=name, bore_mm=bore_mm, rod_mm=rod_mm, stroke_mm=stroke_mm, acting=acting, load_N=load_N)
+        if part:
+            kw = _from_part("cylinder", part, Cylinder, kw)
+        missing = [k for k in ("bore_mm", "rod_mm", "stroke_mm") if kw.get(k) is None]
+        if missing:
+            raise PneumaticsError(f"cylinder {name}: give {', '.join(missing)} (or part= a catalogue part number)")
+        return self.add(Cylinder(**{k: v for k, v in kw.items() if v is not None}))
 
-    def flow_control(self, name: str, meter: str = "out", C: float | None = None, b: float | None = None, **kw) -> FlowControl:
-        return self.add(FlowControl(name, meter=meter, C=C, b=b, **kw))
+    def flow_control(self, name: str, meter: str = "out", C: float | None = None, b: float | None = None, part: str | None = None, **kw) -> FlowControl:
+        kw.update(name=name, meter=meter, C=C, b=b)
+        if part:
+            kw = _from_part("flow_control", part, FlowControl, kw)
+        return self.add(FlowControl(**{k: v for k, v in kw.items() if v is not None}))
+
+    def sensor(self, name: str, cylinder, position: str = "extended", part: str | None = None, **kw) -> Sensor:
+        """A position sensor on a cylinder (switches at the extended or retracted end): an input of the I/O list."""
+        cyl = cylinder.name if isinstance(cylinder, Component) else str(cylinder)
+        if cyl not in self.components or self.components[cyl].kind != "cylinder":
+            raise PneumaticsError(f"sensor {name}: {cyl!r} is not a cylinder of this circuit")
+        if name in self.sensors or name in self.components:
+            raise PneumaticsError(f"{name!r} is already defined")
+        kw.update(name=name, cylinder=cyl, position=position)
+        if part:
+            kw = _from_part("sensor", part, Sensor, kw)
+        s = Sensor(**{k: v for k, v in kw.items() if v is not None})
+        self.sensors[name] = s
+        return s
+
+    def control_voltage(self, volts: float) -> None:
+        """The DC control voltage the valve coils and sensors are switched with (usually the PLC's 24 V)."""
+        self.control_V = _pos(volts, "control voltage")
 
     def node(self, name: str, **kw) -> Node:
         return self.add(Node(name, **kw))
 
-    def silencer(self, port, name: str | None = None, C: float | None = None, b: float | None = None, **kw) -> Silencer:
+    def silencer(self, port, name: str | None = None, C: float | None = None, b: float | None = None, part: str | None = None, **kw) -> Silencer:
         """A silencer screwed onto an exhaust port (no tube)."""
         ref = self._port(port)
-        s = self.add(Silencer(name or f"S_{ref.component}_{ref.port}", C=C, b=b, **kw))
+        kw.update(name=name or f"S_{ref.component}_{ref.port}", C=C, b=b)
+        if part:
+            kw = _from_part("silencer", part, Silencer, kw)
+        s = self.add(Silencer(**{k: v for k, v in kw.items() if v is not None}))
         if ref in self.attached or ref in self.vents or self._tubes_at(ref):
             raise PneumaticsError(f"{ref} already has something on it")
         self.attached[ref] = s.port("IN")
@@ -369,7 +544,7 @@ class Circuit:
         self.vents.add(ref)
         return ref
 
-    def tube(self, name: str, a, b, id_mm: float = 6.0, length_m: float = 1.0, **kw) -> Tube:
+    def tube(self, name: str, a, b, id_mm: float | None = None, length_m: float = 1.0, part: str | None = None, **kw) -> Tube:
         if any(t.name == name for t in self.tubes):
             raise PneumaticsError(f"tube {name!r} is already defined")
         ra, rb = self._port(a), self._port(b)
@@ -378,9 +553,20 @@ class Circuit:
         for r in (ra, rb):
             if self.components[r.component].kind != "node" and (self._tubes_at(r) or r in self.attached or r in self.vents):
                 raise PneumaticsError(f"tube {name}: port {r} already has a connection (use a Node for a tee)")
-        t = Tube(name, ra, rb, id_mm, length_m, **kw)
+        kw.update(id_mm=id_mm)
+        if part:
+            kw = _from_part("tube", part, Tube, kw)
+        if kw.get("id_mm") is None:
+            kw["id_mm"] = 6.0
+        t = Tube(name, ra, rb, length_m=length_m, **{k: v for k, v in kw.items() if v is not None})
         self.tubes.append(t)
         return t
+
+    def screw_in(self, a, b, name: str | None = None) -> Tube:
+        """Two ports screwed straight together, with no tube (a speed controller or a fitting in a cylinder port): a joint with a
+        tiny length for the flow estimate, no tube and no fitting in the BOM."""
+        ra, rb = self._port(a), self._port(b)
+        return self.tube(name or f"J_{ra.component}_{ra.port}", ra, rb, id_mm=4.0, length_m=0.01, fittings=0, direct=True)
 
     def _port(self, x) -> PortRef:
         if isinstance(x, PortRef):

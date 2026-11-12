@@ -29,13 +29,38 @@ c.flow_control(name, meter="out", C=None, b=None)                a speed control
 c.node(name)                                                     a tee: any number of tubes meet at its port N
 c.tube(name, from_port, to_port, id_mm=6, length_m=1, fittings=2, C=None)    a run of tube; ports are comp["PORT"] or "NAME.PORT"
 c.silencer(valve["R"])                                           a silencer screwed onto an exhaust port;  c.exhaust(port) leaves it open
-every component also takes max_bar= (its maximum working pressure, from its datasheet) and part_number=
+c.sensor(name, cylinder, "extended"|"retracted", part=None, signal="", terminal="")   a position switch on a cylinder: a PLC input
+c.control_voltage(24)                                            the DC control voltage the coils and sensors run on
+every component also takes max_bar= and min_bar= (its working pressure range, from its datasheet) and part_number=; a tube max_bar=
+valves also take coil_V=, coil_W=, connector=, signal= / signal_12= (the PLC signal names of coils 14 / 12), terminal=,
+  C_exhaust= / b_exhaust= (the A/B -> R/S passage when the datasheet gives it apart)
+cylinders also take load_mass_kg= (the mass the rod moves), allowable_ke_J=, piston_mass_kg=, speed_min_mm_s= / speed_max_mm_s=, magnet=,
+  on_power_loss= / on_air_loss= (what it must do: "hold" | "extend" | "retract" | "release"; graded against its valves)
+c.screw_in(port_a, port_b)                                       two parts screwed straight together (a speed controller in a cylinder port): no tube, no fitting
+components take connections={"P": "M5", "A": "push-in 6", ...} (catalogue parts fill it): the BOM counts a fitting only where a threaded port needs one
 ```
 
+## Catalogue parts (part=)
+
+`part="..."` on a cylinder, valve, tube, flow control, silencer or sensor fills its datasheet figures (bore, rod, stroke, pressure
+range, port, C/b per passage, coil, cushioning energy, speed range, sensor electrics), each cited in `eitri/pneumatics/catalog.py`.
+A figure you also give must agree with the part's. Known part numbers (the stroke is read from the number and checked):
+
+- cylinders: `FESTO DSNU-20-<stroke>-P-A` (ISO 6432, Ø20/8, 1-320 mm, 1-10 bar, G1/8, magnetic, elastic cushioning 0.2 J),
+  `SMC CDQ2B32-<stroke>DZ` (compact Ø32/16, strokes 5-50 by 5, 75, 100; 0.5-10 bar; Rc1/8; magnet; bumper 0.29 J; 50-500 mm/s;
+  `CQ2B32-...DZ` is the same without a magnet)
+- valves: `SMC SY3120-5LZ-C6` (5/2 single solenoid, spring return, C 0.76 b 0.30 P->A/B, C 0.65 b 0.39 A/B->R/S, 1.5-7 bar,
+  24 VDC 0.4 W, L plug), `SMC SY3220-5LZ-C6` (the same, double solenoid: holds its position unpowered, 1-7 bar),
+  `SMC SY5120-5LZ-01` (C 1.9 / 2.4, all ports 1/8); drop the Z for the 0.35 W coil without indicator light
+- `SMC TU0604` tube (6 x 4 mm polyurethane, 8 bar), `SMC AS2201F-01-06` speed controller (C 0.7), `SMC AN05-M5` silencer (C 1.0)
+- sensors: `SMC D-M9B` (2-wire, 10-28 V, 2.5-40 mA, for CQ2), `FESTO SMT-8M-A-PS-24V-E-0,3-M8D` (PNP, 5-30 V, M8, for DSNU with SMBR-8-20)
+
+Any other part: give its figures by hand from its datasheet (and its part_number) and say where they come from in your reply.
+
 C is the ISO 6358 sonic conductance in L/(s·bar) ANR and b the critical pressure ratio, from the component's datasheet
-(a 1/8" solenoid valve is around C 0.5-1.5, b 0.3; a 1/4" FRL around C 2-4; SMC AN silencers C 1 (M5), 2 (1/8"), 3 (1/4");
+(a 1/8" solenoid valve is around C 0.5-2, b 0.3: SMC's body-ported SY3000 is C 0.6-0.76; a 1/4" FRL around C 2-4; SMC AN silencers C 1 (M5), 2 (1/8"), 3 (1/4");
 SMC AS speed controllers fully open about C 0.3 (M5), 0.7 (1/8"), 1.4 (1/4"), 2.8 (3/8")). Without them a conservative estimate
-is used (the smallest of those sizes: silencer 1.0, flow control 0.3) and the report says so in a warning. Units: bar gauge, N, mm, mm/s, L/min ANR.
+is used (the smallest of those sizes: valve 0.6, silencer 1.0, flow control 0.3) and the report says so in a warning. Units: bar gauge, N, mm, mm/s, L/min ANR.
 
 ## The checks every build runs
 
@@ -45,7 +70,8 @@ is used (the smallest of those sizes: silencer 1.0, flow control 0.3) and the re
   friction allowance), the pressure being the lowest regulator on the supply path (or the supply's); the load ratio is load / theoretical
   force. A single-acting cylinder retracts by its spring (spring_N), graded against load_retract_N.
 - air (FAIL above the supply's capacity, WARN above 80%): free-air consumption per cycle = the swept volumes (both strokes, one for a
-  spring return) plus the dead volume of the lines between valve and cylinder, expanded to atmospheric; x cycles per minute.
+  spring return) at p_abs / p_atm, plus the lines between valve and cylinder refilled from atmospheric (V x p_gauge / p_atm, SMC's
+  method); x cycles per minute.
 - speed per stroke (FAIL below the requirement, WARN within 20%): ISO 6358 flow through the fill path (supply -> regulator -> valve ->
   tube, components in series: 1/C² = sum 1/Cᵢ², b = min bᵢ) against the pressure the load needs, and through the exhaust path to the
   silencer; the achievable speed is the lesser of the two.
@@ -54,6 +80,19 @@ is used (the smallest of those sizes: silencer 1.0, flow control 0.3) and the re
   it reaches before the next regulator; the failure names it. Give `max_bar=` from the part's datasheet on any component; the
   defaults are vendor figures: regulator 10 bar (SMC AR20-AR60, 1.0 MPa), FRL 10 (Festo MS4-LFR), valve 7 (SMC SY3000), flow control
   10 (SMC AS), cylinder 10 (Festo DSNU), silencer 10 (Festo U), tee 10 (SMC KQ2). A supply above a valve's 7 bar needs a regulator.
+- catalogue figures (when a part= or the same fields are given): the cylinder's force against the force its datasheet prints
+  (a FAIL means the bore, rod or part is wrong), minimum operating pressure of cylinders and valves (a pilot-operated valve does
+  not shift below it), the piston speed range (FAIL above the maximum, WARN below the minimum), the end-of-stroke kinetic energy
+  1/2 m v^2 (load_mass_kg + piston mass) against the cushioning's allowable energy (v is the required speed when a speed controller
+  sits on the stroke, else what the open paths pass; not run without load_mass_kg), each coil's voltage against the control voltage,
+  and each sensor's cylinder (a magnetic piston, the series it mounts on) and supply voltage.
+- fail-safe, per cylinder, on a loss of electrical power and on a loss of air: the state its valves give (5/2 single solenoid
+  spring return: its rest position; 5/2 double solenoid: holds its last position on a power cut; 5/3: its centre: closed traps
+  the air (a WARNING for "hold": SMC says it may not hold for long), exhaust releases, pressure extends; manual/pilot valves keep
+  their position; on a loss of air every chamber joined to the supply or an exhaust loses its force, a spring returns a
+  single-acting cylinder) against `on_power_loss=` / `on_air_loss=`. Not declared: "not run" (a warning naming what to declare).
+- end-of-stroke energy uses an impact speed of 2 x the mean speed (SMC: "collision speed = 2 x average speed" when the speed comes
+  from the stroke time).
 - flow data estimated: one warning naming every component or tube sized with an estimate (tubes: effective area from bore and
   equivalent length with 30 diameters per fitting, C = S/5, b = 0.5; valves/regulators/silencers/flow controls: small-component
   defaults; a flow control's free-flow direction passes no more than its throttle fully open, as in SMC's AS tables).
@@ -64,8 +103,9 @@ is used (the smallest of those sizes: silencer 1.0, flow control 0.3) and the re
 ## Outputs of every build (out/)
 
 `<name>.schematic.svg` (the schematic), `<name>.png` (the review image), `<name>.bom.md` / `.bom.csv` (components with part numbers,
-tube by bore with a 10% service loop, fittings), `<name>.cylinders.md` / `.csv` (per stroke: pressure, load, usable force, load ratio,
-required and achievable speed, air per minute, status).
+tube by bore with a 10% service loop, fittings, sensors), `<name>.cylinders.md` / `.csv` (per stroke: pressure, load, usable force, load
+ratio, required and achievable speed, air per minute, status), `<name>.io.md` / `.io.csv` (the I/O list for the PLC programmer: every
+solenoid coil a DO and every position sensor a DI, with signal name, function, part, voltage, current, connector and terminal).
 
 ## Direct edits and layout
 
@@ -88,7 +128,8 @@ def build(p):
     frl = c.frl("FRL", set_bar=p.p_bar, C=2.0, b=0.35)
     v = c.valve("V1", "3/2", actuation="solenoid", returns="spring", C=0.8, b=0.3)
     cyl = c.cylinder("C1", bore_mm=p.bore_mm, rod_mm=10, stroke_mm=p.stroke_mm, acting="single", load_N=p.clamp_N,
-                     spring_N=25, speed_mm_s=100, cycles_per_min=p.cycles_per_min, duty="static")   # clamping: load ratio up to 0.7
+                     spring_N=25, speed_mm_s=100, cycles_per_min=p.cycles_per_min, duty="static",   # clamping: load ratio up to 0.7
+                     on_power_loss="retract", on_air_loss="retract")      # the 3/2 vents and the spring opens the clamp
     c.tube("T1", air["OUT"], frl["IN"], id_mm=8, length_m=1.5)
     c.tube("T2", frl["OUT"], v["P"], id_mm=6, length_m=0.8)
     c.tube("T3", v["A"], cyl["CAP"], id_mm=6, length_m=1.0)
@@ -118,7 +159,8 @@ def build(p):
     fc1 = c.flow_control("FC1", meter="out", C=0.6, b=0.3)                    # on the rod side: controls the extend stroke
     fc2 = c.flow_control("FC2", meter="out", C=0.6, b=0.3)                    # on the cap side: controls the retract stroke
     cyl = c.cylinder("C1", bore_mm=p.bore_mm, rod_mm=12, stroke_mm=p.stroke_mm, load_N=p.load_N, load_retract_N=100,   # the return stroke only drags the empty pusher back
-                     speed_mm_s=p.speed, cycles_per_min=p.cycles_per_min)
+                     speed_mm_s=p.speed, cycles_per_min=p.cycles_per_min,
+                     on_power_loss="extend", on_air_loss="release")       # V1 at rest feeds A -> CAP: it pushes out on a power cut
     c.tube("T1", air["OUT"], frl["IN"], id_mm=8, length_m=2.0)
     c.tube("T2", frl["OUT"], v["P"], id_mm=6, length_m=1.0)
     c.tube("T3", v["A"], fc2["A"], id_mm=6, length_m=1.0)

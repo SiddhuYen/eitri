@@ -93,7 +93,8 @@ def circuit_data(c: Circuit, rep: CircuitReport | None = None) -> dict[str, Any]
     for comp in c.components.values():
         d: dict[str, Any] = {"name": comp.name, "kind": comp.kind, "ports": list(comp.ports), "part_number": comp.part_number, "C": comp.C, "b": comp.b, "max_bar": comp.max_bar, "notes": comp.notes}
         for k in ("pressure_bar", "flow_l_min", "set_bar", "frl", "lubricator", "cls", "actuation", "returns", "normally", "center", "bore_mm", "rod_mm", "stroke_mm",
-                  "acting", "load_N", "load_retract_N", "speed_mm_s", "speed_retract_mm_s", "cycles_per_min", "spring_N", "friction_fraction", "meter"):
+                  "acting", "load_N", "load_retract_N", "speed_mm_s", "speed_retract_mm_s", "cycles_per_min", "spring_N", "friction_fraction", "meter",
+                  "min_bar", "C_exhaust", "b_exhaust", "coil_V", "coil_W", "connector", "load_mass_kg", "allowable_ke_J", "speed_min_mm_s", "speed_max_mm_s", "magnet"):
             if hasattr(comp, k):
                 d[k] = getattr(comp, k)
         if comp.name in cinfo:
@@ -106,9 +107,12 @@ def circuit_data(c: Circuit, rep: CircuitReport | None = None) -> dict[str, Any]
     return {
         "name": c.name,
         "components": comps,
-        "tubes": [{"name": t.name, "a": str(t.a), "b": str(t.b), "id_mm": t.id_mm, "length_m": t.length_m, "fittings": t.fittings, "C": t.C, "part_number": t.part_number} for t in c.tubes],
+        "tubes": [{"name": t.name, "a": str(t.a), "b": str(t.b), "id_mm": t.id_mm, "length_m": t.length_m, "fittings": t.fittings, "C": t.C, "part_number": t.part_number, "max_bar": t.max_bar} for t in c.tubes],
         "vents": [str(v) for v in sorted(c.vents, key=str)], "attached": {str(k): str(v) for k, v in c.attached.items()},
         "layout": {k: list(v) for k, v in c.layout.items()},
+        "sensors": [{"name": x.name, "cylinder": x.cylinder, "position": x.position, "output": x.output, "signal": x.signal, "part_number": x.part_number}
+                    for x in c.sensors.values()],
+        "control_V": c.control_V,
         "valve_classes": sorted(__import__("eitri.pneumatics.model", fromlist=["VALVE_CLASSES"]).VALVE_CLASSES),
     }
 

@@ -25,8 +25,10 @@ def write_outputs(c: Circuit, rep: CircuitReport, out_dir: Path, stem: str, rend
         diagram.scene_to_png(diagram.build_scene(c, rep, status, footer=diagram.footer_from(rep)), png)
         paths["png"] = str(png)
     rows = outputs.bom(c)
+    io_rows = outputs.io_rows(c)
     for key, name, text in (("bom_md", f"{stem}.bom.md", outputs.bom_markdown(c, rows)), ("csv", f"{stem}.bom.csv", outputs.bom_csv(rows)),
-                            ("cylinders_md", f"{stem}.cylinders.md", outputs.cylinders_markdown(c, rep)), ("cylinders_csv", f"{stem}.cylinders.csv", outputs.cylinders_csv(outputs.cylinder_rows(rep)))):
+                            ("cylinders_md", f"{stem}.cylinders.md", outputs.cylinders_markdown(c, rep)), ("cylinders_csv", f"{stem}.cylinders.csv", outputs.cylinders_csv(outputs.cylinder_rows(rep))),
+                            ("io_md", f"{stem}.io.md", outputs.io_markdown(c, io_rows)), ("io_csv", f"{stem}.io.csv", outputs.io_csv(io_rows))):
         f = out_dir / name
         f.write_text(text, encoding="utf-8")
         paths[key] = str(f)
@@ -70,7 +72,7 @@ def run(model, c: Circuit, model_path: Path, out_dir: Path, result: dict, stage,
         return
     timings["analyze"] = round(time.time() - t, 3)
 
-    stage("drawing the schematic, BOM and tables")
+    stage("drawing the schematic, BOM, tables and I/O list")
     t = time.time()
     try:
         paths, scene = write_outputs(c, rep, out_dir, model_path.stem, render=render)

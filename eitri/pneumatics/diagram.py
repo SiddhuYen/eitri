@@ -42,7 +42,8 @@ def status_from(report) -> dict[str, str]:
     """What to colour: the failing and warning checks' parts, except the "flow data estimated" notice, which names nearly every part
     (it is a data-quality note, not a limit being approached; it stays in the checks and the footer)."""
     class _R:
-        checks = [c for c in report.checks if c.category != "flow data"]
+        checks = [c for c in report.checks if c.category != "flow data" and not (c.category == "fail-safe" and c.not_run)]   # an undeclared
+        # fail-safe requirement is a "not run" notice, not a part being near a limit: it stays in the checks, uncoloured
     return _status_from(_R)
 
 
