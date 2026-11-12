@@ -499,3 +499,58 @@ def test_new_0_8_1_checks_carry_rules_sources_and_status():
             "pneumatics.sequence-closes", "pneumatics.cycle-time", "pneumatics.sequence-declared"} <= seen
     ct = next(ch for ch in reps[1].checks if ch.name == "cycle time estimate")
     assert any(s.basis == "document" and "SY_EU.pdf" in s.url for s in ct.source) and any(s.basis == "assumption" for s in ct.source)
+
+
+# ---------------------------------------------------------------------------- 0.8.1 item 5: more part numbers
+
+
+def _example_number(s):
+    st = s.strokes[0] if s.strokes else 50
+    return (s.pattern.replace("(?:FESTO\\s+)?", "").replace("(?:SMC\\s+)?", "").replace("(?P<magnet>D?)", "D")
+            .replace("(?P<stroke>\\d+)", str(st)))
+
+
+def test_every_catalogue_cylinder_force_matches_its_datasheet():
+    cyls = [s for s in catalog.SERIES if s.kind == "cylinder"]
+    assert len(cyls) >= 7 + 10 + 6 + 3                                   # DSNU 16-63, CQ2 12-100, DSBC 32-100, MGPM 20-32
+    for s in cyls:
+        c = Circuit()
+        cy = c.cylinder("C", part=_example_number(s))
+        for key, (want, bar) in s.figures.items():
+            got = cylinder_forces(cy, bar)["extend_theoretical_N" if "extend" in key else "retract_theoretical_N"]
+            assert got == pytest.approx(want, rel=0.01, abs=0.5), (s.pattern, key)
+        assert all(sid in catalog.SOURCES for sid in s.sources)
+
+
+def test_new_families_fill_their_figures():
+    c = Circuit()
+    d = c.cylinder("D", part="FESTO DSNU-40-100-P-A")
+    assert (d.bore_mm, d.rod_mm, d.allowable_ke_J, d.connections["CAP"]) == (40, 16, 0.7, "G1/4") and d.piston_mass_kg == pytest.approx(0.230 + 0.16)
+    q = c.cylinder("Q", part="SMC CDQ2B63-50DZ")
+    assert (q.rod_mm, q.allowable_ke_J, q.min_bar, q.connections["CAP"]) == (20, 1.54, 0.5, "Rc1/4")
+    assert c.cylinder("Q2", part="SMC CQ2B12-10DZ").min_bar == pytest.approx(0.7)       # 0.07 MPa for dia 12
+    i = c.cylinder("I", part="FESTO DSBC-50-200-PPVA-N3")
+    assert (i.rod_mm, i.min_bar, i.max_bar, i.allowable_ke_J) == (20, 0.4, 12.0, 1.0)
+    g = c.cylinder("G", part="SMC MGPM25-50Z")
+    assert (g.rod_mm, g.magnet, g.allowable_ke_J, g.catalog["info"]["guided"]) == (10, True, None, True)
+    with pytest.raises(PneumaticsError, match="standard stroke"):
+        c.cylinder("G2", part="SMC MGPM32-30Z")
+    with pytest.raises(PneumaticsError, match="outside"):
+        c.cylinder("D2", part="DSNU-16-250-P-A")
+    assert c.flow_control("F4", part="SMC AS1201F-M5-04").C == 0.3 and c.flow_control("F8", part="SMC AS2201F-02-08").C == 1.4
+    t = Circuit()
+    a, b = t.node("A"), t.node("B")
+    assert t.tube("T", a, b, part="SMC TU0805").id_mm == 5.0 and t.tube("T4", a, b, part="SMC TU0425").od_mm == 4.0
+
+
+def test_regulator_setting_against_its_regulation_range():
+    c = station()
+    c.components.pop("REG")
+    c2 = Circuit("r")
+    air = c2.supply("AIR", 7.0, flow_l_min=100)
+    f = c2.frl("FRL", 6.0, part="FESTO MS4-LFR-1/4-D6-CRM-AS")
+    c2.tube("T", air["OUT"], f["IN"])
+    assert f.max_bar == 14.0 and one(analyze(c2), "regulator FRL setting").severity == "pass"
+    f.set_bar = 8.0                                                        # MS4-LFR-...-D6: regulates 0.3-7 bar
+    bad = one(analyze(c2), "regulator FRL setting")
+    assert bad.severity == "fail" and "0.3-7 bar" in bad.measured and bad.rule == "pneumatics.regulator-setting"

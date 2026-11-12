@@ -38,8 +38,39 @@ _S = [
            '"Moving mass for 0 mm stroke 44 g", "Additional moving mass per 10 mm stroke 4 g", "Pneumatic connection G1/8"'),
     Source("festo-dsnu-cat", "Festo Round cylinders DSNU catalogue, 2023/08",
            "https://ftp.festo.com/public/pneumatic/SOFTWARE_SERVICE/Documentation/2023/US/DSNU_ENUS.PDF",
-           'p.9 General technical data: piston 20 mm "Stroke 1 ... 320" mm, "Pneumatic connection G1/8", "Piston rod thread M8"; rod '
-           'diameter 8 mm (p.15 dimensions MM; the data sheet\'s 158.3/188.5 N force ratio gives the same 8.0 mm)'),
+           'p.9 General technical data (piston 16/20/25/32/40/50/63): pneumatic connection M5, G1/8, G1/8, G1/8, G1/4, G1/4, G3/8; stroke '
+           '16: 1...200, 20: 1...320, 25-63: 1...500 mm; "Elastic cushioning rings/pads at both ends" (P); p.10 operating pressure DSNU-... '
+           '16-63: 1 ... 10 bar; weights: moving mass with 0 mm stroke 23, 44, 71, 121, 230, 413, 459 g, per 10 mm 2, 4, 6, 9, 16, 25, 25 g; '
+           'p.11 theoretical force at 6 bar advancing 121, 189, 295, 483, 753, 1178, 1870 N, retracting 104, 158, 247, 415, 633, 990, '
+           '1682 N, impact energy in the end positions for P cushioning 0.15, 0.20, 0.30, 0.40, 0.70, 1.00, 1.30 J ("reduced by approx. 50% '
+           'at 80 C"); rod diameter MM p.15 (8-25: 6, 8, 10) and p.18 (32-63: 12, 16, 20, 20)'),
+    Source("smc-cq2-dims", "SMC Compact Cylinder Series CQ2 catalogue (SMC USA, CQ2.pdf, server date 2011-03-23), dimensions",
+           "https://content2.smcetech.com/pdf/CQ2.pdf",
+           'p.614 (dia 12-25, with auto switch): D (rod) 6, 8, 10, 12, port 2 x M5 x 0.8; p.616 (32-50): D 16, 16, 20, P Rc1/8, Rc1/8, '
+           'Rc1/4; p.618 (63-100): D 20, 25, 30, P 1/4, 3/8, 3/8; p.606 Theoretical Output at 0.5 MPa OUT/IN: 12: 57/42, 16: 101/75, '
+           '20: 157/118, 25: 245/189, 32: 402/302, 40: 628/528, 50: 982/825, 63: 1560/1400, 80: 2510/2270, 100: 3930/3570 N'),
+    Source("festo-dsbc", "Festo Standards-based cylinders DSBC, ISO 15552 catalogue 2023/08 and DSBC-<bore>-50-PPVA-N3 data sheets",
+           "https://ftp.festo.com/public/pneumatic/SOFTWARE_SERVICE/Documentation/2023/US/DSBC_ENUS.PDF",
+           'catalogue p.11 piston 32-100, stroke 1 ... 2800 mm; p.13 moving mass with 0 mm stroke 110, 205, 365, 430, 810, 1000 g, per 10 mm 9, '
+           '16, 25, 25, 39, 39 g; p.21 rod MM 12, 16, 20, 20, 25, 25; data sheets 1376424 (32), 1376658 (40), 1366950 (50), 1383580 (63), '
+           '1383335 (80), 1384808 (100) at ftp.festo.com/.../DataSheet/EN_GB/<part>.pdf: operating pressure 0.6-12 bar (32, 40), 0.4-12 bar '
+           '(50-100); connection G1/8, G1/4, G1/4, G3/8, G3/8, G1/2; theoretical force at 6 bar 483/415, 754/633, 1178/990, 1870/1682, '
+           '3016/2721, 4712/4418 N; impact energy in the end positions 0.4, 0.7, 1.0, 1.3, 1.8, 2.5 J. (Figures from the data/components '
+           'records of 2026-11-06/07, page references as given there; not re-opened in this thread.)', fetched="2026-11-07"),
+    Source("smc-mgp-z", "SMC Europe, Compact Guide Cylinder Series MGP-Z (MGP-Z_EU.pdf)", "https://static.smc.eu/pdf/MGP-Z_EU.pdf",
+           'printed p.3 How to Order: MGP{M slide bearing} <bore> - <stroke> Z, "Without auto switch (Built-in magnet)", port thread "-" '
+           'M5 x 0.8 (dia 12, 16) / Rc; printed p.4 Specifications: max operating pressure 1.0 MPa, minimum 0.12 MPa (12) / 0.1 MPa '
+           '(16-100), piston speed 50 to 500 mm/s (12-63) "Maximum speed with no load", cushion "Rubber bumper on both ends"; standard '
+           'strokes 20, 25: 20, 30, 40, 50, 75, 100, 125, 150, 175, 200, 250, 300, 350, 400; 32-100: 25, 50, 75, 100, 125, 150, 175, 200, '
+           '250, 300, 350, 400; Theoretical Output (rod size, OUT/IN at 0.5 MPa): 20 (rod 10) 157/118, 25 (rod 10) 245/206, 32 (rod 14) '
+           '402/325 N. No allowable kinetic energy is printed (MGP is selected from load-speed graphs, pp.8-14: not modelled)'),
+    Source("smc-aw", "SMC Europe, Filter Regulator Series AW10 to 40 (AW_EU.pdf)", "https://static.smc.eu/pdf/AW_EU.pdf",
+           'Standard specifications, AW20 column: max operating pressure 1.0 MPa, set pressure range 0.05-0.85 MPa, filtration 5 um. '
+           '(data/components record smc/aw20, fetched 2026-11-07)', fetched="2026-11-07"),
+    Source("festo-ms4-lfr", "Festo data sheet MS4-LFR-1/4-D6-CRM-AS, part 529144",
+           "https://ftp.festo.com/public/PNEUMATIC/SOFTWARE_SERVICE/DataSheet/EN_GB/529144.pdf",
+           'Operating pressure 0.8-14 bar; pressure regulation range 0.3-7 bar; standard nominal flow rate 1500 L/min (DIN 1343); grade of '
+           'filtration 5 um. (data/components record festo/ms4-lfr-1-4-d6-crm-as, fetched 2026-11-06)', fetched="2026-11-06"),
     Source("smc-cq2-z", "SMC Europe, Compact Cylinder Series CQ2-Z (CQ2-Z_EU.pdf, 1st printing OX)",
            "https://static.smc.eu/pdf/CQ2-Z_EU.pdf",
            'p.7 Specifications, pneumatic type: "Maximum operating pressure 1.0 MPa"; "Minimum operating pressure, Double acting type" 0.05 MPa '
@@ -81,13 +112,14 @@ _S = [
            '"number of connections/cores 3"; "Cable length 0.3 m". (On a DSNU it needs the mounting kit SMBR-8-20.)'),
     Source("smc-tu", "SMC Europe, Polyurethane Tubing Series TU, TIUB (TU_TIUB_EU.pdf)", "https://static.smc.eu/pdf/TU_TIUB_EU.pdf",
            'Specifications: "Max. operating pressure 0.8MPa at 20 C" (lower when hotter: pressure characteristics curve); operating temperature '
-           '-20 to +60 C; TU0604: O.D. 6, I.D. 4 mm'),
+           '-20 to +60 C; TU0425: O.D. 4, I.D. 2.5; TU0604: 6 / 4; TU0805: 8 / 5 mm'),
     Source("smc-kq2", "SMC Europe, One-touch Fittings Series KQ2 (KQ2_EU.pdf)", "https://static.smc.eu/pdf/KQ2_EU.pdf",
            'p.5 Male connector KQ2H: KQ2H06-01S (tube 6 mm, R1/8) effective area 13.1 mm2 nylon, 10.4 mm2 urethane; max operating pressure '
            '1.0 MPa (p.2 Specifications)'),
     Source("smc-as", "SMC Europe, Speed Controller Series AS (AS_EU.pdf)", "https://static.smc.eu/pdf/AS_EU.pdf",
-           'AS2201F-01-06 (R1/8, tube 6 mm): controlled-flow effective area 3.5 mm2 needle fully open; max operating pressure 1 MPa. SMC gives no '
-           'C: C = S / 5 = 0.7 L/(s.bar) (SMC: S [mm2] = 5 x C); b not published (0.30 is an ESTIMATE)', fetched="2026-11-07"),
+           'p.1 (printed 2) Air Flow/Effective Area table (supply 0.5 MPa): AS1201F-M5-04 (M5, tube 4 mm) 1.5 mm2, AS2201F-01-06 (R1/8, '
+           'tube 6 mm) 3.5 mm2, AS2201F-02-08 (R1/4, tube 8 mm) 7 mm2, needle fully open; max operating pressure 1 MPa. SMC gives no C: '
+           'C = S / 5 (SMC: S [mm2] = 5 x C) = 0.3, 0.7, 1.4 L/(s.bar); b not published (0.30 is an ESTIMATE)', fetched="2026-11-07"),
     Source("smc-an", "SMC Silencer Series AN (AN.pdf)", "https://content2.smcetech.com/pdf/AN.pdf",
            'Specifications: max operating pressure 1.0 MPa; performance table, sonic conductance C [dm3/(s.bar)]: AN05-M5 1, AN10-01 2 (R1/8); b not '
            'published (0.30 is an ESTIMATE)', fetched="2026-11-07"),
@@ -119,20 +151,78 @@ class Series:
     figures: dict = field(default_factory=dict)        # catalogue figures the build compares with (forces at a pressure ...)
 
 
+def _dsnu() -> list:
+    """Festo DSNU round cylinders, P cushioning, magnetic piston (-A): catalogue 2023/08 pp.9-11, 15, 18 (festo-dsnu-cat); dia 20 also
+    its own data sheet 19210 (the more precise 188.5 / 158.3 N)."""
+    # bore: rod, port, max stroke, force ext / ret at 6 bar, impact J, moving mass g at 0 mm, g per 10 mm
+    T = {16: (6, "M5", 200, 121, 104, 0.15, 23, 2), 20: (8, "G1/8", 320, 188.5, 158.3, 0.20, 44, 4), 25: (10, "G1/8", 500, 295, 247, 0.30, 71, 6),
+         32: (12, "G1/8", 500, 483, 415, 0.40, 121, 9), 40: (16, "G1/4", 500, 753, 633, 0.70, 230, 16), 50: (20, "G1/4", 500, 1178, 990, 1.00, 413, 25),
+         63: (20, "G3/8", 500, 1870, 1682, 1.30, 459, 25)}
+    out = []
+    for bore, (rod, port, smax, fe, fr, ke, mm0, mm10) in T.items():
+        src = ("festo-dsnu-20-50-p-a", "festo-dsnu-cat") if bore == 20 else ("festo-dsnu-cat",)
+        out.append(Series("cylinder", rf"(?:FESTO\s+)?DSNU-{bore}-(?P<stroke>\d+)-P-A",
+                          dict(bore_mm=float(bore), rod_mm=float(rod), acting="double", min_bar=1.0, max_bar=10.0, port=port,
+                               connections={"CAP": port, "ROD": port}, magnet=True, cushion="elastic rings", allowable_ke_J=ke,
+                               piston_mass_kg=mm0 / 1000.0, piston_mass_per_mm_kg=mm10 / 10000.0, manufacturer="Festo",
+                               description=f"Festo DSNU round cylinder{' ISO 6432' if bore <= 25 else ''}, Ø{bore}, elastic cushioning, magnetic piston"),
+                          src, stroke_range=(1, smax), figures={"force_extend_N": (fe, 6.0), "force_retract_N": (fr, 6.0)}))
+    return out
+
+
+def _cq2() -> list:
+    """SMC CQ2 compact cylinders (CDQ2B: magnet; CQ2B: none), double acting: CQ2-Z_EU p.7, CQ2.pdf pp.606, 614, 616, 618."""
+    # bore: rod, port, standard strokes, out / in at 0.5 MPa, allowable KE J (rubber bumper standard from dia 25; none below), min MPa
+    s30, s50, s100, s10_100 = tuple(range(5, 31, 5)), tuple(range(5, 51, 5)), tuple(range(5, 51, 5)) + (75, 100), tuple(range(10, 51, 5)) + (75, 100)
+    T = {12: (6, "M5", s30, 57, 42, 0.022, 0.07), 16: (8, "M5", s30, 101, 75, 0.038, 0.05), 20: (10, "M5", s50, 157, 118, 0.055, 0.05),
+         25: (12, "M5", s50, 245, 189, 0.18, 0.05), 32: (16, "Rc1/8", s100, 402, 302, 0.29, 0.05), 40: (16, "Rc1/8", s100, 628, 528, 0.52, 0.05),
+         50: (20, "Rc1/4", s10_100, 982, 825, 0.91, 0.05), 63: (20, "Rc1/4", s10_100, 1560, 1400, 1.54, 0.05),
+         80: (25, "Rc3/8", s10_100, 2510, 2270, 2.71, 0.05), 100: (30, "Rc3/8", s10_100, 3930, 3570, 4.54, 0.05)}
+    out = []
+    for bore, (rod, port, strokes, fo, fi, ke, pmin) in T.items():
+        out.append(Series("cylinder", rf"(?:SMC\s+)?C(?P<magnet>D?)Q2B{bore}-(?P<stroke>\d+)DZ",
+                          dict(bore_mm=float(bore), rod_mm=float(rod), acting="double", min_bar=pmin * 10, max_bar=10.0, port=port,
+                               connections={"CAP": port, "ROD": port}, cushion="rubber bumper" if bore >= 25 else "none (standard type)",
+                               allowable_ke_J=ke, speed_min_mm_s=50.0, speed_max_mm_s=500.0, manufacturer="SMC",
+                               description=f"SMC CQ2 compact cylinder, Ø{bore}, through-hole" + (", rubber bumper" if bore >= 25 else "")),
+                          ("smc-cq2-z", "smc-cq2", "smc-cq2-dims"), strokes=strokes,
+                          figures={"force_extend_N": (float(fo), 5.0), "force_retract_N": (float(fi), 5.0)}))
+    return out
+
+
+def _dsbc() -> list:
+    """Festo DSBC ISO 15552 profile cylinders, PPVA self-adjusting pneumatic cushioning, magnetic piston (-N3) (festo-dsbc)."""
+    T = {32: (12, "G1/8", 0.6, 483, 415, 0.4, 110, 9), 40: (16, "G1/4", 0.6, 754, 633, 0.7, 205, 16), 50: (20, "G1/4", 0.4, 1178, 990, 1.0, 365, 25),
+         63: (20, "G3/8", 0.4, 1870, 1682, 1.3, 430, 25), 80: (25, "G3/8", 0.4, 3016, 2721, 1.8, 810, 39), 100: (25, "G1/2", 0.4, 4712, 4418, 2.5, 1000, 39)}
+    out = []
+    for bore, (rod, port, pmin, fe, fr, ke, mm0, mm10) in T.items():
+        out.append(Series("cylinder", rf"(?:FESTO\s+)?DSBC-{bore}-(?P<stroke>\d+)-PPVA-N3",
+                          dict(bore_mm=float(bore), rod_mm=float(rod), acting="double", min_bar=pmin, max_bar=12.0, port=port,
+                               connections={"CAP": port, "ROD": port}, magnet=True, cushion="pneumatic, self-adjusting (PPVA)", allowable_ke_J=ke,
+                               piston_mass_kg=mm0 / 1000.0, piston_mass_per_mm_kg=mm10 / 10000.0, manufacturer="Festo",
+                               description=f"Festo DSBC ISO 15552 profile cylinder, Ø{bore}, PPVA cushioning, magnetic piston"),
+                          ("festo-dsbc",), stroke_range=(1, 2800), figures={"force_extend_N": (float(fe), 6.0), "force_retract_N": (float(fr), 6.0)}))
+    return out
+
+
+def _mgp() -> list:
+    """SMC MGPM compact guide cylinders (slide bearing), built-in magnet (smc-mgp-z). No allowable kinetic energy is printed."""
+    s20 = (20, 30, 40, 50, 75, 100, 125, 150, 175, 200, 250, 300, 350, 400)
+    s32 = (25, 50, 75, 100, 125, 150, 175, 200, 250, 300, 350, 400)
+    T = {20: (10, s20, 157, 118), 25: (10, s20, 245, 206), 32: (14, s32, 402, 325)}
+    return [Series("cylinder", rf"(?:SMC\s+)?MGPM{bore}-(?P<stroke>\d+)Z",
+                   dict(bore_mm=float(bore), rod_mm=float(rod), acting="double", min_bar=1.0, max_bar=10.0, port="Rc (size: dimensions page)",
+                        magnet=True, cushion="rubber bumper", speed_min_mm_s=50.0, speed_max_mm_s=500.0, manufacturer="SMC", guided=True,
+                        description=f"SMC MGPM compact guide cylinder, Ø{bore}, slide bearing, built-in magnet"),
+                   ("smc-mgp-z",), strokes=st, figures={"force_extend_N": (float(fo), 5.0), "force_retract_N": (float(fi), 5.0)})
+            for bore, (rod, st, fo, fi) in T.items()]
+
+
+_CYLINDERS = _dsnu() + _cq2() + _dsbc() + _mgp()
+
 SERIES: list[Series] = [
     # ---------------------------------------------------------------- cylinders
-    Series("cylinder", r"(?:FESTO\s+)?DSNU-20-(?P<stroke>\d+)-P-A",
-           dict(bore_mm=20.0, rod_mm=8.0, acting="double", min_bar=1.0, max_bar=10.0, port="G1/8", connections={"CAP": "G1/8", "ROD": "G1/8"}, magnet=True, cushion="elastic rings",
-                allowable_ke_J=0.2, piston_mass_kg=0.044, piston_mass_per_mm_kg=0.0004, manufacturer="Festo",
-                description="Festo DSNU round cylinder ISO 6432, Ø20, elastic cushioning, magnetic piston"),
-           ("festo-dsnu-20-50-p-a", "festo-dsnu-cat"), stroke_range=(1, 320),
-           figures={"force_extend_N": (188.5, 6.0), "force_retract_N": (158.3, 6.0)}),
-    Series("cylinder", r"(?:SMC\s+)?C(?P<magnet>D?)Q2B32-(?P<stroke>\d+)DZ",
-           dict(bore_mm=32.0, rod_mm=16.0, acting="double", min_bar=0.5, max_bar=10.0, port="Rc1/8", connections={"CAP": "Rc1/8", "ROD": "Rc1/8"}, cushion="rubber bumper",
-                allowable_ke_J=0.29, speed_min_mm_s=50.0, speed_max_mm_s=500.0, manufacturer="SMC",
-                description="SMC CQ2 compact cylinder, Ø32, through-hole, rubber bumper"),
-           ("smc-cq2-z", "smc-cq2"), strokes=(5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 75, 100),
-           figures={"force_extend_N": (402.0, 5.0), "force_retract_N": (302.0, 5.0)}),
+    *_CYLINDERS,
     # ---------------------------------------------------------------- valves
     Series("valve", r"(?:SMC\s+)?SY3120-5L(?P<light>Z?)-C6",
            dict(cls="5/2", actuation="solenoid", returns="spring", C=0.76, b=0.30, C_exhaust=0.65, b_exhaust=0.39, min_bar=1.5, max_bar=7.0,
@@ -165,6 +255,17 @@ SERIES: list[Series] = [
     # ---------------------------------------------------------------- tube, flow controls, silencers
     Series("tube", r"(?:SMC\s+)?TU0604", dict(id_mm=4.0, od_mm=6.0, max_bar=8.0, material="polyurethane",
                                                description="SMC TU polyurethane tube 6 x 4 mm"), ("smc-tu",)),
+    Series("frl", r"(?:SMC\s+)?AW20-0[12][A-Z]*(?:-[A-Z0-9]+)?", dict(max_bar=10.0, set_min_bar=0.5, set_max_bar=8.5, port="Rc1/8 or Rc1/4",
+                                                                   description="SMC AW20 filter regulator, 5 um"), ("smc-aw",)),
+    Series("frl", r"(?:FESTO\s+)?MS4-LFR-1/4-D6-CRM-AS", dict(max_bar=14.0, set_min_bar=0.3, set_max_bar=7.0, port="G1/4", nominal_flow_l_min=1500.0,
+                                                            connections={"IN": "G1/4", "OUT": "G1/4"},
+                                                            description="Festo MS4-LFR filter regulator, 5 um, G1/4"), ("festo-ms4-lfr",)),
+    Series("tube", r"(?:SMC\s+)?TU0425", dict(id_mm=2.5, od_mm=4.0, max_bar=8.0, material="polyurethane", description="SMC TU polyurethane tube 4 x 2.5 mm"), ("smc-tu",)),
+    Series("tube", r"(?:SMC\s+)?TU0805", dict(id_mm=5.0, od_mm=8.0, max_bar=8.0, material="polyurethane", description="SMC TU polyurethane tube 8 x 5 mm"), ("smc-tu",)),
+    Series("flow_control", r"(?:SMC\s+)?AS1201F-M5-04", dict(C=0.3, b=0.30, max_bar=10.0, port="M5, tube 4 mm", connections={"A": "push-in 4", "B": "M5 male"},
+                                                         description="SMC AS speed controller, elbow, M5 x 4 mm"), ("smc-as",)),
+    Series("flow_control", r"(?:SMC\s+)?AS2201F-02-08", dict(C=1.4, b=0.30, max_bar=10.0, port="R1/4, tube 8 mm", connections={"A": "push-in 8", "B": "R1/4 male"},
+                                                         description="SMC AS speed controller, elbow, R1/4 x 8 mm"), ("smc-as",)),
     Series("flow_control", r"(?:SMC\s+)?AS2201F-01-06", dict(C=0.7, b=0.30, max_bar=10.0, port="R1/8, tube 6 mm", connections={"A": "push-in 6", "B": "R1/8 male"},
                                                          description="SMC AS speed controller, elbow, R1/8 x 6 mm"), ("smc-as",)),
     Series("silencer", r"(?:SMC\s+)?AN10-01", dict(C=2.0, b=0.30, max_bar=10.0, port="R1/8", connections={"IN": "R1/8 male"},

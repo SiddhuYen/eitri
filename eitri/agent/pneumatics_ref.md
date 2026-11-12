@@ -67,6 +67,11 @@ A figure you also give must agree with the part's. Known part numbers (the strok
 - valves: `SMC SY3120-5LZ-C6` (5/2 single solenoid, spring return, C 0.76 b 0.30 P->A/B, C 0.65 b 0.39 A/B->R/S, 1.5-7 bar,
   24 VDC 0.4 W, L plug), `SMC SY3220-5LZ-C6` (the same, double solenoid: holds its position unpowered, 1-7 bar),
   `SMC SY5120-5LZ-01` (C 1.9 / 2.4, all ports 1/8); drop the Z for the 0.35 W coil without indicator light
+- more cylinders: `FESTO DSNU-<16|20|25|32|40|50|63>-<stroke>-P-A`, `SMC C[D]Q2B<12..100>-<stroke>DZ` (standard strokes per bore),
+  `FESTO DSBC-<32..100>-<stroke>-PPVA-N3` (ISO 15552, 0.4/0.6-12 bar), `SMC MGPM<20|25|32>-<stroke>Z` (guided, no allowable energy printed)
+- filter regulators: `SMC AW20-02BG` (10 bar, regulates 0.5-8.5 bar), `FESTO MS4-LFR-1/4-D6-CRM-AS` (14 bar, regulates 0.3-7 bar):
+  the set pressure is checked against the regulation range
+- `SMC TU0425` / `TU0805` tube, `SMC AS1201F-M5-04` (C 0.3) / `AS2201F-02-08` (C 1.4) speed controllers for 4 / 8 mm tube
 - `SMC TU0604` tube (6 x 4 mm polyurethane, 8 bar), `SMC AS2201F-01-06` speed controller (C 0.7), `SMC AN05-M5` silencer (C 1.0)
 - sensors: `SMC D-M9B` (2-wire, 10-28 V, 2.5-40 mA, for CQ2), `FESTO SMT-8M-A-PS-24V-E-0,3-M8D` (PNP, 5-30 V, M8, for DSNU with SMBR-8-20)
 

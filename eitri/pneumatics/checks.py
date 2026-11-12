@@ -548,6 +548,12 @@ def _catalog_checks(c: Circuit, infos: list[CylinderInfo]) -> list[Check]:
                                   f"{e:.3f} J = 1/2 x {m:.3f} kg x ({v_hit:.0f} mm/s)^2: impact speed {IMPACT_FACTOR:g} x the mean speed ({v:.0f} mm/s, {how}); "
                                   f"the cushioning absorbs {cyl.allowable_ke_J:g} J{src} [{IMPACT_SOURCE}]",
                                   f"<= {cyl.allowable_ke_J:g} J (a slower stroke, a speed controller, a bigger bore or an external stop)", [cyl.name]))
+    for r in [x for x in c.components.values() if isinstance(x, Regulator) and (x.set_min_bar is not None or x.set_max_bar is not None)]:
+        lo, hi = r.set_min_bar if r.set_min_bar is not None else 0.0, r.set_max_bar if r.set_max_bar is not None else float("inf")
+        sev = "pass" if lo <= r.set_bar <= hi else "fail"
+        out.append(_check("pressure", f"regulator {r.name} setting", sev,
+                          f"set to {r.set_bar:g} bar; it regulates {lo:g}-{hi:g} bar" + (f" [{r.part_number} datasheet]" if r.part_number else ""),
+                          f"{lo:g}-{hi:g} bar (a unit with a wider regulation range)", [r.name]))
     for v in [x for x in c.components.values() if isinstance(x, Valve)]:
         src = f" [{v.part_number} datasheet]" if v.part_number else ""
         if v.min_bar is not None:

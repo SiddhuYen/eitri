@@ -154,6 +154,11 @@ def _cushioning(c, circ):
     return out + (_part_docs(cyl, "allowable_ke_J") if cyl is not None else [])
 
 
+def _regulator_setting(c, circ):
+    r = _ref_comp(c, circ, ("regulator", "frl"))
+    return [requirement(f"{r.name} set_bar" if r is not None else "set_bar")] + (_part_docs(r, "set_min_bar, set_max_bar") if r is not None else [])
+
+
 def _coil(c, circ):
     v = _ref_comp(c, circ, ("valve",))
     return [requirement("control_voltage")] + (_part_docs(v, "coil_V") if v is not None else [])
@@ -209,10 +214,14 @@ RULES = [
                                      _cat_doc("smc-best-tech"))),
     Rule(P + "supply-capacity", "air", r"supply .+ capacity$", (model_file("supply flow_l_min"),)),
     Rule(P + "pressure-ratings", "pressure", r"pressure ratings downstream of ", tuple(PRESSURE_DOCS.values()) + (model_file("max_bar"),), _pressure),
-    Rule(P + "datasheet-force", "force", r"datasheet force ", (THEORETICAL_FORCE, _cat_doc("festo-dsnu-20-50-p-a"), _cat_doc("smc-cq2")),
+    Rule(P + "datasheet-force", "force", r"datasheet force ", (THEORETICAL_FORCE, _cat_doc("festo-dsnu-20-50-p-a"), _cat_doc("smc-cq2"),
+                                                               _cat_doc("festo-dsnu-cat"), _cat_doc("festo-dsbc"), _cat_doc("smc-mgp-z")),
          _datasheet_force),
     Rule(P + "minimum-pressure", "pressure", r"minimum pressure ", (_cat_doc("smc-cq2-z"), _cat_doc("festo-dsnu-20-50-p-a"), _cat_doc("smc-sy"),
+                                                                   _cat_doc("festo-dsnu-cat"), _cat_doc("festo-dsbc"), _cat_doc("smc-mgp-z"),
                                                                    model_file("min_bar")), _min_pressure),
+    Rule(P + "regulator-setting", "pressure", r"regulator .+ setting$", (requirement("set_bar"), _cat_doc("smc-aw"), _cat_doc("festo-ms4-lfr"),
+                                                                      model_file("set_min_bar, set_max_bar")), _regulator_setting),
     Rule(P + "piston-speed-range", "speed", r"piston speed range ", (requirement("speed_mm_s"), _cat_doc("smc-cq2-z"), model_file("speed range")),
          _piston_speed),
     Rule(P + "cushioning", "cushioning", r"end-of-stroke energy ", (model_file("load_mass_kg"), SMC_RB, _cat_doc("smc-cq2-z"),

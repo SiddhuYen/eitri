@@ -161,6 +161,8 @@ class Regulator(Component):
     set_bar: float = 6.0
     frl: bool = False
     lubricator: bool = False
+    set_min_bar: float | None = None     # the datasheet's pressure regulation range (the set pressure must lie inside it)
+    set_max_bar: float | None = None
 
     def __post_init__(self) -> None:
         self.kind, self.ports = ("frl" if self.frl else "regulator"), ["IN", "OUT"]
@@ -517,11 +519,17 @@ class Circuit:
     def supply(self, name: str, pressure_bar: float, flow_l_min: float | None = None, **kw) -> Supply:
         return self.add(Supply(name, pressure_bar=pressure_bar, flow_l_min=flow_l_min, **kw))
 
-    def regulator(self, name: str, set_bar: float, C: float | None = None, b: float | None = None, **kw) -> Regulator:
-        return self.add(Regulator(name, set_bar=set_bar, C=C, b=b, **kw))
+    def regulator(self, name: str, set_bar: float, C: float | None = None, b: float | None = None, part: str | None = None, **kw) -> Regulator:
+        kw.update(name=name, set_bar=set_bar, C=C, b=b)
+        if part:
+            kw = _from_part("frl", part, Regulator, kw)
+        return self.add(Regulator(**{k: v for k, v in kw.items() if v is not None}))
 
-    def frl(self, name: str, set_bar: float, C: float | None = None, b: float | None = None, lubricator: bool = False, **kw) -> Regulator:
-        return self.add(Regulator(name, set_bar=set_bar, C=C, b=b, frl=True, lubricator=lubricator, **kw))
+    def frl(self, name: str, set_bar: float, C: float | None = None, b: float | None = None, lubricator: bool = False, part: str | None = None, **kw) -> Regulator:
+        kw.update(name=name, set_bar=set_bar, C=C, b=b, frl=True, lubricator=lubricator)
+        if part:
+            kw = _from_part("frl", part, Regulator, kw)
+        return self.add(Regulator(**{k: v for k, v in kw.items() if v is not None}))
 
     def valve(self, name: str, cls: str | None = None, actuation: str | None = None, returns: str | None = None, C: float | None = None,
               b: float | None = None, part: str | None = None, **kw) -> Valve:
