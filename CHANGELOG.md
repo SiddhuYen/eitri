@@ -3,33 +3,6 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
-## Unreleased (0.8.1): PLC signal inputs, sourced industrial connectors, a command-line path from approval to package
-
-### Changed
-
-- **Signal nets are graded against the devices at their ends**, not the Arduino 20 mA pin figure for every `signal=True` net.
-  Declare them: `h.mcu_pin(pin, board="uno")` (or a board connector type), `h.plc_input(pin, iec_type=1|2|3)` (IEC 61131-2:
-  ON current and voltage, and a 2-wire sensor's OFF leakage, as drawn in TI's ISO1228 data sheet SLLSFN5B Figure 8-1, graph-read),
-  `h.sensor_output(pin, part=...)` (the Festo SMT-8M-A and SMC D-M9B catalogue figures) or with the sensor's own `max_output_A=`.
-  A signal net with no declared end is "not run" (it was a pass on the wrong limit). New check "signal net N input <pin>".
-  The servo-arm demo and the harness reference examples declare their Uno / Nano pins.
-
-### Added
-
-- **Industrial connectors with sourced ratings**: `M8-3` (4 A, 60 V DC), `M8-4` (3 A, 30 V: the lower of Pepperl+Fuchs' 3 A / 4 A),
-  `M12-4` (4 A, 250 V), `M12-5` (4 A, 60 V DC), all A-coded cordset ends (Pepperl+Fuchs data sheets), and `WAGO-2002-1201` (2.5 mm²
-  push-in feed-through terminal: 20 A, 600 V per UL 1059, the lower of its UL and IEC figures; 0.25-4 mm²). New checks: "connector
-  voltage" (a catalogue connector's DC rating against its nets' voltage) and a mm² wire-range "wires fit the ... terminals".
-  Mirrored in `data/components/connectors.jsonl`.
-- **`eitri build <model.py> --record [--set k=v] [--config c] [--note ...]`**: the command-line path from an approved ticket to a
-  package. It writes the values into PARAMS and records a project revision through the same Project methods as the agent's tools:
-  the plan gate refuses it before approval, and the package flags unplanned parameters as it does for the agent.
-
-### Fixed
-
-- "one gauge per net" on a thin wire with no `current_A` of its own (a cable's return core) now names the wire and says how to
-  give it its own current; the check itself is unchanged.
-
 ## 0.8.0: tickets and checked change packages, a source on every check, fuses, pneumatic catalogue parts, reference parts
 
 > **Read this first: pneumatic valve ports were swapped on SMC valves in every eitri before 0.8.0.** eitri named a 5/2 valve's
@@ -237,6 +210,35 @@ is used (the lower for a limit, the higher for a draw).
   port numbers. The end-of-stroke speed uses SMC's 2x factor, possibly over-conservative without a speed controller.
 - CAD geometry findings (thin wall, knife edge) are report issues with no sourced figure (1.5 mm, 30 deg).
 - Board and module outlines are not in `eitri.electronics.catalog` yet (hosted keeps them).
+
+### Also in 0.8.0: PLC signal inputs, sourced industrial connectors, a command-line path from approval to package
+
+(Written on a branch named 0.8.1 and folded into this release before the tag; a few code comments and test names still say 0.8.1.)
+
+#### Changed
+
+- **Signal nets are graded against the devices at their ends**, not the Arduino 20 mA pin figure for every `signal=True` net.
+  Declare them: `h.mcu_pin(pin, board="uno")` (or a board connector type), `h.plc_input(pin, iec_type=1|2|3)` (IEC 61131-2:
+  ON current and voltage, and a 2-wire sensor's OFF leakage, as drawn in TI's ISO1228 data sheet SLLSFN5B Figure 8-1, graph-read),
+  `h.sensor_output(pin, part=...)` (the Festo SMT-8M-A and SMC D-M9B catalogue figures) or with the sensor's own `max_output_A=`.
+  A signal net with no declared end is "not run" (it was a pass on the wrong limit). New check "signal net N input <pin>".
+  The servo-arm demo and the harness reference examples declare their Uno / Nano pins.
+
+#### Added
+
+- **Industrial connectors with sourced ratings**: `M8-3` (4 A, 60 V DC), `M8-4` (3 A, 30 V: the lower of Pepperl+Fuchs' 3 A / 4 A),
+  `M12-4` (4 A, 250 V), `M12-5` (4 A, 60 V DC), all A-coded cordset ends (Pepperl+Fuchs data sheets), and `WAGO-2002-1201` (2.5 mm²
+  push-in feed-through terminal: 20 A, 600 V per UL 1059, the lower of its UL and IEC figures; 0.25-4 mm²). New checks: "connector
+  voltage" (a catalogue connector's DC rating against its nets' voltage) and a mm² wire-range "wires fit the ... terminals".
+  Mirrored in `data/components/connectors.jsonl`.
+- **`eitri build <model.py> --record [--set k=v] [--config c] [--note ...]`**: the command-line path from an approved ticket to a
+  package. It writes the values into PARAMS and records a project revision through the same Project methods as the agent's tools:
+  the plan gate refuses it before approval, and the package flags unplanned parameters as it does for the agent.
+
+#### Fixed
+
+- "one gauge per net" on a thin wire with no `current_A` of its own (a cable's return core) now names the wire and says how to
+  give it its own current; the check itself is unchanged.
 
 ## 0.7.0: eitri as a plugin in your own agent
 
