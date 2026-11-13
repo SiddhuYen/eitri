@@ -10,6 +10,9 @@ optionally data for result.json and a guard. Register one of three ways:
                                                             (or `module:function`, called with no arguments to register)
     an entry point in the "eitri.extensions" group         pip-installed packages; the entry point is a module or a function
 
+The cross-domain checks of combined projects (eitri_suite, shipped in the same wheel) are registered built in, in
+every build process, and stay silent unless the build is a combined project's (eitri_suite.enabled).
+
     def fn(ctx: BuildContext) -> Outcome | Iterable[Check] | None
 
 Guards keep an extension's checks from being deleted. An Outcome may carry `guard`, a dict describing what the model
@@ -104,7 +107,20 @@ def load(force: bool = False) -> list[str]:
                 obj()
         except Exception as exc:
             _LOAD_ERRORS.append(f"entry point {ep.name!r}: {type(exc).__name__}: {exc}")
+    _load_builtin()
     return list(_LOAD_ERRORS)
+
+
+def _load_builtin() -> None:
+    """The extensions that ship with eitri: the cross-domain checks of combined projects (eitri_suite). It registers in
+    every build process and does nothing unless the build is a combined project's (eitri_suite.enabled)."""
+    if "suite" in _REGISTRY:
+        return
+    try:
+        import eitri_suite
+        eitri_suite.register()
+    except Exception as exc:
+        _LOAD_ERRORS.append(f"built-in extension 'suite': {type(exc).__name__}: {exc}")
 
 
 def _import_spec(spec: str, what: str) -> None:

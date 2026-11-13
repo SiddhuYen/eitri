@@ -9,3 +9,4 @@ import pytest
 def _isolated_config(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("EITRI_CONFIG_DIR", str(tmp_path_factory.mktemp("eitri-config")))
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("EITRI_TELEMETRY", "off")          # tests never send the anonymous counts (eitri.telemetry)
