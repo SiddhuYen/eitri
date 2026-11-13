@@ -582,3 +582,75 @@ def test_cli_only_path_from_approval_to_package(tmp_path, monkeypatch, capsys):
     pkg = json.loads(next((p.folder / "tickets" / "T-0001").glob("T-0001-tilt-rev-B/package.json")).read_text(encoding="utf-8"))
     assert {r["name"]: r["change"] for r in pkg["parameters"]}["camera_g"] == "changed"
     assert pkg["unplanned_changes"] == ["arm_mm"]                                   # the same flag the agent's changes get
+
+
+# ------------------------------------------------------------------------------------ a real terminal (a pseudo-terminal)
+def _run_on_a_pty(argv, env, answer=lambda out: None, timeout=240):
+    """Run argv as a person would, in a pseudo-terminal that is its controlling terminal (so /dev/tty is real, not a stand-in).
+    answer(output_so_far) returns bytes to type, or None. Returns (exit code, everything shown)."""
+    import os
+    import pty
+    import select
+    import time
+    pid, fd = pty.fork()
+    if pid == 0:                                                       # the child: exec at once (no work after fork)
+        try:
+            os.execve(argv[0], argv, env)
+        finally:
+            os._exit(127)
+    out, typed, deadline = b"", False, time.time() + timeout
+    try:
+        while time.time() < deadline:
+            r, _, _ = select.select([fd], [], [], 1)
+            if not r:
+                if os.waitpid(pid, os.WNOHANG)[0]:
+                    break
+                continue
+            try:
+                chunk = os.read(fd, 4096)
+            except OSError:                                            # the child closed the terminal
+                break
+            if not chunk:
+                break
+            out += chunk
+            if not typed:
+                reply = answer(out)
+                if reply is not None:
+                    os.write(fd, reply)
+                    typed = True
+    finally:
+        os.close(fd)
+    _, status = os.waitpid(pid, 0)
+    return os.waitstatus_to_exitcode(status), out.decode("utf-8", "replace")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="no pseudo-terminals")
+@pytest.mark.filterwarnings("ignore:This process .* is multi-threaded:DeprecationWarning")   # the child execs at once
+def test_approve_in_a_real_terminal(tmp_path):
+    """0.8.0 opened /dev/tty with "r+", which a terminal (not seekable) refuses, so `eitri ticket approve` failed in every
+    real terminal with "/dev/tty cannot be opened". The fake terminal above never showed it; this runs the real command in a
+    pseudo-terminal and types the one-time code back."""
+    import os
+    p = _project(tmp_path, mech())
+    T.new_ticket(p, "Heavier camera", "camera is 150 g", acceptance=[{"text": "tilt holds it", "check": "torque joint tilt*"}])
+    T.set_plan(p, "T-0001", PLAN)
+    env = {k: v for k, v in os.environ.items() if k not in T.store.AGENT_ENV}
+    argv = [sys.executable, "-m", "eitri", "ticket", "approve", "T-0001", "-C", str(p.folder), "--by", "Pat Person"]
+
+    def wrong(out):
+        return b"XXXXXX\n" if re.search(rb"type this code: \w{6}", out) else None
+
+    code, shown = _run_on_a_pty(argv, env, wrong)
+    assert code == 1 and "did not match" in shown, shown
+    assert "cannot be opened" not in shown and T.load(p, "T-0001").status == "awaiting_approval"
+
+    def right(out):
+        m = re.search(rb"type this code: (\w{6})", out)
+        return m.group(1) + b"\n" if m else None
+
+    code, shown = _run_on_a_pty(argv, env, right)
+    assert code == 0, shown
+    assert "Raise the camera mass." in shown and "approved T-0001 as Pat Person" in shown
+    t = T.load(p, "T-0001")
+    assert t.status == "approved" and T.verify_approval(t)[0]
+    assert (t.data.get("approval") or {}).get("tty", "").startswith("/dev/")   # the real terminal's name was recorded

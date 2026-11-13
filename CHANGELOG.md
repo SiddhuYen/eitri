@@ -3,6 +3,18 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
+## 0.8.1: person-only approvals work in a real terminal
+
+### Fixed
+
+- **`eitri ticket approve` / `waive` / `close` and `eitri reference add` / `accept` / `remove` failed in every real terminal**
+  with "this needs an interactive terminal (/dev/tty cannot be opened)". eitri 0.8.0 opened `/dev/tty` read-write as one
+  text file, which Python refuses for a terminal (it is not seekable), and the tests only ever used a stand-in terminal. The
+  terminal is now opened once to read and once to write (`eitri/terminal.py`), and a new test runs `eitri ticket approve` in
+  a real pseudo-terminal, types the one-time code back, and checks the recorded approval. The same bug made
+  `eitri setup firmware`'s yes/no question always answer "no"; fixed the same way. Nothing else changed: 0.8.0 tickets,
+  approvals and packages carry over as they are.
+
 ## 0.8.0: tickets and checked change packages, a source on every check, fuses, pneumatic catalogue parts, reference parts
 
 > **Read this first: pneumatic valve ports were swapped on SMC valves in every eitri before 0.8.0.** eitri named a 5/2 valve's

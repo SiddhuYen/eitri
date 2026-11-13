@@ -451,7 +451,8 @@ def _open_tty():
         raise NotAPerson("this needs an interactive terminal: run it yourself in a terminal (not through an agent, a pipe or a "
                          "script)")
     try:
-        return open("/dev/tty", "r+", encoding="utf-8")
+        from eitri.terminal import TerminalIO
+        return TerminalIO()                       # not open("/dev/tty", "r+"): a terminal is not seekable (eitri/terminal.py)
     except OSError:
         raise NotAPerson("this needs an interactive terminal (/dev/tty cannot be opened): run it yourself in a terminal") from None
 

@@ -40,7 +40,8 @@ def _run(cmd: list[str], capture: bool) -> tuple[int, str]:
 def _ask(question: str) -> bool:
     """Ask on the terminal. Without a terminal the answer is no (use --yes)."""
     try:
-        with open("/dev/tty", "r+", encoding="utf-8") as tty:
+        from eitri.terminal import TerminalIO
+        with TerminalIO() as tty:                 # not open("/dev/tty", "r+"): a terminal is not seekable
             tty.write(f"{question} [y/N] ")
             tty.flush()
             return tty.readline().strip().lower() in ("y", "yes")
