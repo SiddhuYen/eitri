@@ -1,7 +1,7 @@
 """Check a built eitri-hardware before it is installed or published:
 
 - dist/ holds exactly one wheel and one sdist, both of the version in pyproject.toml;
-- every file git tracks under eitri/ is in the wheel and in the sdist (the package data: the web app and its
+- every file git tracks under eitri/ and eitri_suite/ is in the wheel and in the sdist (the package data: the web app and its
   assets, the viewer's three.js, the agent's .md prompts, the demo projects' tarballs) - nothing is left behind
   by a too-narrow [tool.setuptools.package-data] glob;
 - pyproject.toml, eitri/__init__.py, the install script's fallback tag and (with --tag, in the release workflow)
@@ -26,7 +26,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 # every kind of package data must be present at least once (a guard even where git is unavailable)
 REQUIRED = ["eitri/web/home.html", "eitri/web/assets/", "eitri/viewer/vendor/three/", "eitri/agent/prompt.md",
-            "eitri/demos/v8-engine/project.tar.xz", "eitri/demos/v8-engine/demo.json", "eitri/demos/quad-power/quad_power.py"]
+            "eitri/demos/v8-engine/project.tar.xz", "eitri/demos/v8-engine/demo.json", "eitri/demos/quad-power/quad_power.py",
+            "eitri_suite/__init__.py", "eitri_suite/workspace.py", "eitri_suite/integration_ref.md", "eitri_suite/demos/uno-arm/model.py"]
 
 
 def main() -> int:
@@ -73,7 +74,7 @@ def main() -> int:
         with tarfile.open(sdist) as t:
             in_sdist = {n.split("/", 1)[1] for n in t.getnames() if "/" in n}
         try:
-            tracked = set(subprocess.check_output(["git", "-C", str(ROOT), "ls-files", "eitri"], text=True).split())
+            tracked = set(subprocess.check_output(["git", "-C", str(ROOT), "ls-files", "eitri", "eitri_suite"], text=True).split())
         except (OSError, subprocess.CalledProcessError):
             tracked = set()
             print("note: git is unavailable; checking only the required files")
@@ -87,7 +88,7 @@ def main() -> int:
         data = [f for f in in_wheel if f.startswith("eitri/") and not f.endswith(".py")]
         print(f"wheel  {wheel.name}: {wheel.stat().st_size / 1e6:.2f} MB, {len(in_wheel)} files ({len(data)} package-data files)")
         print(f"sdist  {sdist.name}: {sdist.stat().st_size / 1e6:.2f} MB, {len(in_sdist)} files")
-        print(f"tracked files under eitri/: {len(tracked)}")
+        print(f"tracked files under eitri/ and eitri_suite/: {len(tracked)}")
 
     if problems:
         print("\n".join("FAIL " + p for p in problems))

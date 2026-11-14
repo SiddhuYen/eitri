@@ -216,8 +216,23 @@ def _materials() -> list[str]:
     return [m for m in DENSITY if m != "aluminum"]
 
 
+# A combined project (eitri_suite.workspace) has a model file per domain: the page shows a tab per file (the editor's host
+# slot EITRI_SHELL.switchModel, which POSTs /model here). The footer's link to the hosted combined workspace is not shown.
+_COMBINED_HEAD = b"""<!-- eitri:host-head -->
+<script>
+window.EITRI_SHELL = Object.assign(window.EITRI_SHELL || {}, {
+  switchModel: async function (file) {
+    const r = await fetch('model', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({file: file})});
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d.ok === false) throw new Error(d.error || ('HTTP ' + r.status));
+  }
+});
+</script>
+<style>#st-combined{display:none}</style>"""
+
+
 def make_handler(project: Project, lock: threading.Lock, hub=None, home: str | None = None, agent=None, policy=None,
-                 plugin: str | None = None):
+                 plugin: str | None = None, combined: bool = False, busy=None):
     """The editor's request handler for one project. `policy` (a hosted deployment) replaces the local-only
     host check (policy.host_ok(handler, post)), refuses routes (policy.blocked(method, path) -> a message
     or None) and adds to the state (policy.state(st))."""
@@ -309,7 +324,10 @@ def make_handler(project: Project, lock: threading.Lock, hub=None, home: str | N
             if path in ("/", "/index.html"):
                 if hub is not None and hasattr(hub, "prewarm"):
                     hub.prewarm()                    # Claude loads while the page does: the first reply comes sooner
-                self._send(200, (_HERE / "index.html").read_bytes(), "text/html; charset=utf-8")
+                page = (_HERE / "index.html").read_bytes()
+                if combined:
+                    page = page.replace(b"<!-- eitri:host-head -->", _COMBINED_HEAD, 1)
+                self._send(200, page, "text/html; charset=utf-8")
             elif path == "/state.json":
                 self._json(_st())
             elif path == "/view.glb":
@@ -523,7 +541,19 @@ def make_handler(project: Project, lock: threading.Lock, hub=None, home: str | N
                 self._json({"ok": False, "error": "bad JSON"}, 400)
                 return
             try:
-                if path == "/set":
+                if path == "/model" and combined:          # a combined project's tab: make another model file current
+                    file = str(payload.get("file") or "")
+                    why = busy() if busy is not None else None
+                    if why:
+                        self._json({"ok": False, "error": why}, 409)
+                    elif file not in project.model_files() or not (project.folder / file).is_file():
+                        self._json({"ok": False, "error": f"this project has no model file {file}"}, 404)
+                    else:
+                        with lock:
+                            project.reload()
+                            project.set_model_file(file)
+                        self._json({"ok": True, "state": _st()})
+                elif path == "/set":
                     with lock:
                         if payload.get("config"):
                             project.apply_config(str(payload["config"]))
@@ -1027,12 +1057,13 @@ def _free_port(preferred: int = 8765) -> int:
     return 0
 
 
-def start_viewer(project: Project, port: int = 0, background: bool = True, hub=None, plugin: str | None = None) -> str:
+def start_viewer(project: Project, port: int = 0, background: bool = True, hub=None, plugin: str | None = None,
+                 combined: bool = False, busy=None) -> str:
     """Start the viewer server; returns its URL. background=False blocks. `plugin`: the agent that drives the project
-    (plugin mode)."""
+    (plugin mode). `combined`: a combined project (a tab per model file); `busy()` says why a tab may not switch now."""
     port = port or _free_port()
     lock = threading.Lock()
-    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(project, lock, hub, plugin=plugin))
+    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(project, lock, hub, plugin=plugin, combined=combined, busy=busy))
     url = f"http://127.0.0.1:{server.server_address[1]}/"
     if background:
         t = threading.Thread(target=server.serve_forever, daemon=True)

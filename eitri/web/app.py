@@ -119,7 +119,9 @@ class ProjectApp:
         self.lock = threading.Lock()
         project = self.project
         self.hub = AgentHub(project, lambda on_event: ws.make_session(project, on_event), printer=ws.printer, history=True)
-        self.handler_cls = make_handler(project, self.lock, self.hub, home="/", agent=lambda: ws.agent)
+        from eitri_suite import is_combined_folder        # a combined project: a tab per model file (eitri_suite.workspace)
+        self.handler_cls = make_handler(project, self.lock, self.hub, home="/", agent=lambda: ws.agent,
+                                        combined=is_combined_folder(project.folder))
 
     def close(self) -> None:
         self.hub.close()

@@ -691,6 +691,9 @@ def main(argv: list[str] | None = None) -> int:
 
     mc = sub.add_parser("mcp", help="the plugin's local MCP server on stdio, for your own agent (the eitri plugin starts it; no API key)")
     mc.add_argument("--plugin", action="store_true", help=argparse.SUPPRESS)
+    mc.add_argument("--combined", action="store_true", help="the combined multi-domain workspace (combined_* tools), on this computer")
+    tl = sub.add_parser("telemetry", help="the two anonymous counts eitri's plugin sends (install, project created): on | off | status")
+    tl.add_argument("action", choices=["on", "off", "status"], nargs="?", default="status")
     from .plugin_install import add_parser as _add_plugin_parser
     _add_plugin_parser(sub)
     from .reference_cli import add_parser as _add_reference_parser
@@ -700,7 +703,7 @@ def main(argv: list[str] | None = None) -> int:
 
     argv = list(sys.argv[1:] if argv is None else argv)
     commands = ("chat", "build", "bom", "view", "drawing", "serve", "web", "cam", "cut", "print-prep", "print", "doctor", "key",
-                "update", "setup", "mcp", "plugin", "reference", "ticket", "package", "-h", "--help", "-V", "--version")
+                "update", "setup", "mcp", "plugin", "telemetry", "reference", "ticket", "package", "-h", "--help", "-V", "--version")
     if not argv:
         argv = ["web"]                   # plain `eitri`: the website, in the browser
     elif argv[0] not in commands:
@@ -716,9 +719,16 @@ def main(argv: list[str] | None = None) -> int:
         from .tickets.cli import package_main
         return package_main(args)
     if args.cmd == "mcp":
+        if args.combined:
+            from .agent.combined_server import serve as serve_combined
+            serve_combined()
+            return 0
         from .agent.mcp_server import serve_plugin
         serve_plugin()
         return 0
+    if args.cmd == "telemetry":
+        from .telemetry import main as telemetry_main
+        return telemetry_main(args.action)
     if args.cmd == "plugin":
         from .plugin_install import main as plugin_main
         return plugin_main(args)
@@ -865,7 +875,8 @@ def main(argv: list[str] | None = None) -> int:
         project = Project(args.project)
         if project.ensure_model():
             project.build(note="blank design", render=False)
-        url = start_viewer(project, port=args.port, background=False)
+        from eitri_suite import is_combined_folder
+        url = start_viewer(project, port=args.port, background=False, combined=is_combined_folder(project.folder))
         return 0
 
     project = Project(args.project, name=args.model_name)

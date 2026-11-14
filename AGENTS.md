@@ -133,24 +133,31 @@ replays a real Claude session in the editor) and a box to describe a part when a
 ## As a plugin in the person's own agent (instead of steps 3-4)
 
 If the person wants eitri inside the agent they already use (Claude Code, Codex or Cursor), on that agent's own
-subscription with no Anthropic API key, run after step 2. **This needs eitri 0.7.0 or newer** (`eitri --version`; the
-release that adds `eitri plugin` and `eitri mcp`). On an older eitri, run `eitri update` first; if it reports an older
-version as the newest, the plugin is not released yet, so stop and tell the person. Do not run `eitri plugin ...` on an
-older eitri: it reads `plugin` as a project folder.
+subscription with no Anthropic API key, run after step 2. **This needs eitri 0.9.0 or newer** (`eitri --version`; the
+release that adds the local combined workspace, `eitri mcp --combined`). On an older eitri, run `eitri update` first; if
+it reports an older version as the newest, 0.9.0 is not released yet, so stop and tell the person.
 
 ```sh
-eitri plugin install          # registers the plugin in every agent app found
-eitri plugin login            # opens eitri.io/account; the person makes a token and pastes it (hidden prompt)
+eitri plugin install          # registers the plugin in every agent app found; nothing to sign in to
 ```
 
-(or `curl -fsSL https://eitri.io/install | sh -s -- --plugin` does install + plugin + login in one go).
-**Success:** one `ok` line per agent app found, then `saved eitri…xxxx to <config folder>/plugin-token`. A token
-eitri.io rejects prints `not saved: eitri.io rejected this token` and exits 1. Do not invent or echo the token;
-`printf '%s' "$TOKEN" | eitri plugin login --token-stdin` works when the person gives it to you. Without a token the
-local single-domain tools still work; only the combined workspace (eitri.io) needs one. Tell the person: in combined
-mode the model files go to eitri.io, are kept as projects, and are used to train eitri's models unless they turn that
-off on eitri.io/account. Then they restart their agent and ask it for a design. `eitri plugin status` shows the state;
-`eitri plugin uninstall` removes it.
+(or `curl -fsSL https://eitri.io/install | sh -s -- --plugin` does install + plugin in one go).
+**Success:** one `ok` line per agent app found, the one-line note about the anonymous counts, then
+`Done. Now run  claude  and ask it for a machine ...`. With no agent app installed it prints how to install Claude Code
+(`curl -fsSL https://claude.ai/install.sh | bash`) and exits 3; the one-line installer then still exits 0. Both servers run
+on this computer: `eitri` (six single domains) and `eitri-combined` (the combined workspace: a whole machine, every domain
+checked against the others). No account, no token. Then the person runs `claude` (or restarts Codex / Cursor) and asks for
+a design. `eitri plugin status` shows the state; `eitri plugin uninstall` removes it.
+
+Optional, only if the person wants projects kept on eitri.io: `eitri plugin login` (it opens eitri.io/account; the person
+makes a token and pastes it; `printf '%s' "$TOKEN" | eitri plugin login --token-stdin` when they give it to you; do not
+invent or echo it). It adds a third server, `eitri-io`, with the same tools. Tell the person: on that server the model
+files go to eitri.io, are kept as projects, and are used to train eitri's models unless they turn that off on
+eitri.io/account. `eitri plugin logout` removes it.
+
+Anonymous counts: `eitri plugin install` sends one "install" count and the plugin one "project_created" count per new
+project (a random install id, the eitri version, the OS, the agent app, the project's domain; nothing else) to
+https://eitri.io/api/ping. Tell the person if they ask; `eitri telemetry off` (or `EITRI_TELEMETRY=off`) turns them off.
 
 ## Other useful commands (no browser, no API key)
 
@@ -237,7 +244,8 @@ eitri never checks for updates on its own unless the person turns it on with `ei
 | `eitri update` says it could not reach pypi.org | check the internet connection; or reinstall with the one-line installer |
 | chat says `Invalid API key` | `eitri key set` with a valid key (or fix `ANTHROPIC_API_KEY`) |
 
-Network: on its own, eitri contacts nothing but Anthropic's API (with the key). It asks pypi.org for the newest
+Network: on its own, the eitri app contacts nothing but Anthropic's API (with the key). It asks pypi.org for the newest
 version only on `eitri update`, `eitri doctor --online`, or once a day if the person ran `eitri update --auto on`.
 The installer downloads packages from PyPI (or the release archive from GitHub) and, if needed, uv from astral.sh;
-`eitri setup firmware` downloads from Arduino and Espressif. No telemetry.
+`eitri setup firmware` downloads from Arduino and Espressif. The plugin (not the app) sends two anonymous counts, install and
+project created, to eitri.io/api/ping (`eitri telemetry status` shows what; `eitri telemetry off` turns them off).

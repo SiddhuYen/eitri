@@ -49,6 +49,7 @@ class PluginSession:
         self._opened: set[str] = set()              # folders whose viewer the browser was sent to
         self._lock = threading.Lock()
         self._warmed = False
+        self._count_pending: str | None = None       # a project new_project made: counted at its first build (eitri.telemetry)
 
     # ------------------------------------------------------------------ projects
     def adopt_startup_folder(self) -> Project | None:
@@ -91,6 +92,7 @@ class PluginSession:
         if goal.strip():
             project.design_notes_path.write_text(f"# {title_from(name)}\n\nGoal: {goal.strip()}\n", encoding="utf-8")
         self._activate(project)
+        self._count_pending = str(project.folder)
         return ToolResult(
             f"Created the eitri project {_tilde(target)} (model file {project.model_path.name}, not written yet).\n"
             f"Viewer: {self.viewer_url(project)} (it opens in the browser at the first build and follows every rebuild).\n"
@@ -189,6 +191,13 @@ class PluginSession:
             return False
 
     def _on_event(self, kind: str, data: dict) -> None:
+        if kind == "build_start" and self.project is not None and self._count_pending == str(self.project.folder):
+            self._count_pending = None                 # its kind is known now: the anonymous project count, once
+            try:
+                from .. import telemetry
+                telemetry.send("project_created", kind=self.project.kind)
+            except Exception:
+                pass
         if kind == "build_start" and self.project is not None:
             try:
                 self._browse(self.viewer_url())       # the first build of a project: the user watches it arrive

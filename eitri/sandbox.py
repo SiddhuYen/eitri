@@ -112,6 +112,7 @@ def _selfcheck(out: Path, scan: bool = False) -> int:
 
 
 def main() -> int:
+    os.environ["EITRI_TELEMETRY"] = "off"     # a sandbox never sends the plugin's anonymous counts (eitri.telemetry)
     out_fd = os.dup(1)                      # the real stdout carries only the output tar
     os.dup2(2, 1)
     sys.stdout = sys.stderr

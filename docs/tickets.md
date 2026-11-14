@@ -127,7 +127,7 @@ The **Not checked** section lists what eitri's checks do not cover:
 - every waived check;
 - every check that disappeared;
 - each domain's standing limits (for example, no FEA for CAD and no dynamic loads for mechanisms);
-- cross-domain checks, which run only in the eitri.io combined workspace.
+- cross-domain checks, which run only in a combined project (the combined workspace, `eitri mcp --combined`, or eitri.io).
 
 The **change order** is a draft. eitri fills in the reason, description, affected items, from and to revisions, and the
 originator. The number, disposition, effectivity and sign-off are left blank for a person.

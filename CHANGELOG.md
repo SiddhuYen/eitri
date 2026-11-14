@@ -3,6 +3,52 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
+## 0.9.0: the combined workspace runs on your computer, open source; the plugin installs with one line
+
+### Added
+
+- **The cross-domain suite is open source and ships in eitri-hardware** (`eitri_suite/`, FSL-1.1-MIT like the rest): the checks
+  between a machine's model files (CAD <-> harness route fit and mating faces, mechanism <-> CAD link masses, torque and
+  self-collision, actuators at their joints, every body attached, the harness placed at the CAD anchors with 3D wire paths and cut
+  lengths, firmware pins against the harness, the SEQUENCE against the joints, the supply against the actuators that move together,
+  a free-standing base against tipping, and the circuit against the harness, the firmware, the mechanism and the CAD), the parts
+  catalog, the consolidated BOM, the build package, and the reference projects (`eitri_suite/demos/uno-arm`, `robot-arm`,
+  `desk-gripper`). Core registers it as a built-in build extension; it runs only for a combined project (a folder whose eitri.json
+  says `"workspace": "combined"`, or `EITRI_SUITE=1`; `EITRI_SUITE=0` turns it off).
+- **A local combined workspace** (`eitri mcp --combined`, the plugin's `eitri-combined` server): the same eight tools and contract as
+  eitri.io's remote one (`combined_reference`, `combined_new_project`, `combined_list_projects`, `combined_read_files`,
+  `combined_put_files`, `combined_build`, `combined_results`, `combined_export`), with projects as folders in ~/eitri-projects and
+  every build on this computer. No account, no token, no database. `combined_export` writes into the project's export/ folder and
+  refuses while any check of any file fails, did not run, or is out of date (a file it reads changed since); the build package also
+  needs a passing combined build of the current files. Electronics (elec.py) is part of a combined project.
+- The viewer of a combined project (from the plugin, `eitri web` or `eitri serve`) shows a tab per model file with its check verdict.
+- **Two anonymous counts** for the plugin (`eitri.telemetry`): `eitri plugin install` sends `{"event": "install", ...}` once per install
+  id, and each new project `{"event": "project_created", "kind": ...}`, to https://eitri.io/api/ping, with a random install id (uuid4
+  in eitri's config folder, tied to no account), the eitri version, the OS and the agent app. Nothing else. Fire-and-forget (2 s, no
+  retry). Off with `eitri telemetry off`, `EITRI_TELEMETRY=off`, `EITRI_NO_PING=1` or `DO_NOT_TRACK=1`; never sent from tests or a
+  sandbox. The installer and the first plugin run say so in one line. The app (`eitri`, `eitri web`) sends neither.
+
+### Changed
+
+- **The plugin defaults to the two local servers** (`eitri` and `eitri-combined`, both stdio). eitri.io's hosted combined workspace is
+  an option: `eitri plugin login` adds it as a third server, `eitri-io` (Claude Code: a user-scope server through the bundle's header
+  helper; Codex and Cursor: in their config), and `eitri plugin logout` removes it. The `design` and `combined` skills route to the
+  local workspace and mention eitri.io only when the person asks for it.
+- `curl -fsSL https://eitri.io/install | sh -s -- --plugin` no longer asks for a token: it installs eitri, registers the plugin and ends
+  with `Done. Now run claude`. With no agent app installed, `eitri plugin install` says how to install Claude Code and exits 3, and the
+  installer exits 0 (eitri itself installed fine) instead of failing.
+- The plugin launcher needs eitri 0.9.0 (it checks for `eitri mcp --combined`).
+
+### Known limits
+
+- The local viewer has no Assembly view (eitri.io's one 3D scene of every domain: the harness wires routed through the CAD model,
+  the boards at their anchors, the arm posed through the SEQUENCE, replays); each file shows in its own domain view instead.
+- Without eitri installed, Claude Code's marketplace route (`/plugin marketplace add SiddhuYen/eitri`) starts the servers through
+  uvx, whose first download (about 390 MB) outlasts Claude Code's 30 s connect limit: the first session has no eitri tools. Install
+  eitri first (the one-line installer).
+- Checks are only as good as the models and figures behind them: unverified catalog figures are marked, and a check missing an
+  input says "not run".
+
 ## 0.8.1: person-only approvals work in a real terminal
 
 ### Fixed

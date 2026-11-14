@@ -1,8 +1,16 @@
 {
   "name": "eitri",
-  "owner": { "name": "eitri", "url": "https://eitri.io" },
+  "owner": {
+    "name": "eitri",
+    "url": "https://eitri.io"
+  },
   "description": "The eitri plugin, from the installed eitri package (eitri plugin install adds it).",
   "plugins": [
-    { "name": "eitri", "source": "./", "description": "Hardware design with sourced checks on every build: combined multi-domain workspace (eitri.io) and six local domains.", "category": "development" }
+    {
+      "name": "eitri",
+      "source": "./",
+      "description": "Hardware design with sourced checks on every build, on your computer: the combined multi-domain workspace and six single domains.",
+      "category": "development"
+    }
   ]
 }

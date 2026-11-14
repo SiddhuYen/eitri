@@ -1,18 +1,19 @@
 ---
 name: combined
-description: Design a whole machine in eitri's combined workspace on eitri.io (the combined_* tools) - structure, wiring, motion, air and firmware in one project, built and checked together until every single-domain and cross-domain check passes. Use for robots, arms, rovers, plotters, grippers with their drive and power, and anything spanning two or more domains.
+description: Design a whole machine in eitri's combined workspace (the combined_* tools, on this computer) - structure, mechanism, wiring, firmware, air and its circuit in one project, built and checked together until every single-domain and cross-domain check passes. Use for robots, arms, rovers, plotters, grippers with their drive and power, and anything spanning two or more domains.
 ---
 
 # eitri: the combined workspace
 
-The tools come from the `eitri-combined` MCP server: `combined_reference`, `combined_new_project`,
-`combined_list_projects`, `combined_read_files`, `combined_put_files`, `combined_build`, `combined_results` and
-`combined_export`. Your host may show them with a prefix (for example `mcp__plugin_eitri_eitri-combined__combined_build`).
-eitri.io builds every file in a sandbox and runs all the checks, single-domain and cross-domain. Only the results come
-back. You write every file yourself.
+The tools come from the `eitri-combined` MCP server, which runs on this computer: `combined_reference`,
+`combined_new_project`, `combined_list_projects`, `combined_read_files`, `combined_put_files`, `combined_build`,
+`combined_results` and `combined_export`. Your host may show them with a prefix (for example
+`mcp__plugin_eitri_eitri-combined__combined_build`). eitri builds every file here and runs all the checks, single-domain and
+cross-domain. A project is a folder in ~/eitri-projects; the user watches it in eitri's viewer (a tab per model file). You
+write every file yourself.
 
-If these tools are missing, or a call says the token is missing or invalid, follow the sign-in steps in the **design**
-skill (`eitri plugin login`). Don't work around it.
+If these tools are missing, follow the **design** skill (eitri isn't installed yet). If the user asked for eitri.io and
+signed in, the `eitri-io` server has the same tools; use those instead and give its privacy line (see **design**).
 
 ## The loop
 
@@ -23,36 +24,32 @@ skill (`eitri plugin login`). Don't work around it.
    the board) and your assumptions. Ask the user only for a fact that would change the design and that you can't
    reasonably assume.
 3. **Project.** `combined_new_project(name, goal)`, where `goal` is the request in a sentence. Before writing any file,
-   send the user one short message: the workspace you picked and why, the plan from step 2, the view link the project
-   returns (it shows the assembly live), and, the first time in a conversation, the privacy line from the **design**
-   skill (the files are kept on eitri.io and used for training unless turned off on eitri.io/account). To continue earlier work, use `combined_list_projects()` and
-   `combined_read_files(project_id)` instead.
+   send the user one short message: the workspace you picked and why, the plan from step 2, and the viewer link the
+   project returns. To continue earlier work, use `combined_list_projects()` and `combined_read_files(project_id)` instead.
 4. **Write.** `combined_put_files(project_id, {path: content, ...})` sends whole files (with `delete=[path]` to remove
-   one). Keep every number the user may change in each file's `PARAMS`. Put the request's own requirements in
-   `verify()`.
-5. **Build.** `combined_build(project_id)` builds every domain and runs every check. While the build waits for a free
-   builder, the result gives a queue position: call `combined_results(project_id)` after a short wait. Don't start
-   another build.
-6. **Read the result.** It lists each check with pass, warn or fail, the measured number, the limit and the limit's source.
-   It also lists the **next steps**: what is unbuilt ("wiring not built yet") and why something fails ("coupling X fails
-   because..."). Treat the next steps as your to-do list: work through them in order, and add any missing domain they
-   name.
+   one). You may also edit the files in the project folder with your own file tools; `combined_build` builds what is on
+   disk. Keep every number the user may change in each file's `PARAMS`. Put the request's own requirements in `verify()`.
+5. **Build.** `combined_build(project_id)` builds every domain and runs every check. A long build goes on in the
+   background: the result then says so, and `combined_results(project_id)` waits for it. Don't start another build.
+6. **Read the result.** It lists each check with pass, warn, not run or fail, the measured number, the limit and the
+   limit's source. It also lists the **next steps**: what is unbuilt ("wiring not built yet") and why something fails
+   ("coupling X fails because..."). Treat the next steps as your to-do list: work through them in order, and add any
+   missing domain they name. "Not run" is not a pass: give the missing input.
 7. **Fix and rebuild.** Change the design, not the checks: a bigger servo, a thicker wire, a lower gear ratio, a
    regulator with headroom, a longer link. Never delete, loosen or rename a check to make it pass, and never lower a
    requirement the user gave. If you think a check measures the wrong thing, keep it, add the right one, and say so.
-   Send only the files you changed with `combined_put_files`, then `combined_build` again.
+   Send only the files you changed, then `combined_build` again.
 8. **Done** means every check passes (warnings explained) and the next steps list is empty. Then reply briefly: what you
-   built, the numbers that matter (the tightest margins), what the user can change, your assumptions, and the view
-   link. When the user wants files, use `combined_export(project_id, formats)`, which returns download links.
+   built, the numbers that matter (the tightest margins), what the user can change, your assumptions, and the viewer
+   link. When the user wants files, use `combined_export(project_id, formats)`, which writes them into the project's
+   export/ folder and returns their paths (the build package only when every check has run and passes).
 
 ## Notes
 
-- The combined workspace has no electronics (breadboard circuits) yet; `combined_reference()` lists the kinds it takes.
-  Don't put a circuit file in a combined project. If the user needs the circuit checked, design it with the local
-  **electronics** skill and say it is not checked against the combined project.
-
+- A firmware file's `compiles (arduino-cli)` check fails with "compiler unavailable" until arduino-cli is installed: ask the
+  user to run `eitri setup firmware` once in a terminal (it installs system software, so it's their call), then rebuild.
 - Results give each failing check's numbers and source. Quote them to the user when you explain a change.
 - Work in visible stages on a big machine: get the structure and motion right first, then wiring and power, then
-  firmware. Build after each stage and say in one line what you are adding.
-- The model files are kept on eitri.io as the user's project. Tell the user once about training use and the opt-out on
-  eitri.io/account (see the **design** skill), before the first `combined_put_files`, not at the end.
+  firmware, then the circuit. Build after each stage and say in one line what you are adding.
+- The checks are only as good as the models and figures behind them: say which numbers are estimates or unverified
+  catalog figures when they decide a margin.

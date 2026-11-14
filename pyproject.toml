@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "eitri-hardware"                # the PyPI name ("eitri" is taken; up to 0.5.6 it was "eitri-cad", never on PyPI); the import and the command are both `eitri`
-version = "0.8.1"
+version = "0.9.0"
 description = "Hardware design as code: CAD (build123d), wire harnesses, mechanisms, pneumatics, firmware and electronics, with sourced checks on every build; a local AI agent, a browser editor and an MCP server for your own agent."
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
@@ -45,7 +45,7 @@ eitri = "eitri.cli:main"
 eitri-hardware = "eitri_hardware:main"     # the package's own name, for MCP registries (`uvx eitri-hardware mcp`): the local MCP server
 
 [tool.setuptools.packages.find]
-include = ["eitri", "eitri.*", "eitri_hardware"]
+include = ["eitri", "eitri.*", "eitri_hardware", "eitri_suite"]
 
 [tool.setuptools.package-data]
 eitri = [
@@ -58,6 +58,7 @@ eitri = [
   "plugin_bundle/skills/*/SKILL.md", "plugin_bundle/cursor/*.mdc",
   "tickets/*.json",
 ]
+eitri_suite = ["*.md", "demos/*/*.py"]     # the combined workspace: its integration reference and the reference projects
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

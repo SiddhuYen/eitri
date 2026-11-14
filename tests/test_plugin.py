@@ -86,9 +86,9 @@ def test_mcp_config_has_both_servers():
     cfg = json.loads((BUNDLE / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]
     assert set(cfg) == {"eitri", "eitri-combined"}
     assert cfg["eitri"]["type"] == "stdio" and cfg["eitri"]["args"] == ["${CLAUDE_PLUGIN_ROOT}/bin/eitri-mcp"]
-    remote = cfg["eitri-combined"]
-    assert remote["type"] == "http" and remote["url"] == "${EITRI_MCP_URL:-https://eitri.io/mcp}"
-    assert "eitri-auth-header" in remote["headersHelper"] and "headers" not in remote     # no token in the file
+    combined = cfg["eitri-combined"]                                   # the combined workspace runs locally too: no URL, no token
+    assert combined["type"] == "stdio" and combined["args"] == ["${CLAUDE_PLUGIN_ROOT}/bin/eitri-mcp", "--combined"]
+    assert "url" not in combined and "headersHelper" not in combined
     market = json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8"))
     assert market["name"] == "eitri" and market["plugins"][0]["source"] == "./eitri/plugin_bundle"
 
@@ -104,15 +104,15 @@ def test_skills():
             assert word not in text, (name, word)
     for tool in TOOLS:                                       # the combined skill uses the whole contract
         assert tool in skills["combined"], tool
-    # electronics is not part of combined projects yet (eitri.io's combined_reference says so): nothing may list it as one
-    combined_claims = [skills["combined"].split("---")[1], skills["design"].split("## Decide")[0],
-                       json.loads((BUNDLE / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))["description"].split("six local")[0],
-                       (ROOT / "README.md").read_text(encoding="utf-8").split("- **Combined workspace (the default):**")[1].split("- **Six local")[0]]
-    for text in combined_claims:
-        assert "firmware and electronics" not in text and "firmware, electronics)" not in text, text[:200]
-    assert "not part of" in combined_claims[1] and "not part of combined projects" in combined_claims[3]
+    # the local combined workspace holds the circuit too (elec.py, checked against the other files)
+    assert "circuit" in skills["combined"].split("---")[1] and "elec.py" in skills["design"]
+    readme = (ROOT / "README.md").read_text(encoding="utf-8").split("- **Combined workspace (the default):**")[1].split("- **Six local")[0]
+    assert "eitri mcp --combined" in readme and "open source" in readme
+    for text in (skills["combined"], skills["design"]):                   # the default is local: no token step, no remote URL
+        assert "eitri.io/mcp" not in text and "this computer" in text
     router = skills["design"]
-    assert "eitri plugin login" in router and "train" in router and "telemetry" in router
+    assert "eitri plugin login" in router and "train" in router and "eitri telemetry off" in router
+    assert router.index("eitri plugin login") > router.index("## eitri.io (optional)")
     assert "default" in router.lower()
     for name, (_k, _f, ref, _d) in plugin_files.DOMAINS.items():
         assert f"`{ref}()`" in skills[name] and "PROJECT STATUS" in skills[name]
@@ -140,34 +140,34 @@ def test_auth_header_script(tmp_path):
 def test_launcher_script(tmp_path):
     script = BUNDLE / "bin" / "eitri-mcp"
     good, old = tmp_path / "good", tmp_path / "old"
-    good.write_text('#!/bin/sh\nif [ "$1" = --help ]; then printf "  {chat,mcp}\\n    mcp       the plugin server\\n"; exit 0; fi\necho "ran $*"\n')
-    old.write_text('#!/bin/sh\nif [ "$1" = --help ]; then printf "    chat   the REPL\\n"; exit 0; fi\n'
-                   'if [ "$1" = --version ]; then echo "eitri 0.6.0"; exit 0; fi\necho "ran $*"\n')
+    good.write_text('#!/bin/sh\nif [ "$2" = --help ]; then printf "  --plugin\\n  --combined  the combined workspace\\n"; exit 0; fi\necho "ran $*"\n')
+    old.write_text('#!/bin/sh\nif [ "$2" = --help ]; then printf "  -h, --help\\n"; exit 0; fi\n'
+                   'if [ "$1" = --version ]; then echo "eitri 0.8.1"; exit 0; fi\necho "ran $*"\n')
     good.chmod(0o755)
     old.chmod(0o755)
     base = {"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)}
     p = subprocess.run(["sh", str(script), "x"], env={**base, "EITRI_BIN": str(good)}, capture_output=True, text=True, encoding="utf-8")
     assert p.stdout.strip() == "ran mcp x"
+    p = subprocess.run(["sh", str(script), "--combined"], env={**base, "EITRI_BIN": str(good)}, capture_output=True, text=True, encoding="utf-8")
+    assert p.stdout.strip() == "ran mcp --combined"
     p = subprocess.run(["sh", str(script)], env={**base, "EITRI_BIN": str(old)}, capture_output=True, text=True, encoding="utf-8")
     assert p.returncode == 1 and "eitri update" in p.stderr
-    assert "needs eitri 0.7.0 or newer" in p.stderr and "eitri 0.6.0" in p.stderr and "not released yet" in p.stderr
+    assert "needs eitri 0.9.0 or newer" in p.stderr and "eitri 0.8.1" in p.stderr and "not released yet" in p.stderr
     p = subprocess.run(["sh", str(script)], env=base, capture_output=True, text=True, encoding="utf-8")
     assert p.returncode == 1 and "eitri.io/install" in p.stderr
 
 
-@pytest.mark.parametrize("version,ok", [("0.6.0", False), ("0.7.0", True)])
-def test_installer_plugin_flag_needs_0_7(tmp_path, version, ok):
-    """`install-remote.sh --plugin` over an eitri without `eitri plugin` stops with the 0.7.0 message (0.6.0 would read
-    `plugin` as a project folder and open the chat); a new one goes on to `eitri plugin install`. uv is a stub."""
+def _installer(tmp_path, version: str, combined: bool, plugin_rc: int = 0, plugin_out: str = "  ok   Claude Code: plugin eitri@eitri"):
+    """`install-remote.sh --plugin` over a stub eitri (uv is a stub too): (returncode, stdout, stderr)."""
     tools, home = tmp_path / "tools", tmp_path / "home"
     tools.mkdir()
     home.mkdir()
-    sub = "    plugin    use eitri inside your own agent\\n" if ok else ""
+    flag = "  --combined  the combined workspace\\n" if combined else ""
     (tools / "eitri").write_text(
         '#!/bin/sh\ncase "$1" in\n'
-        f'  --help) printf "    chat   the REPL\\n{sub}";;\n'
+        f'  mcp) printf "  -h, --help\\n{flag}";;\n'
         f'  --version) echo "eitri {version}";;\n'
-        '  plugin) echo "PLUGIN $*"; if [ "$2" = status ]; then echo "  eitri.io token: eitri_…abcd"; fi;;\n'
+        f'  plugin) echo "PLUGIN $*"; echo "{plugin_out}"; exit {plugin_rc};;\n'
         '  *) exit 0;;\nesac\n', encoding="utf-8")
     (tools / "uv").write_text(f'#!/bin/sh\ncase "$*" in "tool dir --bin") echo "{tools}";; "tool dir") echo "{tmp_path}/none";; esac\nexit 0\n',
                               encoding="utf-8")
@@ -176,11 +176,27 @@ def test_installer_plugin_flag_needs_0_7(tmp_path, version, ok):
     env = {"PATH": f"{tools}:/usr/bin:/bin", "HOME": str(home), "EITRI_INSTALL_SOURCE": "stub", "EITRI_NO_PATH_EDIT": "1"}
     p = subprocess.run(["sh", str(ROOT / "scripts" / "install-remote.sh"), "--plugin"], env=env, capture_output=True,
                        text=True, encoding="utf-8", timeout=60)
+    return p.returncode, p.stdout, p.stderr
+
+
+@pytest.mark.parametrize("version,ok", [("0.8.1", False), ("0.9.0", True)])
+def test_installer_plugin_flag_needs_0_9(tmp_path, version, ok):
+    """`--plugin` over an eitri without the local combined workspace stops with the 0.9.0 message; a new one registers the
+    plugin and ends with what to run next: no sign-in step, no token."""
+    rc, out, err = _installer(tmp_path, version, combined=ok)
     if ok:
-        assert p.returncode == 0 and "PLUGIN plugin install" in p.stdout, p.stdout + p.stderr
+        assert rc == 0 and "PLUGIN plugin install" in out, out + err
+        assert "Done. Now run   claude" in out and "login" not in out and "token" not in out.replace("no token", "")
     else:
-        assert p.returncode == 1 and "PLUGIN" not in p.stdout
-        assert "needs eitri 0.7.0 or newer" in p.stderr and "eitri 0.6.0" in p.stderr
+        assert rc == 1 and "PLUGIN" not in out
+        assert "needs eitri 0.9.0 or newer" in err and "eitri 0.8.1" in err
+
+
+def test_installer_without_an_agent_app_succeeds_and_says_what_to_install(tmp_path):
+    """No Claude Code, Codex or Cursor: eitri is installed, so the installer exits 0 and says how to get Claude Code."""
+    rc, out, err = _installer(tmp_path, "0.9.0", combined=True, plugin_rc=PI.NO_AGENT, plugin_out=PI.INSTALL_AGENT_HINT.splitlines()[1])
+    assert rc == 0, out + err
+    assert "claude.ai/install.sh" in out and "eitri plugin install" in out and "Done. Now run" not in out
 
 
 # ------------------------------------------------------------------------------------------------ the local server
@@ -298,13 +314,14 @@ def test_install_everywhere_and_uninstall(home):
     import tomllib
     servers = tomllib.loads(cfg)["mcp_servers"]
     assert servers["eitri"]["args"] == ["mcp"] and servers["eitri"]["tool_timeout_sec"] >= 600
-    assert servers["eitri-combined"]["url"] == "https://eitri.io/mcp"
-    assert servers["eitri-combined"]["http_headers_helper"] == str(copy / "bin" / "eitri-auth-header")
+    assert servers["eitri-combined"]["args"] == ["mcp", "--combined"] and "url" not in servers["eitri-combined"]
+    assert servers["eitri-combined"]["env"]["EITRI_LAZY_IMPORT"] == "1" and PI.REMOTE_NAME not in servers     # no token: no eitri.io
     skill = (home / ".agents" / "skills" / "eitri-design" / "SKILL.md").read_text(encoding="utf-8")
     assert "name: eitri-design" in skill and "**eitri-combined**" in skill
 
     cursor = json.loads((home / ".cursor" / "mcp.json").read_text(encoding="utf-8"))["mcpServers"]
-    assert cursor["eitri"]["args"] == ["mcp"] and "eitri-combined" not in cursor      # no token yet
+    assert cursor["eitri"]["args"] == ["mcp"] and cursor["eitri-combined"]["args"] == ["mcp", "--combined"]
+    assert PI.REMOTE_NAME not in cursor                                                 # eitri.io only after `login`
     assert (home / "proj" / ".cursor" / "rules" / "eitri.mdc").read_text(encoding="utf-8").startswith("---\ndescription:")
 
     # idempotent, and the user's own Codex settings survive
@@ -334,7 +351,9 @@ def test_no_agent_found(home, monkeypatch, capsys):
     monkeypatch.setenv("EITRI_PLUGIN_CLAUDE_BIN", "")
     monkeypatch.setattr(PI, "_claude_bin", lambda: None)
     monkeypatch.setattr(PI.Path, "exists", lambda self: False if str(self) == "/Applications/Cursor.app" else os.path.exists(self))
-    assert PI.run_install() == 1 and "No agent app found" in capsys.readouterr().out
+    assert PI.run_install() == PI.NO_AGENT
+    out = capsys.readouterr().out
+    assert "No agent app found" in out and "curl -fsSL https://claude.ai/install.sh | bash" in out and "eitri plugin install" in out
 
 
 def test_login_against_the_stub(home, monkeypatch, capsys):
@@ -357,13 +376,15 @@ def test_login_against_the_stub(home, monkeypatch, capsys):
         assert PI.load_token() == stub.token
         assert stat.S_IMODE(os.stat(PI.token_path()).st_mode) == 0o600
         cursor = json.loads((home / ".cursor" / "mcp.json").read_text(encoding="utf-8"))["mcpServers"]
-        assert cursor["eitri-combined"] == {"url": stub.url, "headers": {"Authorization": f"Bearer {stub.token}"}}
+        assert cursor[PI.REMOTE_NAME] == {"url": stub.url, "headers": {"Authorization": f"Bearer {stub.token}"}}
+        assert cursor["eitri-combined"]["args"] == ["mcp", "--combined"]                 # the local one stays
         # the bundle's helper now sends that token
         out = subprocess.run(["sh", str(BUNDLE / "bin" / "eitri-auth-header")], capture_output=True, text=True, encoding="utf-8",
                              env={"PATH": os.environ["PATH"], "HOME": str(home), "EITRI_CONFIG_DIR": os.environ["EITRI_CONFIG_DIR"]}).stdout
         assert json.loads(out) == {"Authorization": f"Bearer {stub.token}"}
         assert PI.run_logout() == 0 and PI.load_token() is None
-        assert "eitri-combined" not in json.loads((home / ".cursor" / "mcp.json").read_text(encoding="utf-8"))["mcpServers"]
+        servers = json.loads((home / ".cursor" / "mcp.json").read_text(encoding="utf-8"))["mcpServers"]
+        assert PI.REMOTE_NAME not in servers and "eitri-combined" in servers
     finally:
         stub.close()
     # eitri.io unreachable: saved anyway, with a note
@@ -371,16 +392,30 @@ def test_login_against_the_stub(home, monkeypatch, capsys):
     assert PI.run_login(token="eitri_pat_offline0123456789") == 0 and "could not reach" in capsys.readouterr().out
 
 
-def test_status_names_the_remote_url(home, monkeypatch, capsys):
-    PI.run_status()
-    assert "combined server: https://eitri.io/mcp (the default)" in capsys.readouterr().out
-    monkeypatch.setenv("EITRI_MCP_URL", "http://127.0.0.1:8078/mcp")
+def test_status_names_the_servers_and_the_optional_remote(home, monkeypatch, capsys):
     PI.run_status()
     out = capsys.readouterr().out
-    assert "combined server: http://127.0.0.1:8078/mcp (from EITRI_MCP_URL)" in out
-    assert "eitri.io token: (none)" in out                  # the line install-remote.sh greps for
-    PI.run_install(["cursor"])
-    assert "Combined workspace (http://127.0.0.1:8078/mcp (from EITRI_MCP_URL))" in capsys.readouterr().out
+    assert "eitri-combined (the combined workspace), both on this computer" in out
+    assert f"eitri.io ({PI.REMOTE_NAME}, optional): not added (eitri plugin login adds it)" in out
+    assert "anonymous counts: off (EITRI_TELEMETRY=off)" in out          # tests/conftest.py turns them off
+    monkeypatch.setenv("EITRI_MCP_URL", "http://127.0.0.1:8078/mcp")
+    PI.save_token("eitri_pat_status0123456789")
+    PI.run_status()
+    assert "http://127.0.0.1:8078/mcp (from EITRI_MCP_URL)" in capsys.readouterr().out
+
+
+def test_login_adds_the_remote_server_to_claude_code(home, capsys):
+    """`eitri plugin login` adds eitri.io as a user-scope Claude Code server (header helper, no token in the config) and
+    `logout` removes it again."""
+    PI.run_install(["claude"])
+    assert PI.run_login(token="eitri_pat_claude0123456789", check=False) == 0
+    calls = (home.parent / "claude.log").read_text(encoding="utf-8")
+    line = next(l for l in calls.splitlines() if l.startswith(f"mcp add-json -s user {PI.REMOTE_NAME} "))
+    cfg = json.loads(line.split(f"{PI.REMOTE_NAME} ", 1)[1])
+    assert cfg["type"] == "http" and cfg["url"] == "https://eitri.io/mcp" and "eitri-auth-header" in cfg["headersHelper"]
+    assert "eitri_pat_claude" not in line
+    assert PI.run_logout() == 0
+    assert f"mcp remove -s user {PI.REMOTE_NAME}" in (home.parent / "claude.log").read_text(encoding="utf-8").splitlines()[-1]
 
 
 def test_login_without_a_terminal_prints_the_instruction_first(home, tmp_path):
@@ -425,10 +460,9 @@ def test_signed_in_notice_wording():
         "Signed in to eitri.io. In the combined workspace, the model files your agent writes are sent to eitri.io, kept as "
         "projects in your account, and used to train eitri's models unless you turn that off at https://eitri.io/account. "
         "Single-domain work stays on this machine.")
-    # the installer's --plugin path runs login with the terminal as its stdout (no redirect that would hide the notice)
+    # the installer's --plugin path no longer signs in (the combined workspace is local): no login call in it
     sh = (ROOT / "scripts" / "install-remote.sh").read_text(encoding="utf-8")
-    line = next(l for l in sh.splitlines() if '"$eitri" plugin login' in l)
-    assert line.strip() == '"$eitri" plugin login </dev/tty || true'
+    assert '"$eitri" plugin login' not in sh
 
 
 def test_unverified_token_is_not_called_signed_in(home, monkeypatch, capsys):

@@ -30,7 +30,7 @@ Workflow: new_project(name, goal) or open_project(folder) first; read the domain
 the complete model file with build_model; read the report and the review image; fix with edit_model / set_params (or edit the
 file yourself and call rebuild) until the PROJECT STATUS at the end of every result says every check passes. Never delete or
 loosen a check to make it pass. A whole machine that spans several domains (a robot, a rover, a plotter) belongs in the eitri
-combined workspace (the eitri-combined server's combined_* tools) when it is connected."""
+combined workspace (the eitri-combined server's combined_* tools, also on this computer)."""
 
 
 class _NoProject(Exception):
@@ -77,7 +77,12 @@ def make_plugin_server(session=None) -> MCPServer:
                  "sentence) goes into its DESIGN.md; `folder` is where the user wants it (absolute, or relative to "
                  "~/eitri-projects; default ~/eitri-projects/<name>). Returns the folder and the viewer link.")
     def new_project(name: str, goal: str = "", folder: str = "") -> str:
-        return session.new_project(name, goal, folder).text
+        res = session.new_project(name, goal, folder)
+        if res.is_error:
+            return res.text
+        from .. import telemetry
+        note = telemetry.notice_once()
+        return (f"Tell the person once, in your next message: {note}\n\n" if note else "") + res.text
 
     @server.tool(description="Open an existing eitri project folder (absolute, or a folder name in ~/eitri-projects) and "
                  "make it the one every other tool works on; `file` picks one model file when the folder has several. "

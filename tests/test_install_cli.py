@@ -282,7 +282,7 @@ def _plugin_step(tmp_path, install_out: str, install_rc: int):
     fake = tmp_path / "eitri"
     fake.write_text("#!/bin/sh\n"
                     'case "$1 $2" in\n'
-                    "  '--help '*) echo '    plugin   the plugin' ;;\n"
+                    "  'mcp --help') echo '  --combined  the combined workspace' ;;\n"
                     f"  'plugin install') printf '%s\\n' {install_out!r}; exit {install_rc} ;;\n"
                     "  'plugin status') echo 'eitri.io token: (none)' ;;\n"
                     "esac\nexit 0\n")
@@ -292,15 +292,20 @@ def _plugin_step(tmp_path, install_out: str, install_rc: int):
     return subprocess.run(["sh", "-c", script], capture_output=True, text=True, timeout=60)
 
 
-def test_installer_plugin_step_with_no_agent_app_exits_0(tmp_path):
-    """0.7.1 brief: `--plugin` on a machine with no agent app installs eitri fine; it must not exit 1 or mention FAIL lines."""
-    p = _plugin_step(tmp_path, "No agent app found (looked for Claude Code, Codex and Cursor). Install one, then run `eitri plugin install`.", 1)
+@pytest.mark.parametrize("rc", [3, 1])
+def test_installer_plugin_step_with_no_agent_app_exits_0(tmp_path, rc):
+    """`--plugin` on a machine with no agent app installs eitri fine: it exits 0, says how to get Claude Code, no FAIL lines.
+    `eitri plugin install` exits 3 for this from 0.9.0 (0.7.1-0.8.1 exited 1 with the same first line)."""
+    from eitri.plugin_install import INSTALL_AGENT_HINT, NO_AGENT
+    assert NO_AGENT == 3
+    p = _plugin_step(tmp_path, INSTALL_AGENT_HINT if rc == 3 else "No agent app found (looked for Claude Code, Codex and Cursor).", rc)
     assert p.returncode == 0, p.stderr
-    assert "install Claude Code, Codex or Cursor" in p.stdout and "FAIL" not in p.stdout + p.stderr
+    assert "Install Claude Code" in p.stdout and "eitri plugin install" in p.stdout and "FAIL" not in p.stdout + p.stderr
+    assert "Done. Now run" not in p.stdout
 
 
 def test_installer_plugin_step_keeps_exit_1_for_a_real_failure(tmp_path):
     p = _plugin_step(tmp_path, "  FAIL Claude Code: claude plugin install failed", 1)
     assert p.returncode == 1 and "could not be registered" in p.stderr
     ok = _plugin_step(tmp_path, "  ok   Claude Code: installed", 0)
-    assert ok.returncode == 0 and "Done. Restart your agent" in ok.stdout
+    assert ok.returncode == 0 and "Done. Now run   claude" in ok.stdout and "login" not in ok.stdout

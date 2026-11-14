@@ -9,7 +9,7 @@ Generated from eitri's own firmware guide by `scripts/gen_plugin.py`; the **desi
 task that spans domains belongs in the combined workspace instead).
 
 **In this plugin.** The tools come from the `eitri` MCP server on this computer (your host may prefix them, e.g.
-`mcp__plugin_eitri_eitri__build_model`). No API key and no account are needed; nothing leaves the machine.
+`mcp__plugin_eitri_eitri__build_model`). No API key and no account are needed; your files never leave the machine.
 1. Open a project first: `new_project(name, goal)` (it goes in ~/eitri-projects/<name>; pass `folder` when the user wants
    it somewhere else, such as a folder of their repo) or `open_project(folder)` to continue one (`list_projects()`).
 2. Read `firmware_reference()` before writing the model file.

@@ -11,15 +11,19 @@
 # Settings (environment variables):
 #   EITRI_NO_UV_INSTALL=1   do not install uv automatically (stop and say how instead)
 #   EITRI_NO_PATH_EDIT=1    leave your shell profile alone (then run eitri by the full path printed at the end)
-#   EITRI_VERSION=0.8.1     install this version instead of the newest
+#   EITRI_VERSION=0.9.0     install this version instead of the newest
 #   EITRI_INSTALL_SOURCE=…  install from this instead: a checkout folder, a wheel, or any uv requirement
 #                           (./install.sh in a checkout sets it to the checkout)
 #   EITRI_PLUGIN=1          same as --plugin
 #
 # Flags (after `sh -s --` when piped):
-#   --plugin                (eitri 0.7.0 or newer) also register eitri as a plugin in every agent app found (Claude Code, Codex, Cursor:
-#                           `eitri plugin install`) and sign in to eitri.io for the combined workspace
-#                           (`eitri plugin login`; press Enter to skip):  curl -fsSL https://eitri.io/install | sh -s -- --plugin
+#   --plugin                (eitri 0.9.0 or newer) also register eitri as a plugin in every agent app found (Claude Code, Codex, Cursor:
+#                           `eitri plugin install`): the combined workspace and the six single domains, all on this computer, with no
+#                           account, token or API key:  curl -fsSL https://eitri.io/install | sh -s -- --plugin
+#                           Then run `claude` and ask for a machine. (eitri.io's hosted workspace stays optional: `eitri plugin login`.)
+#
+# Anonymous counts: `eitri plugin install` sends one "install" count (a random id, the eitri version, the OS, the agent app; nothing
+# else) to https://eitri.io/api/ping, and the plugin one per project made. Off: EITRI_TELEMETRY=off, or `eitri telemetry off`.
 #
 # If PyPI is unreachable, it installs the release archive of the tag below from GitHub instead. An eitri installed
 # under its old package name (eitri-cad, up to 0.5.6) is uninstalled first; projects, key and settings are kept.
@@ -29,7 +33,7 @@
 # The whole script is one function called on the last line, so a download cut off half-way runs nothing.
 set -eu
 
-EITRI_FALLBACK_TAG="${EITRI_FALLBACK_TAG:-v0.8.1}"
+EITRI_FALLBACK_TAG="${EITRI_FALLBACK_TAG:-v0.9.0}"
 EITRI_REPO="https://github.com/SiddhuYen/eitri"
 PYPI_PACKAGE="eitri-hardware"
 OLD_PACKAGE="eitri-cad"          # the name up to 0.5.6 (installed from GitHub); both provide the `eitri` command
@@ -173,10 +177,10 @@ eitri_install() {
   fi
 
   if [ "$want_plugin" = "1" ]; then
-    if ! "$eitri" --help 2>/dev/null | grep -Eq '^[[:space:]]+plugin[[:space:]]'; then
-      # `eitri plugin` and `eitri mcp` arrived in 0.7.0; an older eitri would read `plugin` as a project folder
-      err "the eitri plugin needs eitri 0.7.0 or newer; this installed $("$eitri" --version 2>/dev/null | head -n1)."
-      err "eitri itself is installed and works (run: eitri). Get the plugin once 0.7.0 is out: eitri update && eitri plugin install"
+    if ! "$eitri" mcp --help 2>/dev/null | grep -q -- '--combined'; then
+      # the local combined workspace (`eitri mcp --combined`) arrived in 0.9.0; an older eitri's plugin needs eitri.io
+      err "the eitri plugin needs eitri 0.9.0 or newer; this installed $("$eitri" --version 2>/dev/null | head -n1)."
+      err "eitri itself is installed and works (run: eitri). Get the plugin once 0.9.0 is out: eitri update && eitri plugin install"
       exit 1
     fi
     say ""
@@ -184,32 +188,27 @@ eitri_install() {
     plugin_rc=0
     plugin_out="$("$eitri" plugin install 2>&1)" || plugin_rc=$?
     printf '%s\n' "$plugin_out"
-    if [ "$plugin_rc" -ne 0 ]; then
-      case "$plugin_out" in
-        *"No agent app found"*)
-          # nothing failed: there is no agent app to register the plugin in yet (eitri itself is installed and works)
-          say ""
-          say "eitri is installed. To use it as a plugin, install Claude Code, Codex or Cursor, then run:  $eitri plugin install"
-          say "Or start eitri's own app now:  eitri"
-          exit 0 ;;
-      esac
-      err "the plugin could not be registered in every agent app (see the lines above); fix that and run: $eitri plugin install"
-      exit 1
-    fi
-    if ! "$eitri" plugin status 2>/dev/null | grep -q 'eitri.io token: (none)'; then
-      :                                   # already signed in
-    elif [ -r /dev/tty ] && [ -t 1 ]; then
-      say ""
-      say "==> signing in to eitri.io for the combined workspace (eitri plugin login; Enter skips)"
-      # stdout stays this terminal: login prints what happens to the model files once the token is stored
-      "$eitri" plugin login </dev/tty || true
-    else
-      say "Sign in to eitri.io for the combined workspace later:  eitri plugin login"
-    fi
+    case "$plugin_rc:$plugin_out" in
+      0:*) ;;
+      3:*|*"No agent app found"*)
+        # nothing failed: there is no agent app to register the plugin in yet (eitri itself is installed and works);
+        # the lines above say what to install. Exit 0: the install itself succeeded.
+        say ""
+        say "eitri is installed. Install Claude Code (above), then run:  $eitri plugin install   and then:  claude"
+        say "Or start eitri's own app now (it needs an Anthropic API key to chat):  eitri"
+        return 0 ;;
+      *)
+        err "the plugin could not be registered in every agent app (see the lines above); fix that and run: $eitri plugin install"
+        exit 1 ;;
+    esac
     say ""
-    say "Done. Restart your agent (Claude Code, Codex or Cursor) and ask it for a design, for example:"
-    say "      \"design a pan-tilt camera mount with two SG90 servos, powered from USB\""
-    say "      The local tools need no account; the combined workspace needs  eitri plugin login  once."
+    if [ "$on_path" = "0" ]; then
+      say "Open a new terminal first (eitri was added to your PATH), then:"
+    fi
+    say "Done. Now run   claude   and ask it for a machine, for example:"
+    say "      \"design a desk robot arm with three MG996R servos and an Arduino Uno, powered from a 5 V supply\""
+    say "      Everything runs on this computer: no account, no token, no API key (Claude Code uses your own subscription)."
+    say "      Firmware compile checks need arduino-cli once:  eitri setup firmware"
     return 0
   fi
 

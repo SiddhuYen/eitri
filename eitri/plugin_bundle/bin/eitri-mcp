@@ -1,18 +1,19 @@
 #!/bin/sh
-# Start eitri's local MCP server in plugin mode (`eitri mcp`) for the agent that runs the eitri plugin.
+# Start eitri's local MCP server in plugin mode (`eitri mcp`, or with --combined the combined workspace) for the agent
+# that runs the eitri plugin.
 # It finds the eitri command ($EITRI_BIN, PATH, the uv tool folder) and checks it is new enough; with no eitri
 # installed it runs the published package once through uvx. Nothing here starts Claude or reads a login.
 set -u
 # the CAD kernel loads on first use, not at start: agents give a server ~30 s to answer
 EITRI_LAZY_IMPORT=1
 export EITRI_LAZY_IMPORT
-need="0.7.0"                     # the first release with `eitri mcp`
+need="0.9.0"                     # the first release with `eitri mcp --combined` (the local combined workspace)
 try() {
   c="$1"; shift
   [ -n "$c" ] && [ -x "$c" ] || return 1
-  if ! "$c" --help 2>/dev/null | grep -Eq '^[[:space:]]+mcp[[:space:]]'; then
+  if ! "$c" mcp --help 2>/dev/null | grep -q -- '--combined'; then
     have="$("$c" --version 2>/dev/null | head -n1)"
-    echo "The eitri plugin needs eitri $need or newer (it adds the plugin server, \`eitri mcp\`); $c is ${have:-an older eitri}." >&2
+    echo "The eitri plugin needs eitri $need or newer (its servers are \`eitri mcp\` and \`eitri mcp --combined\`); $c is ${have:-an older eitri}." >&2
     echo "Run  eitri update  (or: uv tool upgrade eitri-hardware), then restart your agent." >&2
     echo "If eitri update says ${have:-your version} is the newest, eitri $need is not released yet: the plugin cannot run until it is." >&2
     exit 1
