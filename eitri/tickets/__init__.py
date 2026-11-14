@@ -10,7 +10,7 @@ and `package` hands back a checked change package (or refuses to).
         T-0001-<stem>-rev-B/ the change package (and T-0001-<stem>-rev-B.zip next to it)
 
 One implementation for every surface: the CLI (`eitri ticket ...`, `eitri package`), the agent's tools (agent/tools.py, so the
-plugin's MCP server and the app's agent loops) and, later, eitri.io, which plugs in its own signer and confirmer.
+plugin's MCP server and the app's agent loops). A program embedding eitri may plug in its own signer and confirmer.
 
 The plan gate: while the active ticket is not approved, Project refuses to write or build the model (eitri.project calls
 `gate`). Approval and waivers are person-only: no agent tool calls them, and `approve` / `waive` refuse to run inside an

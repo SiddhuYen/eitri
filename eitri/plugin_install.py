@@ -1,4 +1,4 @@
-"""`eitri plugin install | login | logout | uninstall | status`: register eitri in the agent apps on this computer.
+"""`eitri plugin install | uninstall | status | login | logout`: register eitri in the agent apps on this computer.
 
 eitri runs inside the user's own agent (on their own subscription) as one plugin with two MCP servers, both on this computer:
 - `eitri`: the local single-domain tools (`eitri mcp`, stdio);
@@ -14,10 +14,9 @@ What `install` does per agent app it finds (nothing for an app that is not there
 - Cursor: both servers in ~/.cursor/mcp.json; `--cursor-rules DIR` also writes DIR/.cursor/rules/eitri.mdc (Cursor has no
   documented file for global rules).
 
-eitri.io's hosted combined workspace is an option, not the default: `login` takes a personal token from eitri.io/account
-(typed, or --token-stdin), checks it against eitri.io/mcp, saves it in eitri's config folder (readable only by you) and adds
-a third server, `eitri-io` (streamable HTTP, `Authorization: Bearer <token>` through the bundle's header helper; in Cursor a
-static header), with the same combined_* tools. `logout` removes it. No shell file is edited.
+eitri.io's hosted combined workspace (an `eitri-io` server that 0.7.0-0.9.0's `eitri plugin login` could add) closed in
+November 2026. `install` (and so `eitri update`) removes that server from every agent app it was added to and forgets the
+saved token; `login` only says so; `logout` does the same clean-up. No shell file is edited.
 
 `install` sends one anonymous count (eitri.telemetry: a random install id, the version, the OS, the agent app; off with
 `eitri telemetry off`).
@@ -31,33 +30,21 @@ import shutil
 import stat
 import subprocess
 import sys
-import webbrowser
 from pathlib import Path
 
 from .config import config_dir
 
-DEFAULT_URL = "https://eitri.io/mcp"
 MARKETPLACE = "eitri"
 PLUGIN_ID = "eitri@eitri"
 BLOCK_START = "# >>> eitri plugin (written by `eitri plugin install`; `eitri plugin uninstall` removes it) >>>"
 BLOCK_END = "# <<< eitri plugin <<<"
-TOKEN_RE = re.compile(r"^[A-Za-z0-9_.~+/=-]{16,512}$")
-# Printed to the person by `eitri plugin login` once a token is stored (consent itself is given on eitri.io/account when
-# the token is made; this says it again where the person is, not through their agent). One place to change the wording.
-PRIVACY_NOTICE = ("In the combined workspace, the model files your agent writes are sent to eitri.io, kept as projects in "
-                  "your account, and used to train eitri's models unless you turn that off at https://eitri.io/account. "
-                  "Single-domain work stays on this machine.")
-SIGNED_IN_NOTICE = "Signed in to eitri.io. " + PRIVACY_NOTICE            # the token was checked with eitri.io
-
-
-def unverified_notice(reason: str) -> str:
-    """The notice for a token stored without eitri.io confirming it (--no-check, or eitri.io unreachable)."""
-    return f"Token saved (not checked yet: {reason}). " + PRIVACY_NOTICE
-REMOTE_NAME = "eitri-io"           # the hosted combined workspace's server, added by `login` (the local one is eitri-combined)
+OLD_REMOTE = "eitri-io"            # eitri.io's closed hosted server, as `eitri plugin login` (0.7.0-0.9.0) added it
+CLOSED = ("eitri.io's hosted combined workspace has closed: everything runs on this computer (the eitri and eitri-combined "
+          "servers), with nothing to sign in to.")
 SKILLS = ("design", "combined", "cad", "wires", "motion", "pneumatics", "firmware", "electronics")
 
 
-# ------------------------------------------------------------------------------------------------ paths and token
+# ------------------------------------------------------------------------------------------------ paths
 def bundle_source() -> Path:
     return Path(__file__).parent / "plugin_bundle"
 
@@ -70,137 +57,19 @@ def bundle_copy() -> Path:
     return data_dir() / "plugin"
 
 
-def remote_url() -> str:
-    return os.environ.get("EITRI_MCP_URL") or DEFAULT_URL
-
-
-def remote_label() -> str:
-    """The combined server's URL and where it comes from, for `status` and `install`."""
-    url = remote_url()
-    return f"{url} (from EITRI_MCP_URL)" if os.environ.get("EITRI_MCP_URL") else f"{url} (the default)"
-
-
-def account_url(url: str | None = None) -> str:
-    from urllib.parse import urlparse
-    u = urlparse(url or remote_url())
-    return f"{u.scheme}://{u.netloc}/account"
-
-
-def token_path() -> Path:
+def old_token_path() -> Path:
+    """Where 0.7.0-0.9.0 kept the eitri.io token (removed by install, logout and uninstall)."""
     return config_dir() / "plugin-token"
 
 
-def load_token() -> str | None:
+def forget_old_token() -> bool:
     try:
-        t = token_path().read_text(encoding="utf-8").strip()
-    except OSError:
-        return None
-    return t or None
-
-
-def save_token(token: str) -> Path:
-    f = token_path()
-    f.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(f), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        fh.write(token.strip() + "\n")
-    os.chmod(f, 0o600)
-    return f
-
-
-def forget_token() -> bool:
-    try:
-        token_path().unlink()
+        old_token_path().unlink()
         return True
     except FileNotFoundError:
         return False
-
-
-def mask(token: str | None) -> str:
-    if not token:
-        return "(none)"
-    return token[:6] + "…" + token[-4:] if len(token) > 12 else "…"
-
-
-def check_token(token: str | None, url: str | None = None, timeout: float = 20.0) -> tuple[str, str]:
-    """("ok" | "rejected" | "unreachable", detail): eitri.io/mcp answers initialize without a token and refuses a tool
-    call without a valid one (an isError result with how to sign in, not an HTTP 401), so this initializes and makes one
-    harmless call, combined_list_projects, with the token."""
-    import urllib.error
-    import urllib.request
-    from . import __version__
-    url = url or remote_url()
-    headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream",
-               "MCP-Protocol-Version": "2025-06-18"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
-    def post(msg: dict, extra: dict | None = None) -> tuple[dict | None, dict]:
-        req = urllib.request.Request(url, data=json.dumps(msg).encode(), headers={**headers, **(extra or {})}, method="POST")
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            body = r.read(1 << 20).decode("utf-8", "replace")
-            return _jsonrpc_reply(body, r.headers.get("Content-Type") or ""), dict(r.headers)
-
-    try:
-        init, h = post({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
-            "protocolVersion": "2025-06-18", "capabilities": {},
-            "clientInfo": {"name": "eitri-plugin-login", "version": __version__}}})
-        sid = {k: v for k, v in h.items() if k.lower() == "mcp-session-id"}
-        extra = {"Mcp-Session-Id": next(iter(sid.values()))} if sid else {}
-        try:
-            post({"jsonrpc": "2.0", "method": "notifications/initialized"}, extra)
-        except urllib.error.HTTPError:
-            pass
-        res, _ = post({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
-                       "params": {"name": "combined_list_projects", "arguments": {}}}, extra)
-    except urllib.error.HTTPError as exc:
-        text = exc.read(4096).decode("utf-8", "replace")
-        if exc.code in (401, 403):
-            return "rejected", _error_text(text) or f"HTTP {exc.code}"
-        return "unreachable", f"HTTP {exc.code}: {_error_text(text)[:200]}"
-    except (urllib.error.URLError, OSError, TimeoutError, ValueError) as exc:
-        return "unreachable", str(getattr(exc, "reason", exc))
-    if not res:
-        return "unreachable", "no answer from the server"
-    if "error" in res:
-        return "unreachable", str((res.get("error") or {}).get("message", res["error"]))[:300]
-    result = res.get("result") or {}
-    text = " ".join(c.get("text", "") for c in result.get("content") or [] if isinstance(c, dict))
-    if result.get("isError"):
-        if re.search(r"token|sign(ed)? in|log ?in", text, re.I):
-            return "rejected", text.strip()[:300]
-        return "unreachable", text.strip()[:300]
-    return "ok", "signed in"
-
-
-def _jsonrpc_reply(body: str, ctype: str) -> dict | None:
-    """The JSON-RPC response in a body that is JSON or a server-sent event stream (the last message with an id)."""
-    if "text/event-stream" in ctype:
-        found = None
-        for line in body.splitlines():
-            if line.startswith("data:"):
-                try:
-                    msg = json.loads(line[5:].strip())
-                except ValueError:
-                    continue
-                if isinstance(msg, dict) and "id" in msg:
-                    found = msg
-        return found
-    body = body.strip()
-    return json.loads(body) if body else None
-
-
-def _error_text(text: str) -> str:
-    try:
-        d = json.loads(text)
-        if isinstance(d, dict):
-            e = d.get("error")
-            if isinstance(e, dict):
-                return str(e.get("message") or "")
-            return str(e or d.get("message") or d.get("detail") or "")
-    except ValueError:
-        pass
-    return text.strip()[:300]
+    except OSError:
+        return False
 
 
 # ------------------------------------------------------------------------------------------------ the agents
@@ -293,6 +162,15 @@ def uninstall_claude() -> tuple[bool, str]:
     return True, "removed plugin eitri@eitri and the eitri marketplace"
 
 
+def remove_old_remote_claude() -> bool:
+    """Remove eitri.io's closed `eitri-io` server from Claude Code's user config, if 0.9.0's `login` added it (True: it was there)."""
+    claude = _claude_bin()
+    if not claude:
+        return False
+    rc, _out = _run([claude, "mcp", "remove", "-s", "user", OLD_REMOTE], timeout=60)
+    return rc == 0
+
+
 # -- Codex
 def codex_block(bundle: Path) -> str:
     q = json.dumps                                            # a JSON string is a valid TOML basic string
@@ -319,13 +197,6 @@ def codex_block(bundle: Path) -> str:
         'EITRI_HOST_AGENT = "Codex"',
         'EITRI_IMAGE_MODE = "inline"',
         'EITRI_LAZY_IMPORT = "1"',
-        *([] if not load_token() else [
-            "",
-            f"[mcp_servers.{REMOTE_NAME}]",
-            f"url = {q(remote_url())}",
-            f"http_headers_helper = {q(str(bundle / 'bin' / 'eitri-auth-header'))}",
-            "startup_timeout_sec = 30",
-            "tool_timeout_sec = 900"]),
         BLOCK_END,
         "",
     ])
@@ -341,7 +212,7 @@ def install_codex(bundle: Path) -> tuple[bool, str]:
     cfg.parent.mkdir(parents=True, exist_ok=True)
     old = cfg.read_text(encoding="utf-8") if cfg.is_file() else ""
     base = _strip_block(old)
-    clash = [n for n in ("eitri", "eitri-combined", REMOTE_NAME, '"eitri"', '"eitri-combined"', f'"{REMOTE_NAME}"')
+    clash = [n for n in ("eitri", "eitri-combined", '"eitri"', '"eitri-combined"')
              if re.search(rf"^\s*\[mcp_servers\.{re.escape(n)}\]", base, re.M)]
     if clash:
         return False, f"{cfg} already defines [mcp_servers.{clash[0].strip(chr(34))}] outside eitri's block; remove it and run again"
@@ -357,8 +228,7 @@ def install_codex(bundle: Path) -> tuple[bool, str]:
         shutil.copy2(cfg, cfg.with_suffix(".toml.eitri-backup"))
     cfg.write_text(new, encoding="utf-8")
     n = install_codex_skills(bundle)
-    remote = f" + {REMOTE_NAME}" if load_token() else ""
-    return True, f"servers eitri + eitri-combined{remote} in {_tilde(cfg)}; {n} skills in {_tilde(agents_skills_dir())}"
+    return True, f"servers eitri + eitri-combined in {_tilde(cfg)}; {n} skills in {_tilde(agents_skills_dir())}"
 
 
 def agents_skills_dir() -> Path:
@@ -401,16 +271,14 @@ def uninstall_codex() -> tuple[bool, str]:
 
 
 # -- Cursor
-def cursor_servers(bundle: Path, token: str | None) -> dict:
+def cursor_servers(bundle: Path) -> dict:
     env = {"EITRI_HOST_AGENT": "Cursor", "EITRI_IMAGE_MODE": "inline", "EITRI_LAZY_IMPORT": "1"}
     servers: dict = {"eitri": {"type": "stdio", "command": eitri_command(), "args": ["mcp"], "env": dict(env)},
                      "eitri-combined": {"type": "stdio", "command": eitri_command(), "args": ["mcp", "--combined"], "env": dict(env)}}
-    if token:
-        servers[REMOTE_NAME] = {"url": remote_url(), "headers": {"Authorization": f"Bearer {token}"}}
     return servers
 
 
-def install_cursor(bundle: Path, token: str | None = None, rules_dir: str | None = None) -> tuple[bool, str]:
+def install_cursor(bundle: Path, rules_dir: str | None = None) -> tuple[bool, str]:
     cfg = cursor_home() / "mcp.json"
     try:
         data = json.loads(cfg.read_text(encoding="utf-8")) if cfg.is_file() else {}
@@ -419,14 +287,12 @@ def install_cursor(bundle: Path, token: str | None = None, rules_dir: str | None
     if not isinstance(data, dict):
         return False, f"{cfg} is not a JSON object; left unchanged"
     servers = data.setdefault("mcpServers", {})
-    servers.pop("eitri-combined", None)
-    servers.pop(REMOTE_NAME, None)
-    servers.update(cursor_servers(bundle, token if token is not None else load_token()))
+    servers.pop("eitri-combined", None)                     # 0.7.0-0.8.1 wrote eitri.io's URL under this name
+    servers.pop(OLD_REMOTE, None)                           # 0.9.0's `login`: eitri.io's closed server
+    servers.update(cursor_servers(bundle))
     cfg.parent.mkdir(parents=True, exist_ok=True)
     cfg.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-    if REMOTE_NAME in servers:
-        os.chmod(cfg, 0o600)                                  # it holds the token
-    msg = f"servers eitri + eitri-combined{' + ' + REMOTE_NAME if REMOTE_NAME in servers else ''} in {_tilde(cfg)}"
+    msg = f"servers eitri + eitri-combined in {_tilde(cfg)}"
     if rules_dir:
         rule = Path(rules_dir).expanduser() / ".cursor" / "rules" / "eitri.mdc"
         rule.parent.mkdir(parents=True, exist_ok=True)
@@ -444,7 +310,7 @@ def uninstall_cursor() -> tuple[bool, str]:
     except ValueError:
         return False, f"{cfg} is not valid JSON; left unchanged"
     servers = data.get("mcpServers") or {}
-    gone = [k for k in ("eitri", "eitri-combined", REMOTE_NAME) if servers.pop(k, None) is not None]
+    gone = [k for k in ("eitri", "eitri-combined", OLD_REMOTE) if servers.pop(k, None) is not None]
     cfg.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     return True, ("removed " + ", ".join(gone) + f" from {_tilde(cfg)}") if gone else "nothing to remove"
 
@@ -474,19 +340,39 @@ def _count_install(agents: list[str]) -> None:
         pass
 
 
+def remove_old_remote() -> list[str]:
+    """eitri.io's closed hosted server, wherever an older eitri put it: Claude Code's user config (`eitri-io`), Cursor's
+    mcp.json (`eitri-io`, or 0.8.x's `eitri-combined` pointing at eitri.io), the saved token. Codex's entry lived in eitri's
+    own block, which install rewrites. Returns what was removed (for the person to read)."""
+    gone = []
+    if remove_old_remote_claude():
+        gone.append(f"Claude Code's {OLD_REMOTE} server")
+    cfg = cursor_home() / "mcp.json"
+    data = _read_json(cfg) if cfg.is_file() else {}
+    servers = data.get("mcpServers") if isinstance(data.get("mcpServers"), dict) else {}
+    stale = [k for k in (OLD_REMOTE, "eitri-combined") if k in servers and "url" in (servers.get(k) or {})]
+    if stale:
+        for k in stale:
+            servers.pop(k, None)
+        cfg.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        gone.append(f"Cursor's {', '.join(stale)} server")
+    if forget_old_token():
+        gone.append("the saved eitri.io token")
+    return gone
+
+
 def run_install(agents: list[str] | None = None, cursor_rules: str | None = None, quiet: bool = False) -> int:
     found = found_agents()
     want = agents or list(found)
     if not want:
         print(INSTALL_AGENT_HINT)
         return NO_AGENT
+    gone = remove_old_remote()                                # before the new configs are written
     bundle = copy_bundle()
     ok_all, done = True, []
     for a in want:
         if a == "claude":
             ok, msg = install_claude(bundle)
-            if ok and load_token():
-                add_remote_claude()                           # keep eitri.io's server where `login` added it
         elif a == "codex":
             ok, msg = install_codex(bundle)
         elif a == "cursor":
@@ -497,13 +383,13 @@ def run_install(agents: list[str] | None = None, cursor_rules: str | None = None
         if ok:
             done.append(a)
         print(f"  {'ok  ' if ok else 'FAIL'} {_AGENT_NAMES.get(a, a)}: {msg}")
+    if gone:
+        print(f"  ok   removed eitri.io's closed hosted workspace: {', '.join(gone)}")
     (data_dir() / "plugin-installed.json").write_text(json.dumps({"agents": want, "cursor_rules": cursor_rules}), encoding="utf-8")
     if not quiet:
         print("")
         print("Both servers run on this computer: the combined workspace (a whole machine: structure, wiring, motion, air, firmware "
               "and its circuit, checked together) and the six single domains. No account, no token, no API key.")
-        if load_token():
-            print(f"eitri.io's hosted combined workspace is added too ({REMOTE_NAME}; `eitri plugin logout` removes it).")
         _count_install(done)
         first = "claude" if "claude" in done else (done[0] if done else None)
         print("")
@@ -513,139 +399,23 @@ def run_install(agents: list[str] | None = None, cursor_rules: str | None = None
     return 0 if ok_all else 1
 
 
-def _bundle_for_remote() -> Path:
-    return bundle_copy() if bundle_copy().is_dir() else bundle_source()
-
-
-def add_remote_claude() -> tuple[bool, str]:
-    """eitri.io's combined workspace as a user-scope MCP server in Claude Code (`claude mcp add-json`), its token through the
-    bundle's header helper (which reads the file `login` saved)."""
-    claude = _claude_bin()
-    if not claude:
-        return False, "Claude Code not found"
-    helper = _bundle_for_remote() / "bin" / "eitri-auth-header"
-    cfg = {"type": "http", "url": remote_url(), "headersHelper": f'sh "{helper}"'}
-    _run([claude, "mcp", "remove", "-s", "user", REMOTE_NAME], timeout=60)
-    rc, out = _run([claude, "mcp", "add-json", "-s", "user", REMOTE_NAME, json.dumps(cfg)], timeout=60)
-    if rc != 0:
-        return False, f"`claude mcp add-json` failed: {out[-300:]}"
-    return True, f"server {REMOTE_NAME} ({remote_url()})"
-
-
-def remove_remote_claude() -> tuple[bool, str]:
-    claude = _claude_bin()
-    if not claude:
-        return False, "Claude Code not found"
-    rc, out = _run([claude, "mcp", "remove", "-s", "user", REMOTE_NAME], timeout=60)
-    return True, (f"removed server {REMOTE_NAME}" if rc == 0 else "nothing to remove")
-
-
-def _installed_agents() -> list[str]:
-    info = _read_json(data_dir() / "plugin-installed.json")
-    return [a for a in (info.get("agents") or []) if a in found_agents()] or list(found_agents())
-
-
-def add_remote(token: str) -> list[str]:
-    """Register eitri.io's server (REMOTE_NAME) in every agent app found; the lines to print."""
-    out = []
-    for a in _installed_agents():
-        if a == "claude":
-            ok, msg = add_remote_claude()
-        elif a == "codex":
-            ok, msg = install_codex(_bundle_for_remote())
-        elif a == "cursor":
-            ok, msg = install_cursor(_bundle_for_remote(), token=token)
-        else:
-            continue
-        out.append(f"  {'ok  ' if ok else 'FAIL'} {_AGENT_NAMES.get(a, a)}: {msg}")
-    return out
-
-
-def remove_remote() -> list[str]:
-    out = []
-    for a in _installed_agents():
-        if a == "claude":
-            ok, msg = remove_remote_claude()
-        elif a == "codex":
-            ok, msg = install_codex(_bundle_for_remote()) if (codex_home() / "config.toml").is_file() else (True, "nothing to remove")
-        elif a == "cursor":
-            ok, msg = install_cursor(_bundle_for_remote(), token="") if (cursor_home() / "mcp.json").is_file() else (True, "nothing to remove")
-        else:
-            continue
-        out.append(f"  {'ok  ' if ok else 'FAIL'} {_AGENT_NAMES.get(a, a)}: {msg}")
-    return out
-
-
-def run_login(token: str | None = None, from_stdin: bool = False, check: bool = True, open_browser: bool = True) -> int:
-    """Optional: add eitri.io's hosted combined workspace (a third server, eitri-io) beside the local ones."""
-    url = remote_url()
-    if from_stdin:
-        token = sys.stdin.read().strip()
-    if not token:
-        acct = account_url(url)
-        print("This is optional: the combined workspace already runs on this computer (the eitri-combined server). Signing in adds "
-              f"eitri.io's hosted one as a third server, {REMOTE_NAME}.", flush=True)
-        # flushed: the prompt goes to the terminal or stderr, and a piped stdout would otherwise print this after it
-        print(f"Make a personal token on {acct} (sign in with GitHub; \"Tokens for your agent\"), then paste it below.",
-              flush=True)
-        if open_browser:
-            try:
-                webbrowser.open(acct)
-            except Exception:                                 # noqa: BLE001 - the link is printed anyway
-                pass
-        token = _ask_token("eitri.io token (hidden; Enter to skip): ")
-    if not token:
-        print("No token given: nothing changed (the local combined and single-domain tools need none).")
-        return 1
-    token = token.removeprefix("Bearer ").strip()
-    if not TOKEN_RE.match(token):
-        print("not saved: that does not look like an eitri.io token (copy the whole token from eitri.io/account)")
-        return 1
-    unverified = "--no-check was given" if not check else None
-    if check:
-        state, detail = check_token(token, url)
-        if state == "rejected":
-            print(f"not saved: eitri.io rejected this token ({detail}). Make a new one on {account_url(url)}.")
-            return 1
-        if state == "unreachable":
-            unverified = f"could not reach {url} ({detail})"
-    path = save_token(token)
-    print(f"saved {mask(token)} to {path} (readable only by you)")
-    for line in add_remote(token):
-        print(line)
-    print("")
-    print(SIGNED_IN_NOTICE if unverified is None else unverified_notice(unverified))
-    print("", flush=True)
-    print(f"Restart your agent. The local combined workspace stays the default; ask the agent to use eitri.io (the {REMOTE_NAME} "
-          "server) when you want a project kept there.")
+def run_login() -> int:
+    """`eitri plugin login` from 0.7.0-0.9.0 added eitri.io's hosted workspace; it has closed. Says so, and cleans up after an
+    older login."""
+    print(CLOSED)
+    for what in remove_old_remote():
+        print(f"  removed {what}")
     return 0
-
-
-def _ask_token(prompt: str) -> str:
-    """The token, typed hidden in a terminal; without one (stdin piped), one line from stdin with the prompt on stderr
-    (getpass would warn that it cannot hide the input, or prompt on a /dev/tty the caller does not see)."""
-    try:
-        if sys.stdin.isatty():
-            import getpass
-            return getpass.getpass(prompt).strip()
-        sys.stderr.write(prompt)
-        sys.stderr.flush()
-        return (sys.stdin.readline() or "").strip()
-    except (EOFError, KeyboardInterrupt, OSError):
-        return ""
 
 
 def run_logout() -> int:
-    gone = forget_token()
-    for line in remove_remote():
-        print(line)
-    print("forgot the eitri.io token" if gone else "no eitri.io token was saved")
+    gone = remove_old_remote()
+    print("removed " + ", ".join(gone) if gone else "nothing to remove: there is no sign-in (" + CLOSED.split(":")[0] + ")")
     return 0
 
 
-def run_uninstall(keep_token: bool = False) -> int:
-    if _claude_bin():
-        remove_remote_claude()
+def run_uninstall() -> int:
+    remove_old_remote()
     for name, fn in (("claude", uninstall_claude), ("codex", uninstall_codex), ("cursor", uninstall_cursor)):
         if name == "claude" and not _claude_bin():
             continue
@@ -657,13 +427,11 @@ def run_uninstall(keep_token: bool = False) -> int:
         (data_dir() / "plugin-installed.json").unlink()
     except FileNotFoundError:
         pass
-    if not keep_token and forget_token():
-        print("  ok   forgot the eitri.io token")
     print("eitri itself is still installed (projects in ~/eitri-projects are kept).")
     return 0
 
 
-def run_status(online: bool = False) -> int:
+def run_status() -> int:
     found = found_agents()
     print("eitri plugin")
     print(f"  agents found: {', '.join(_AGENT_NAMES[a] for a in found) or 'none'}")
@@ -676,13 +444,9 @@ def run_status(online: bool = False) -> int:
         print(f"  Codex: {'installed' if cfg.is_file() and BLOCK_START in cfg.read_text(encoding='utf-8') else 'not installed'}")
     if "cursor" in found:
         print(f"  Cursor: {'installed' if 'eitri' in (_read_json(cursor_home() / 'mcp.json').get('mcpServers') or {}) else 'not installed'}")
-    print("  servers: eitri (single domains) and eitri-combined (the combined workspace), both on this computer")
-    token = load_token()
-    print(f"  eitri.io ({REMOTE_NAME}, optional): " + (f"signed in, token {mask(token)}, {remote_label()}" if token else
-          "not added (eitri plugin login adds it)"))
-    if online and token:
-        state, detail = check_token(token)
-        print(f"  token check against {remote_url()}: {state} ({detail})")
+    print("  servers: eitri (single domains) and eitri-combined (the combined workspace), both on this computer; nothing to sign in to")
+    if old_token_path().is_file():
+        print("  an eitri.io token from an older eitri is still saved: `eitri plugin install` (or logout) removes it")
     try:
         from . import telemetry
         why = telemetry.off_reason()
@@ -693,7 +457,8 @@ def run_status(online: bool = False) -> int:
 
 
 def refresh_after_update() -> None:
-    """After `eitri update`: copy the new bundle and re-register it where it was installed (quietly; best effort)."""
+    """After `eitri update`: copy the new bundle and re-register it where it was installed (quietly; best effort). This is also
+    where an older install loses eitri.io's closed server."""
     marker = data_dir() / "plugin-installed.json"
     if not marker.is_file():
         return
@@ -708,36 +473,31 @@ def main(args) -> int:
     action = args.action
     if action == "install":
         agents = [a.strip() for a in (args.agent or "").split(",") if a.strip()] or None
-        rc = run_install(agents, args.cursor_rules)
-        if rc == 0 and args.login and not load_token():
-            run_login(open_browser=not args.no_browser)
-        return rc
+        return run_install(agents, args.cursor_rules)
     if action == "login":
-        return run_login(token=None, from_stdin=args.token_stdin, check=not args.no_check, open_browser=not args.no_browser)
+        return run_login()
     if action == "logout":
         return run_logout()
     if action == "uninstall":
-        return run_uninstall(keep_token=args.keep_token)
+        return run_uninstall()
     if action == "status":
-        return run_status(online=args.online)
-    if action == "headers":                                   # what the bundle's helper prints, for checking by hand
-        token = load_token()
-        print(json.dumps({"Authorization": f"Bearer {token}"} if token else {}))
-        return 0
+        return run_status()
     return 2
 
 
 def add_parser(sub) -> None:
-    pl = sub.add_parser("plugin", help="use eitri inside your own agent (Claude Code, Codex, Cursor): install | login | logout | uninstall | status")
-    pl.add_argument("action", choices=["install", "login", "logout", "uninstall", "status", "headers"])
+    pl = sub.add_parser("plugin", help="use eitri inside your own agent (Claude Code, Codex, Cursor): install | uninstall | status")
+    pl.add_argument("action", choices=["install", "uninstall", "status", "login", "logout"])
     pl.add_argument("--agent", help="only these agents: claude,codex,cursor (default: every one found)")
     pl.add_argument("--cursor-rules", metavar="DIR", help="also write DIR/.cursor/rules/eitri.mdc (a Cursor project rule)")
-    pl.add_argument("--login", action="store_true", help="install: then add eitri.io's hosted combined workspace too (optional; asks for a token)")
-    pl.add_argument("--token-stdin", action="store_true", help="login: read the token from stdin")
-    pl.add_argument("--no-check", action="store_true", help="login: save the token without checking it with eitri.io")
-    pl.add_argument("--no-browser", action="store_true", help="login: print the account link instead of opening it")
-    pl.add_argument("--keep-token", action="store_true", help="uninstall: keep the saved eitri.io token")
-    pl.add_argument("--online", action="store_true", help="status: check the token with eitri.io")
+    # accepted so older scripts keep working; they do nothing now (eitri.io's hosted workspace has closed)
+    for flag in ("--login", "--token-stdin", "--no-check", "--no-browser", "--keep-token", "--online"):
+        pl.add_argument(flag, action="store_true", help=argparse_suppress())
+
+
+def argparse_suppress():
+    import argparse
+    return argparse.SUPPRESS
 
 
 _AGENT_NAMES = {"claude": "Claude Code", "codex": "Codex", "cursor": "Cursor"}
@@ -757,3 +517,4 @@ def _tilde(p: Path | str) -> str:
         return "~/" + str(p.relative_to(Path.home()))
     except ValueError:
         return str(p)
+

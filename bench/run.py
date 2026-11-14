@@ -3,7 +3,7 @@
     .venv/bin/python -m bench.run --system eitri --tasks plate,flange --model opus
     .venv/bin/python -m bench.run --system baseline --tasks all
     .venv/bin/python -m bench.run --report            # summarise bench/results/*.json
-    .venv/bin/python -m bench.run --backend api --tasks plate --budget 2   # the Messages-API loop (eitri.io's)
+    .venv/bin/python -m bench.run --backend api --tasks plate --budget 2   # the Messages-API loop (APISession)
 
 Each run gets a fresh folder under bench/results/<system>/<task>/ with the
 transcript, the produced files and the checker verdicts. The checkers only read
@@ -386,7 +386,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--effort", default="high")
     ap.add_argument("--budget", type=float, default=6.0, help="USD cap per task")
     ap.add_argument("--backend", choices=["cli", "api"], default="cli",
-                    help="eitri only: cli = headless Claude Code; api = the Messages-API loop (APISession, as on eitri.io)")
+                    help="eitri only: cli = headless Claude Code; api = the Messages-API loop (APISession)")
     ap.add_argument("--label", default=None, help="results folder name (default: the system, plus _api for --backend api)")
     ap.add_argument("--followup-effort", default=None,
                     help="--backend api: effort for the follow-up turn, set per message so the cached history holds")

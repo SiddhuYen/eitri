@@ -11,7 +11,7 @@
 # Settings (environment variables):
 #   EITRI_NO_UV_INSTALL=1   do not install uv automatically (stop and say how instead)
 #   EITRI_NO_PATH_EDIT=1    leave your shell profile alone (then run eitri by the full path printed at the end)
-#   EITRI_VERSION=0.9.0     install this version instead of the newest
+#   EITRI_VERSION=0.9.1     install this version instead of the newest
 #   EITRI_INSTALL_SOURCE=…  install from this instead: a checkout folder, a wheel, or any uv requirement
 #                           (./install.sh in a checkout sets it to the checkout)
 #   EITRI_PLUGIN=1          same as --plugin
@@ -20,7 +20,7 @@
 #   --plugin                (eitri 0.9.0 or newer) also register eitri as a plugin in every agent app found (Claude Code, Codex, Cursor:
 #                           `eitri plugin install`): the combined workspace and the six single domains, all on this computer, with no
 #                           account, token or API key:  curl -fsSL https://eitri.io/install | sh -s -- --plugin
-#                           Then run `claude` and ask for a machine. (eitri.io's hosted workspace stays optional: `eitri plugin login`.)
+#                           Then run `claude` and ask for a machine.
 #
 # Anonymous counts: `eitri plugin install` sends one "install" count (a random id, the eitri version, the OS, the agent app; nothing
 # else) to https://eitri.io/api/ping, and the plugin one per project made. Off: EITRI_TELEMETRY=off, or `eitri telemetry off`.
@@ -33,7 +33,7 @@
 # The whole script is one function called on the last line, so a download cut off half-way runs nothing.
 set -eu
 
-EITRI_FALLBACK_TAG="${EITRI_FALLBACK_TAG:-v0.9.0}"
+EITRI_FALLBACK_TAG="${EITRI_FALLBACK_TAG:-v0.9.1}"
 EITRI_REPO="https://github.com/SiddhuYen/eitri"
 PYPI_PACKAGE="eitri-hardware"
 OLD_PACKAGE="eitri-cad"          # the name up to 0.5.6 (installed from GitHub); both provide the `eitri` command
@@ -178,7 +178,7 @@ eitri_install() {
 
   if [ "$want_plugin" = "1" ]; then
     if ! "$eitri" mcp --help 2>/dev/null | grep -q -- '--combined'; then
-      # the local combined workspace (`eitri mcp --combined`) arrived in 0.9.0; an older eitri's plugin needs eitri.io
+      # the local combined workspace (`eitri mcp --combined`) arrived in 0.9.0; an older eitri's plugin relied on eitri.io's closed server
       err "the eitri plugin needs eitri 0.9.0 or newer; this installed $("$eitri" --version 2>/dev/null | head -n1)."
       err "eitri itself is installed and works (run: eitri). Get the plugin once 0.9.0 is out: eitri update && eitri plugin install"
       exit 1

@@ -43,7 +43,7 @@ The installer (A, and C, which runs the same script on the clone) installs `uv` 
 `claude-agent-sdk` package from PyPI: about 390 MB of downloads, 1 to 5 minutes), runs `eitri doctor` (up to a
 minute the first time), and adds the tool folder to the shell `PATH`. It needs no sudo. Set
 `EITRI_NO_PATH_EDIT=1` to leave the shell profile alone (then call eitri by the full path it prints),
-`EITRI_NO_UV_INSTALL=1` to stop it from installing uv, `EITRI_VERSION=0.8.0` to pin a version. If the
+`EITRI_NO_UV_INSTALL=1` to stop it from installing uv, `EITRI_VERSION=0.9.1` to pin a version. If the
 PyPI is unreachable, the installer installs the matching GitHub release archive instead. An older eitri installed as
 `eitri-cad` (the package name up to 0.5.6) is uninstalled first; projects, key and settings are kept.
 
@@ -67,7 +67,7 @@ eitri doctor
 ```
 eitri doctor
   ok   python: 3.12.x (...)
-  ok   eitri: 0.8.0 (installed from PyPI with uv tool)
+  ok   eitri: 0.9.1 (installed from PyPI with uv tool)
   ok   CAD kernel: build123d 0.13.0, OCP 8.0.1.1.0
   ok   test build: 20 mm cube, volume 8000 mm^3, STEP + report + review image in 2.0 s
   ok   Claude Code binary: 2.1.301 (Claude Code) (from Anthropic's claude-agent-sdk package); API-key-only mode (--bare) supported
@@ -149,11 +149,9 @@ on this computer: `eitri` (six single domains) and `eitri-combined` (the combine
 checked against the others). No account, no token. Then the person runs `claude` (or restarts Codex / Cursor) and asks for
 a design. `eitri plugin status` shows the state; `eitri plugin uninstall` removes it.
 
-Optional, only if the person wants projects kept on eitri.io: `eitri plugin login` (it opens eitri.io/account; the person
-makes a token and pastes it; `printf '%s' "$TOKEN" | eitri plugin login --token-stdin` when they give it to you; do not
-invent or echo it). It adds a third server, `eitri-io`, with the same tools. Tell the person: on that server the model
-files go to eitri.io, are kept as projects, and are used to train eitri's models unless they turn that off on
-eitri.io/account. `eitri plugin logout` removes it.
+There is no hosted workspace and nothing to sign in to (eitri.io's hosted service has closed; eitri.io is only the install
+line and a project page). `eitri plugin login` only says so. If an older eitri added an `eitri-io` server, `eitri plugin
+install` or `eitri update` removes it.
 
 Anonymous counts: `eitri plugin install` sends one "install" count and the plugin one "project_created" count per new
 project (a random install id, the eitri version, the OS, the agent app, the project's domain; nothing else) to

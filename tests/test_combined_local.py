@@ -1,5 +1,5 @@
 """The local combined workspace (eitri_suite.workspace) and its MCP server (`eitri mcp --combined`): the same tool names and
-contract as eitri.io's remote combined tools, projects as folders, builds on this computer with the cross-domain checks on,
+contract as eitri.io's former remote combined tools, projects as folders, builds on this computer with the cross-domain checks on,
 and the export rule (nothing leaves while a check fails, did not run or is out of date)."""
 from __future__ import annotations
 
@@ -15,8 +15,12 @@ from eitri_suite import workspace as W
 
 ROOT = Path(__file__).resolve().parent.parent
 UNO = ROOT / "eitri_suite" / "demos" / "uno-arm"
-sys.path.insert(0, str(Path(__file__).parent))
-from plugin_stub_remote import TOOLS as REMOTE_TOOLS  # noqa: E402
+# the tool contract the plugin's skills address (the names and arguments of eitri.io's former remote server, kept)
+REMOTE_TOOLS = {
+    "combined_reference": {"topic"}, "combined_new_project": {"name", "goal"}, "combined_list_projects": set(),
+    "combined_read_files": {"project_id", "paths"}, "combined_put_files": {"project_id", "files", "delete"},
+    "combined_build": {"project_id"}, "combined_results": {"project_id"}, "combined_export": {"project_id", "formats"},
+}
 
 BOX = '''from eitri import *
 
@@ -168,7 +172,7 @@ def _call(server, name, args=None):
 
 
 def test_server_has_the_remote_contract(tmp_path, monkeypatch):
-    """Same tool names as eitri.io's remote server (the plugin's skills address both), and the same required arguments."""
+    """The same tool names and arguments as eitri.io's former remote server (what the plugin's skills address)."""
     monkeypatch.setenv("EITRI_NO_WARM", "1")
     from eitri.agent.combined_server import CombinedSession, make_server
     server = make_server(CombinedSession(root=tmp_path / "projects", open_browser=False))

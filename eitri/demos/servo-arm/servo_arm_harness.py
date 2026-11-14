@@ -1,7 +1,7 @@
 """Servo arm wiring with overcurrent protection: an Arduino Uno drives three servos (D9, D10, D11); the servos run from a 5 V
 supply through one blade fuse at the supply and two bus blocks (terminal splices), with the Uno's ground on the same bus.
 
-The harness of the eitri.io robot-arm demo (eitri_suite/demos/uno-arm/wiring.py), made complete: the supply is declared (a
+The harness of the uno-arm combined demo (eitri_suite/demos/uno-arm/wiring.py), made complete: the supply is declared (a
 Mean Well LRS-50-5: its overload protection trips at 110-150 % of the rated 50 W, so set as low as 4.5 V it can push up to
 75 W / 4.5 V = 16.7 A into a fault, more than a 22 AWG branch's 7 A), so the 5 V rail needs a fuse. One ATO 5 A fuse within 175 mm of the supply protects every wire on the rail: its
 5 A is under the thinnest wire's 7 A, and the rail's 3 A steady load is within the fuse's continuous-load derating.

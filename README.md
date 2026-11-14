@@ -92,11 +92,9 @@ The plugin brings two MCP servers, both on your computer, and a set of skills:
   (a bracket, an enclosure, one harness, one sketch...). It says which one it picked. `combined` runs the loop
   (reference → write files → build → fix until every check passes), plus one skill per local domain.
 
-**eitri.io (optional).** `eitri plugin login` adds a third server, `eitri-io`: eitri.io's hosted combined workspace, with
-the same `combined_*` tools, for projects you want kept in your eitri.io account. It takes a personal token from
-eitri.io/account. **On that server your model files go to eitri.io, are kept there as your projects, and are used to train
-eitri's models unless you turn that off on eitri.io/account.** `eitri plugin logout` removes it. The local servers never
-send your files anywhere.
+**No hosted version.** There is nothing to sign in to: eitri.io is only the install line above and a project page. An older
+eitri's `eitri plugin login` added eitri.io's hosted workspace as an `eitri-io` server; that service has closed, and
+`eitri plugin install` (or `eitri update`) removes the dead entry from every agent app.
 
 What it does compared with the app:
 
@@ -106,14 +104,16 @@ What it does compared with the app:
 | Domains | the six single domains | the combined workspace and the six single domains, all on this computer |
 | Editor | the full browser editor with chat, direct edits, demos and replays | the same viewer and editor (a tab per file in a combined project), following your agent's builds; you chat in your agent |
 | Reminders while checks fail | the agent loop's nudges | every tool result ends with what fails, what is unbuilt and what to do next |
-| Network | Anthropic's API only | none for your designs; two anonymous counts (below); eitri.io only if you add it with `eitri plugin login` |
+| Network | Anthropic's API only | none for your designs; two anonymous counts (below) |
 
 `eitri plugin status` shows what is installed and `eitri plugin uninstall` removes the plugin from every agent app (your
 projects stay). Per agent: Claude Code gets a real plugin (`eitri@eitri`: skills `/eitri:design`, `/eitri:combined`,
 `/eitri:cad` ...); Codex gets both servers in `~/.codex/config.toml` and the skills in `~/.agents/skills/eitri-*`; Cursor
 gets both servers in `~/.cursor/mcp.json` (`--cursor-rules <project>` also adds a project rule). In Claude Code the
 marketplace route (`/plugin marketplace add SiddhuYen/eitri`, `/plugin install eitri@eitri`) also works once eitri is
-installed (`uv tool install eitri-hardware`); without it, see "Plugin without the installer" in AGENTS.md.
+installed (`uv tool install eitri-hardware`). Without eitri installed, the plugin's launcher falls back to `uvx`, whose
+first download (about 390 MB) outlasts Claude Code's 30 s server start-up limit, so the first session has no eitri tools:
+install eitri first.
 
 **Anonymous counts.** The plugin sends two counts so we know how many people install it and how many projects they make:
 `eitri plugin install` sends `{"event": "install", ...}` once, and each new project sends `{"event": "project_created",

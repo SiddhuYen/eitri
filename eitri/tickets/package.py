@@ -61,7 +61,7 @@ NOT_COVERED = {
                     "Thermal conditions inside an enclosure; component tolerances and ageing."],
 }
 ALWAYS_NOT_COVERED = ["Cross-domain interaction with other model files (servo torque against the CAD arm, current against the "
-                      "wiring...): those checks run in the eitri.io combined workspace, not in this package.",
+                      "wiring...): those checks run in a combined project (eitri's combined workspace), not in this package.",
                       "Physical build and test: every result here is computed; nothing was built or measured."]
 
 

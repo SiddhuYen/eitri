@@ -6,7 +6,7 @@ fail, its numbers and their source, what is still unbuilt, and what to do next. 
 token, no database, no queue: a project is a folder, its builds are core's (eitri.project.Project), and its last combined build
 is stored in <folder>/.eitri/combined.json.
 
-The tools have the same names and arguments as eitri.io's remote combined tools, so the skills and the agents do not change:
+The tools keep the names and arguments of eitri.io's former remote combined tools (now closed), so skills written for either work:
 
     combined_reference(topic?)                       how to write the files
     combined_new_project(name, goal)                 -> project id (the folder's name under ~/eitri-projects), viewer link

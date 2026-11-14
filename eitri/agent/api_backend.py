@@ -119,7 +119,7 @@ class APISession:
         if set, is the effort for a follow-up edit: a turn that starts on a project that already has a good build
         (so a resumed chat counts too). send(effort=...) sets one turn's effort. Both go out as per-message effort
         changes, which keep the cached history. A caller whose single turn spans several send() calls on a design
-        that is still being created (eitri.io's combined-design nudges) should not set followup_effort."""
+        that is still being created (a host loop's combined-design nudges) should not set followup_effort."""
         import anthropic
         from ..config import api_key as configured_key
         key = api_key or configured_key()

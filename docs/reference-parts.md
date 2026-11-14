@@ -83,6 +83,4 @@ did not change underneath. A STEP file is data; nothing in it is executed.
   partial arcs below 90% coverage, are not found; vendor models usually model a tapped hole as a plain cylinder at
   the tap-drill or the nominal diameter.
 - The mount check measures the designed part's hole, not the screw length, thread engagement or the head's seat.
-- On eitri.io a sandboxed build is given at most 8 MB of model file plus inputs in total, so a larger STEP file only
-  builds locally for now.
 - Accepting a new revision is command-line only; there is no button in the editor yet.

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "eitri-hardware"                # the PyPI name ("eitri" is taken; up to 0.5.6 it was "eitri-cad", never on PyPI); the import and the command are both `eitri`
-version = "0.9.0"
+version = "0.9.1"
 description = "Hardware design as code: CAD (build123d), wire harnesses, mechanisms, pneumatics, firmware and electronics, with sourced checks on every build; a local AI agent, a browser editor and an MCP server for your own agent."
 readme = "README.md"
 requires-python = ">=3.10,<3.14"

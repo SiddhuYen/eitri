@@ -10,7 +10,8 @@ A ticket's status:
 
 Changing the ticket's content (request, target, constraints, acceptance criteria, plan) after approval voids the approval:
 the approval signs a hash of that content. The signature is an HMAC with a key kept in eitri's config folder (outside the
-project), so a ticket.yaml edited to say "approved" does not pass the gate. eitri.io plugs in its own signer (set_signer).
+project), so a ticket.yaml edited to say "approved" does not pass the gate. A program embedding eitri may plug in its own signer
+(set_signer); eitri itself always uses the local key.
 
 Who can approve: only a person, through `eitri ticket approve` in their own terminal. No agent tool reaches approve(), and
 approve() itself refuses (NotAPerson) inside an agent's process (the markers in AGENT_ENV: eitri's own MCP server and agent
@@ -384,7 +385,8 @@ _SIGNER: Any = LocalKeySigner()
 
 
 def set_signer(signer) -> None:
-    """A host (eitri.io) signs approvals its own way: an object with sign(payload) -> str and verify(payload, sig) -> bool."""
+    """A program embedding eitri may sign approvals its own way: an object with sign(payload) -> str and verify(payload, sig) -> bool.
+    Nothing in eitri calls this; the default is LocalKeySigner."""
     global _SIGNER
     _SIGNER = signer
 

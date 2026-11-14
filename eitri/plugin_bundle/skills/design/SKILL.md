@@ -40,14 +40,6 @@ If the `eitri` or `eitri-combined` tools are missing, eitri isn't installed (or 
 `curl -fsSL https://eitri.io/install | sh -s -- --plugin` (or `eitri update && eitri plugin install`), then restart the
 agent. If a server fails to connect, `eitri doctor` in a terminal says why.
 
-## eitri.io (optional)
-
-A user who ran `eitri plugin login` also has an `eitri-io` server: eitri.io's hosted combined workspace, with the same
-`combined_*` tools. Use it only when the user asks for eitri.io (to keep the project in their eitri.io account, or share it
-from there). Then tell them once, before the first `combined_put_files` on it: the model files go to eitri.io, are kept
-there as projects, and are used to train eitri's models unless they turn that off on eitri.io/account. The local servers
-keep everything on this computer.
-
 ## Privacy
 
 Everything the local servers do stays on this computer. eitri's plugin sends two anonymous counts (an install, and a project

@@ -1,7 +1,7 @@
 {
   "name": "eitri",
   "displayName": "eitri",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Hardware design with checks that run on every build, all on your computer: the combined multi-domain workspace (a whole machine: structure, mechanism, wiring, firmware, air and its circuit checked together) and six single domains (CAD, wire harnesses, mechanisms, pneumatics, firmware, electronics). Every check's number cites its source. No account or API key; two anonymous counts (install, project created), off with `eitri telemetry off`.",
   "icon": "./.claude-plugin/icon.png",
   "author": {

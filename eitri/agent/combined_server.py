@@ -1,6 +1,6 @@
 """`eitri mcp --combined`: the local combined workspace over MCP (stdio), the plugin's `eitri-combined` server.
 
-The tools are eitri_suite.workspace's, with the same names, arguments and answers as eitri.io's remote combined tools, so the
+The tools are eitri_suite.workspace's, with the same names, arguments and answers as the (now closed) eitri.io remote combined tools, so the
 plugin's skills work with either. Everything runs on this computer: projects are folders in ~/eitri-projects, builds are core's
 with the cross-domain checks on, no account and no token. The person watches each project in eitri's viewer (a tab per model
 file), which opens in the browser at the project's first build.

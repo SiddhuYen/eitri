@@ -1,8 +1,8 @@
 # eitri design system
 
 The look and the shell every eitri page shares: tokens, fonts, glyphs, and the app chrome (top bar, rail, status bar, panels, buttons,
-⌘K palette, menus, dialogs). Plain CSS and plain JavaScript (custom elements), no build step and no dependencies. eitri.io uses it, and the
-open-source core is meant to copy this folder as it is, so it knows nothing about accounts, projects storage, usage, or the
+⌘K palette, menus, dialogs). Plain CSS and plain JavaScript (custom elements), no build step and no dependencies. It was written for the
+former hosted eitri.io app (closed in November 2026), and the open-source core is meant to copy this folder as it is, so it knows nothing about accounts, projects storage, usage, or the
 combined workspace. A host fills those in through slots (see "Slots").
 
 ```
@@ -42,7 +42,7 @@ design/
 ```
 
 Load the scripts in `<head>`: the elements must be defined before the body is parsed so the chrome renders without a flash.
-eitri.io bundles the same files into one script (`scripts/build_ui.py`); the core can link them one by one.
+A host may bundle the same files into one script; the core links them one by one.
 
 `<body class="app">` is a grid: top bar across the top, the rail down the left, the canvas, the status bar along the bottom. Under 760 px
 the rail becomes a bottom tab bar, the top bar sticks, and the canvas scrolls.
@@ -131,7 +131,7 @@ window.EITRI_SHELL = {
 
 ## Slots: what a host fills
 
-| Slot | eitri.io (hosted) | the open-source core (local) |
+| Slot | a host (as the former hosted eitri.io used them) | the open-source core (local) |
 |---|---|---|
 | Top bar, right (`topbarEnd(end, topbar)`, or `slot="end"` children) | the usage meter (`.pill`, "$X of $4.00 today") and the account menu (Projects, Account, Admin, Sign out); "Sign in" when signed out | a "local" badge (`<span class="badge">local</span>`) |
 | Rail, bottom (`railBottom`) | Projects (`/app`) | the local project list |
@@ -141,7 +141,7 @@ window.EITRI_SHELL = {
 | Model file tabs (`switchModel(file)`, `models(state)`, `addModel(kind)`) | a tab per file, and Add | none: no tabs |
 | The host's own views (`views(state)`, `switchView(key)`) and the viewer (`window.eitriViewer`) | an Assembly view of a combined project, drawn into the editor's scene | none |
 
-The palette is a host function for the same reason: eitri.io adds Projects, Account and Sign out when someone is signed in.
+The palette is a host function for the same reason: a host with accounts adds Projects, Account and Sign out.
 
 ### The editor's place: `place(state)`
 
@@ -180,7 +180,7 @@ makes current.
 
 ### A host's own view beside the tabs: `views(state)` and `switchView(key)`
 
-A host may have something to show that is not one model file (eitri.io shows a combined project's domains together). `views(state)`
+A host may have something to show that is not one model file (the former hosted eitri.io showed a combined project's domains together). `views(state)`
 returns `[{key, name, short, glyph, active, verdict, said}]` and the editor draws one tab per entry after the file tabs: `glyph` names
 the `<e-glyph>` (default `all`), `short` is the tab's text (default `name`), `verdict` (`ok`, `warn`, `bad`, `none`) draws the dot and
 `said` goes in the title and the accessible name. Opening one calls `switchView(key)`; the editor then selects no file tab and sets

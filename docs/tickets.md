@@ -13,7 +13,7 @@ through four steps:
    writes a folder and a zip for a person to review and sign off. If any check fails or did not run, it writes no
    package.
 
-The same code serves the CLI, the agent's tools (the plugin's MCP server and the app's agent) and, later, eitri.io.
+The same code serves the CLI and the agent's tools (the plugin's MCP server and the app's agent).
 
 ## Files
 
@@ -127,7 +127,7 @@ The **Not checked** section lists what eitri's checks do not cover:
 - every waived check;
 - every check that disappeared;
 - each domain's standing limits (for example, no FEA for CAD and no dynamic loads for mechanisms);
-- cross-domain checks, which run only in a combined project (the combined workspace, `eitri mcp --combined`, or eitri.io).
+- cross-domain checks, which run only in a combined project (the combined workspace, `eitri mcp --combined`).
 
 The **change order** is a draft. eitri fills in the reason, description, affected items, from and to revisions, and the
 originator. The number, disposition, effectivity and sign-off are left blank for a person.

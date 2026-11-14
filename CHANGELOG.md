@@ -3,6 +3,35 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
+## 0.9.1: no hosted service: eitri.io's web app and remote MCP server have closed
+
+eitri.io is now only the install line (`curl -fsSL https://eitri.io/install | sh`, which serves this repository's
+`scripts/install-remote.sh` at the release tag), a project page, a privacy page and the anonymous-count endpoint. Everything
+eitri does runs on your computer, as it already did by default in 0.9.0.
+
+### Changed
+
+- **`eitri plugin login` no longer signs in anywhere**: it prints one line saying the hosted workspace has closed and that
+  everything runs locally (exit 0), and cleans up after an older login. `--token-stdin`, `--no-check`, `--no-browser`,
+  `--login`, `--keep-token` and `--online` are still accepted and do nothing, so old scripts keep working.
+- **`eitri plugin install` (and so `eitri update`) removes eitri.io's dead server** wherever an older eitri added it: Claude
+  Code's user-scope `eitri-io` server (`claude mcp remove -s user eitri-io`), Cursor's `eitri-io` entry or 0.8.x's
+  `eitri-combined` entry pointing at eitri.io (replaced by the local one), Codex's (inside eitri's own block, rewritten), and
+  the saved token file (`plugin-token` in eitri's config folder). It says what it removed. `eitri plugin logout` does the same
+  clean-up; `status` and `uninstall` work as before.
+- Removed: the plugin bundle's `bin/eitri-auth-header`, `eitri plugin headers`, the token check against eitri.io/mcp,
+  `EITRI_MCP_URL` and `EITRI_TOKEN`.
+- Text: README, AGENTS.md, the skills, the Cursor rule, the plugin manifests, the web pages' footers, the installer and docs no
+  longer describe a hosted web app, a sign-in, combined builds on eitri.io or an eitri.io package page. A ticket's change
+  package now says cross-domain checks run "in a combined project", not "in the eitri.io combined workspace".
+
+### Unchanged
+
+- The anonymous counts: still POSTed to https://eitri.io/api/ping with the same payload, off with `eitri telemetry off`,
+  `EITRI_TELEMETRY=off`, `EITRI_NO_PING=1` or `DO_NOT_TRACK=1`.
+- Ticket approvals: still `eitri ticket approve` in a person's own terminal, signed with the local key (`set_signer` stays as an
+  embedding hook that nothing in eitri calls).
+
 ## 0.9.0: the combined workspace runs on your computer, open source; the plugin installs with one line
 
 ### Added
@@ -30,8 +59,8 @@ annotated tags (`git show v0.4.0`).
 
 ### Changed
 
-- **The plugin defaults to the two local servers** (`eitri` and `eitri-combined`, both stdio). eitri.io's hosted combined workspace is
-  an option: `eitri plugin login` adds it as a third server, `eitri-io` (Claude Code: a user-scope server through the bundle's header
+- **The plugin defaults to the two local servers** (`eitri` and `eitri-combined`, both stdio). eitri.io's hosted combined workspace was
+  an option (removed in 0.9.1: the service closed): `eitri plugin login` adds it as a third server, `eitri-io` (Claude Code: a user-scope server through the bundle's header
   helper; Codex and Cursor: in their config), and `eitri plugin logout` removes it. The `design` and `combined` skills route to the
   local workspace and mention eitri.io only when the person asks for it.
 - `curl -fsSL https://eitri.io/install | sh -s -- --plugin` no longer asks for a token: it installs eitri, registers the plugin and ends

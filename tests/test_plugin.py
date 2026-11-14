@@ -1,6 +1,6 @@
-"""The eitri plugin: the local MCP server in plugin mode (no agent, no key), the bundle (skills, manifests, scripts),
-`eitri plugin install | login | uninstall` against fake agent homes, and the combined-workspace contract against a stub
-of eitri.io's remote server (tests/plugin_stub_remote.py)."""
+"""The eitri plugin: the local MCP server in plugin mode (no agent, no key), the bundle (skills, manifests, scripts), and
+`eitri plugin install | uninstall | status | login | logout` against fake agent homes, including the clean-up of eitri.io's
+closed hosted server that 0.7.0-0.9.0 could add."""
 from __future__ import annotations
 
 import asyncio
@@ -20,8 +20,8 @@ from eitri import plugin_install as PI
 
 ROOT = Path(__file__).resolve().parent.parent
 BUNDLE = ROOT / "eitri" / "plugin_bundle"
-sys.path.insert(0, str(Path(__file__).parent))
-from plugin_stub_remote import NO_TOKEN, TOOLS, StubRemote  # noqa: E402
+COMBINED_TOOLS = ("combined_reference", "combined_new_project", "combined_list_projects", "combined_read_files",
+                  "combined_put_files", "combined_build", "combined_results", "combined_export")
 
 MECH_OK = '''from eitri.mechanism import *
 
@@ -54,11 +54,13 @@ def home(tmp_path, monkeypatch):
     (h / ".codex").mkdir(parents=True)
     (h / ".cursor").mkdir()
     monkeypatch.setenv("HOME", str(h))
-    for v in ("XDG_DATA_HOME", "CODEX_HOME", "EITRI_MCP_URL", "XDG_CONFIG_HOME"):
+    for v in ("XDG_DATA_HOME", "CODEX_HOME", "XDG_CONFIG_HOME"):
         monkeypatch.delenv(v, raising=False)
     log = tmp_path / "claude.log"
     stub = tmp_path / "claude"
-    stub.write_text(f'#!/bin/sh\necho "$@" >> "{log}"\ncase "$*" in "plugin list"*) echo "eitri@eitri";; esac\nexit 0\n')
+    # like the real one, `claude mcp remove` fails for a server that is not there (the marker file stands for eitri-io)
+    stub.write_text(f'#!/bin/sh\necho "$@" >> "{log}"\ncase "$*" in "plugin list"*) echo "eitri@eitri";;\n'
+                    f'  "mcp remove"*) if [ -f "{tmp_path}/eitri-io" ]; then rm "{tmp_path}/eitri-io"; exit 0; fi; exit 1;; esac\nexit 0\n')
     stub.chmod(0o755)
     monkeypatch.setenv("EITRI_PLUGIN_CLAUDE_BIN", str(stub))
     monkeypatch.setattr(PI.shutil, "which", lambda name: None)   # no real codex/cursor/eitri on PATH
@@ -102,7 +104,7 @@ def test_skills():
         # skills describe the contract, never how the private suite works inside
         for word in ("eitri_suite", "cadhost", "eitri-hosted", "sandbox container"):
             assert word not in text, (name, word)
-    for tool in TOOLS:                                       # the combined skill uses the whole contract
+    for tool in COMBINED_TOOLS:                              # the combined skill uses the whole contract
         assert tool in skills["combined"], tool
     # the local combined workspace holds the circuit too (elec.py, checked against the other files)
     assert "circuit" in skills["combined"].split("---")[1] and "elec.py" in skills["design"]
@@ -111,8 +113,9 @@ def test_skills():
     for text in (skills["combined"], skills["design"]):                   # the default is local: no token step, no remote URL
         assert "eitri.io/mcp" not in text and "this computer" in text
     router = skills["design"]
-    assert "eitri plugin login" in router and "train" in router and "eitri telemetry off" in router
-    assert router.index("eitri plugin login") > router.index("## eitri.io (optional)")
+    assert "eitri telemetry off" in router
+    for text in skills.values():                                          # no hosted workspace, no sign-in left in any skill
+        assert "eitri plugin login" not in text and "eitri-io" not in text and "eitri.io/account" not in text
     assert "default" in router.lower()
     for name, (_k, _f, ref, _d) in plugin_files.DOMAINS.items():
         assert f"`{ref}()`" in skills[name] and "PROJECT STATUS" in skills[name]
@@ -123,18 +126,6 @@ def test_claude_validates_plugin_and_marketplace():
     for target in (BUNDLE, ROOT):
         p = subprocess.run(["claude", "plugin", "validate", str(target), "--strict"], capture_output=True, text=True, encoding="utf-8", timeout=120)
         assert p.returncode == 0, p.stdout + p.stderr
-
-
-def test_auth_header_script(tmp_path):
-    script = BUNDLE / "bin" / "eitri-auth-header"
-    env = {"PATH": os.environ["PATH"], "HOME": str(tmp_path), "EITRI_CONFIG_DIR": str(tmp_path / "cfg")}
-    run = lambda e: json.loads(subprocess.run(["sh", str(script)], env=e, capture_output=True, text=True, encoding="utf-8").stdout)  # noqa: E731
-    assert run(env) == {}
-    (tmp_path / "cfg").mkdir()
-    (tmp_path / "cfg" / "plugin-token").write_text('eitri_pat_abc123"; rm -rf /\n')
-    assert run(env) == {"Authorization": "Bearer eitri_pat_abc123rm-rf/"}            # quotes and spaces cannot break the JSON
-    (tmp_path / "cfg" / "plugin-token").unlink()
-    assert run({**env, "EITRI_TOKEN": "fromenv_0123456789"}) == {"Authorization": "Bearer fromenv_0123456789"}
 
 
 def test_launcher_script(tmp_path):
@@ -306,7 +297,7 @@ def test_install_everywhere_and_uninstall(home):
     assert PI.run_install(cursor_rules=str(home / "proj")) == 0
     copy = home / ".local" / "share" / "eitri" / "plugin"
     assert (copy / ".claude-plugin" / "plugin.json").is_file()
-    assert os.stat(copy / "bin" / "eitri-auth-header").st_mode & stat.S_IXUSR
+    assert os.stat(copy / "bin" / "eitri-mcp").st_mode & stat.S_IXUSR
     calls = (home.parent / 'claude.log').read_text(encoding='utf-8')
     assert f"plugin marketplace add {copy}" in calls and "plugin install eitri@eitri --scope user" in calls
 
@@ -315,13 +306,13 @@ def test_install_everywhere_and_uninstall(home):
     servers = tomllib.loads(cfg)["mcp_servers"]
     assert servers["eitri"]["args"] == ["mcp"] and servers["eitri"]["tool_timeout_sec"] >= 600
     assert servers["eitri-combined"]["args"] == ["mcp", "--combined"] and "url" not in servers["eitri-combined"]
-    assert servers["eitri-combined"]["env"]["EITRI_LAZY_IMPORT"] == "1" and PI.REMOTE_NAME not in servers     # no token: no eitri.io
+    assert servers["eitri-combined"]["env"]["EITRI_LAZY_IMPORT"] == "1" and PI.OLD_REMOTE not in servers
     skill = (home / ".agents" / "skills" / "eitri-design" / "SKILL.md").read_text(encoding="utf-8")
     assert "name: eitri-design" in skill and "**eitri-combined**" in skill
 
     cursor = json.loads((home / ".cursor" / "mcp.json").read_text(encoding="utf-8"))["mcpServers"]
     assert cursor["eitri"]["args"] == ["mcp"] and cursor["eitri-combined"]["args"] == ["mcp", "--combined"]
-    assert PI.REMOTE_NAME not in cursor                                                 # eitri.io only after `login`
+    assert PI.OLD_REMOTE not in cursor
     assert (home / "proj" / ".cursor" / "rules" / "eitri.mdc").read_text(encoding="utf-8").startswith("---\ndescription:")
 
     # idempotent, and the user's own Codex settings survive
@@ -356,202 +347,90 @@ def test_no_agent_found(home, monkeypatch, capsys):
     assert "No agent app found" in out and "curl -fsSL https://claude.ai/install.sh | bash" in out and "eitri plugin install" in out
 
 
-def test_login_against_the_stub(home, monkeypatch, capsys):
-    stub = StubRemote()
-    try:
-        monkeypatch.setenv("EITRI_MCP_URL", stub.url)
-        assert PI.account_url() == stub.url.rsplit("/", 1)[0] + "/account"
-        PI.run_install(["cursor"])
-        capsys.readouterr()
-        assert PI.run_login(token="eitri_pat_wrongtoken000000") == 1           # eitri.io rejects it: not saved
-        out = capsys.readouterr().out
-        assert "rejected" in out and PI.load_token() is None and PI.SIGNED_IN_NOTICE not in out
-        assert PI.run_login(token="not a token") == 1
-        assert PI.SIGNED_IN_NOTICE not in capsys.readouterr().out
-        n_calls = len(stub.calls)
-        assert PI.run_login(token="Bearer " + stub.token) == 0
-        out = capsys.readouterr().out
-        assert len(stub.calls) == n_calls + 1                                   # checked with eitri.io first ...
-        assert out.index("saved eitri") < out.index(PI.SIGNED_IN_NOTICE)       # ... then stored, then the notice
-        assert PI.load_token() == stub.token
-        assert stat.S_IMODE(os.stat(PI.token_path()).st_mode) == 0o600
-        cursor = json.loads((home / ".cursor" / "mcp.json").read_text(encoding="utf-8"))["mcpServers"]
-        assert cursor[PI.REMOTE_NAME] == {"url": stub.url, "headers": {"Authorization": f"Bearer {stub.token}"}}
-        assert cursor["eitri-combined"]["args"] == ["mcp", "--combined"]                 # the local one stays
-        # the bundle's helper now sends that token
-        out = subprocess.run(["sh", str(BUNDLE / "bin" / "eitri-auth-header")], capture_output=True, text=True, encoding="utf-8",
-                             env={"PATH": os.environ["PATH"], "HOME": str(home), "EITRI_CONFIG_DIR": os.environ["EITRI_CONFIG_DIR"]}).stdout
-        assert json.loads(out) == {"Authorization": f"Bearer {stub.token}"}
-        assert PI.run_logout() == 0 and PI.load_token() is None
-        servers = json.loads((home / ".cursor" / "mcp.json").read_text(encoding="utf-8"))["mcpServers"]
-        assert PI.REMOTE_NAME not in servers and "eitri-combined" in servers
-    finally:
-        stub.close()
-    # eitri.io unreachable: saved anyway, with a note
-    monkeypatch.setenv("EITRI_MCP_URL", "http://127.0.0.1:9/mcp")
-    assert PI.run_login(token="eitri_pat_offline0123456789") == 0 and "could not reach" in capsys.readouterr().out
-
-
-def test_status_names_the_servers_and_the_optional_remote(home, monkeypatch, capsys):
+def test_status_names_the_local_servers(home, capsys):
     PI.run_status()
     out = capsys.readouterr().out
-    assert "eitri-combined (the combined workspace), both on this computer" in out
-    assert f"eitri.io ({PI.REMOTE_NAME}, optional): not added (eitri plugin login adds it)" in out
+    assert "eitri-combined (the combined workspace), both on this computer; nothing to sign in to" in out
+    assert "eitri.io" not in out
     assert "anonymous counts: off (EITRI_TELEMETRY=off)" in out          # tests/conftest.py turns them off
-    monkeypatch.setenv("EITRI_MCP_URL", "http://127.0.0.1:8078/mcp")
-    PI.save_token("eitri_pat_status0123456789")
+    PI.old_token_path().parent.mkdir(parents=True, exist_ok=True)
+    PI.old_token_path().write_text("eitri_pat_old0123456789\n")
     PI.run_status()
-    assert "http://127.0.0.1:8078/mcp (from EITRI_MCP_URL)" in capsys.readouterr().out
+    assert "token from an older eitri is still saved" in capsys.readouterr().out
 
 
-def test_login_adds_the_remote_server_to_claude_code(home, capsys):
-    """`eitri plugin login` adds eitri.io as a user-scope Claude Code server (header helper, no token in the config) and
-    `logout` removes it again."""
-    PI.run_install(["claude"])
-    assert PI.run_login(token="eitri_pat_claude0123456789", check=False) == 0
-    calls = (home.parent / "claude.log").read_text(encoding="utf-8")
-    line = next(l for l in calls.splitlines() if l.startswith(f"mcp add-json -s user {PI.REMOTE_NAME} "))
-    cfg = json.loads(line.split(f"{PI.REMOTE_NAME} ", 1)[1])
-    assert cfg["type"] == "http" and cfg["url"] == "https://eitri.io/mcp" and "eitri-auth-header" in cfg["headersHelper"]
-    assert "eitri_pat_claude" not in line
-    assert PI.run_logout() == 0
-    assert f"mcp remove -s user {PI.REMOTE_NAME}" in (home.parent / "claude.log").read_text(encoding="utf-8").splitlines()[-1]
+def _old_090_install(home):
+    """What 0.9.0's `eitri plugin login` left behind: a saved token, Cursor's eitri-io entry (and 0.8.x's eitri-combined at
+    eitri.io), Codex's eitri-io inside eitri's block, Claude Code's user-scope eitri-io server (the stub logs the remove)."""
+    PI.old_token_path().parent.mkdir(parents=True, exist_ok=True)
+    PI.old_token_path().write_text("eitri_pat_old0123456789\n")
+    (home / ".cursor" / "mcp.json").write_text(json.dumps({"mcpServers": {
+        "mine": {"command": "x"},
+        "eitri-io": {"url": "https://eitri.io/mcp", "headers": {"Authorization": "Bearer eitri_pat_old0123456789"}},
+        "eitri-combined": {"url": "https://eitri.io/mcp"}}}))
+    (home.parent / "eitri-io").write_text("")                                 # Claude Code has the eitri-io server
+    (home / ".codex" / "config.toml").write_text('model = "gpt-6"\n\n' + PI.BLOCK_START + '\n[mcp_servers.eitri-io]\n'
+                                                 'url = "https://eitri.io/mcp"\n' + PI.BLOCK_END + '\n')
 
 
-def test_login_without_a_terminal_prints_the_instruction_first(home, tmp_path):
-    """Piped (no terminal): the "Make a personal token" line comes before the prompt, and the token is read from stdin."""
+def test_install_removes_the_closed_hosted_server(home, capsys):
+    _old_090_install(home)
+    assert PI.run_install() == 0
+    out = capsys.readouterr().out
+    assert "removed eitri.io's closed hosted workspace: Claude Code's eitri-io server, Cursor's eitri-io, eitri-combined server, the saved eitri.io token" in out, out
+    assert not PI.old_token_path().exists()
+    assert f"mcp remove -s user {PI.OLD_REMOTE}" in (home.parent / "claude.log").read_text(encoding="utf-8")
+    cursor = json.loads((home / ".cursor" / "mcp.json").read_text(encoding="utf-8"))["mcpServers"]
+    assert "eitri-io" not in cursor and cursor["mine"] == {"command": "x"}
+    assert cursor["eitri-combined"]["args"] == ["mcp", "--combined"] and "url" not in cursor["eitri-combined"]
+    codex = (home / ".codex" / "config.toml").read_text(encoding="utf-8")
+    assert "eitri-io" not in codex and "eitri.io" not in codex and 'model = "gpt-6"' in codex
+    assert not (PI.bundle_copy() / "bin" / "eitri-auth-header").exists()
+    # a second install finds nothing left to remove
+    PI.run_install()
+    assert "closed hosted workspace" not in capsys.readouterr().out
+
+
+def test_update_refresh_cleans_up_too(home, capsys):
+    assert PI.run_install(["cursor"]) == 0
+    _old_090_install(home)
+    PI.refresh_after_update()
+    assert "eitri-io" not in json.loads((home / ".cursor" / "mcp.json").read_text(encoding="utf-8"))["mcpServers"]
+    assert not PI.old_token_path().exists()
+
+
+def test_login_says_the_hosted_workspace_closed(home, capsys):
+    _old_090_install(home)
+    assert PI.run_login() == 0
+    out = capsys.readouterr().out
+    assert out.startswith(PI.CLOSED) and "removed the saved eitri.io token" in out
+    assert PI.run_logout() == 0 and "nothing to remove" in capsys.readouterr().out
+
+
+def test_old_login_flags_still_parse(home, tmp_path):
+    """Scripts written for 0.7.0-0.9.0 (`eitri plugin login --token-stdin`, `install --login`) still run, and sign in nowhere."""
     env = {**os.environ, "PYTHONPATH": str(ROOT), "EITRI_LAZY_IMPORT": "1"}
-    p = subprocess.run([sys.executable, "-m", "eitri", "plugin", "login", "--no-check", "--no-browser"],
-                       input="eitri_pat_piped0123456789\n", stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                       text=True, encoding="utf-8", env=env, cwd=str(tmp_path), start_new_session=True, timeout=120)
-    out = p.stdout
-    assert p.returncode == 0, out
-    assert out.index("Make a personal token") < out.index("eitri.io token (hidden") < out.index("saved eitri")
-    notice = PI.unverified_notice("--no-check was given")                    # this run passes --no-check
-    assert out.index("saved eitri") < out.index(notice)                       # printed to the person's terminal
-    assert "GetPassWarning" not in out and PI.load_token() == "eitri_pat_piped0123456789"
+    for args in (["login", "--token-stdin", "--no-check", "--no-browser"], ["logout"], ["status", "--online"]):
+        p = subprocess.run([sys.executable, "-m", "eitri", "plugin", *args], input="eitri_pat_piped0123456789\n",
+                           capture_output=True, text=True, encoding="utf-8", env=env, cwd=str(tmp_path), timeout=120)
+        assert p.returncode == 0, p.stdout + p.stderr
+    assert not PI.old_token_path().exists()
+    p = subprocess.run([sys.executable, "-m", "eitri", "plugin", "headers"], capture_output=True, text=True, env=env, cwd=str(tmp_path))
+    assert p.returncode == 2                                                  # gone: argparse refuses it
 
 
-def test_login_flushes_the_instruction_before_the_terminal_prompt(home, monkeypatch):
-    """The reported case: stdout piped (block-buffered) while getpass prompts on the terminal. By the time the prompt
-    shows, the instruction must already have left stdout's buffer."""
-    import getpass
-    import io
-    raw = io.BytesIO()
-    out = io.TextIOWrapper(raw, encoding="utf-8", line_buffering=False, write_through=False)
-    seen = {}
-
-    class TTY(io.StringIO):
-        def isatty(self):
-            return True
-
-    def fake_getpass(prompt):
-        seen["before_prompt"] = raw.getvalue().decode("utf-8")
-        return "eitri_pat_terminal012345678"
-    monkeypatch.setattr(sys, "stdout", out)
-    monkeypatch.setattr(sys, "stdin", TTY())
-    monkeypatch.setattr(getpass, "getpass", fake_getpass)
-    assert PI.run_login(check=False, open_browser=False) == 0
-    assert "Make a personal token" in seen["before_prompt"]
-
-
-def test_signed_in_notice_wording():
-    assert PI.SIGNED_IN_NOTICE == (
-        "Signed in to eitri.io. In the combined workspace, the model files your agent writes are sent to eitri.io, kept as "
-        "projects in your account, and used to train eitri's models unless you turn that off at https://eitri.io/account. "
-        "Single-domain work stays on this machine.")
-    # the installer's --plugin path no longer signs in (the combined workspace is local): no login call in it
-    sh = (ROOT / "scripts" / "install-remote.sh").read_text(encoding="utf-8")
-    assert '"$eitri" plugin login' not in sh
-
-
-def test_unverified_token_is_not_called_signed_in(home, monkeypatch, capsys):
-    """--no-check, or eitri.io unreachable: "Token saved (not checked yet: <reason>)." and the same privacy sentence."""
-    assert PI.SIGNED_IN_NOTICE == "Signed in to eitri.io. " + PI.PRIVACY_NOTICE
-    capsys.readouterr()
-    assert PI.run_login(token="eitri_pat_nocheck0123456789", check=False) == 0
-    out = capsys.readouterr().out
-    assert "Signed in to eitri.io" not in out
-    assert "Token saved (not checked yet: --no-check was given). " + PI.PRIVACY_NOTICE in out
-    assert PI.load_token() == "eitri_pat_nocheck0123456789"
-
-    monkeypatch.setenv("EITRI_MCP_URL", "http://127.0.0.1:9/mcp")           # nothing listens there
-    assert PI.run_login(token="eitri_pat_offline0123456789") == 0
-    out = capsys.readouterr().out
-    assert "Signed in to eitri.io" not in out
-    assert "Token saved (not checked yet: could not reach http://127.0.0.1:9/mcp (" in out
-    assert ("). " + PI.PRIVACY_NOTICE) in out
-    assert out.index("saved eitri") < out.index("Token saved (not checked yet")
-    assert PI.load_token() == "eitri_pat_offline0123456789"
-
-
-def test_login_from_stdin(home, monkeypatch):
-    monkeypatch.setattr(sys, "stdin", __import__("io").StringIO("eitri_pat_fromstdin012345\n"))
-    assert PI.run_login(from_stdin=True, check=False) == 0 and PI.load_token() == "eitri_pat_fromstdin012345"
-
-
-# ------------------------------------------------------------------------------------------------ the remote contract
-def _remote(url: str, headers: dict, steps):
-    from mcp.client.session import ClientSession
-    from mcp.client.streamable_http import streamable_http_client
-    from mcp.shared._httpx_utils import create_mcp_http_client
-
-    async def go():
-        async with create_mcp_http_client(headers=headers) as http:
-            async with streamable_http_client(url, http_client=http) as (r, w, *_):
-                async with ClientSession(r, w) as s:
-                    await s.initialize()
-                    return await steps(s)
-    return asyncio.run(go())
-
-
-def test_combined_loop_against_the_stub(tmp_path):
-    """The loop the combined skill describes, through a real MCP client with the bundle's auth helper."""
-    stub = StubRemote()
-    try:
-        cfg = tmp_path / "cfg"
-        cfg.mkdir()
-        (cfg / "plugin-token").write_text(stub.token)
-        headers = json.loads(subprocess.run(["sh", str(BUNDLE / "bin" / "eitri-auth-header")], capture_output=True, text=True, encoding="utf-8",
-                                            env={"PATH": os.environ["PATH"], "HOME": str(tmp_path), "EITRI_CONFIG_DIR": str(cfg)}).stdout)
-
-        async def steps(s):
-            tools = {t.name for t in (await s.list_tools()).tools}
-            t = lambda r: r.content[0].text  # noqa: E731
-            ref = t(await s.call_tool("combined_reference", {}))
-            pid = json.loads(t(await s.call_tool("combined_new_project", {"name": "arm", "goal": "a 2-DOF arm"})))["project_id"]
-            await s.call_tool("combined_put_files", {"project_id": pid, "files": {"motion/arm.py": 'servo = "SG90"'}})
-            first = json.loads(t(await s.call_tool("combined_build", {"project_id": pid})))
-            await s.call_tool("combined_put_files", {"project_id": pid, "files": {"motion/arm.py": 'servo = "MG996R"',
-                                                                                   "wiring/harness.py": "..."}})
-            second = json.loads(t(await s.call_tool("combined_build", {"project_id": pid})))
-            again = json.loads(t(await s.call_tool("combined_results", {"project_id": pid})))
-            links = json.loads(t(await s.call_tool("combined_export", {"project_id": pid, "formats": ["step"]})))
-            return tools, ref, first, second, again, links
-        tools, ref, first, second, again, links = _remote(stub.url, headers, steps)
-        assert tools == set(TOOLS)
-        assert "layout" in ref
-        assert not first["all_pass"] and any("wiring not built yet" in s for s in first["next_steps"])
-        assert any(c["severity"] == "fail" and c["source"] for c in first["checks"])
-        assert second["all_pass"] and second["next_steps"] == [] and again == second
-        assert links["step"].endswith(".step")
-    finally:
-        stub.close()
-
-
-def test_remote_without_token_says_how_to_sign_in():
-    stub = StubRemote()
-    try:
-        state, detail = PI.check_token(None, stub.url)
-        assert state == "rejected" and "eitri plugin login" in detail and detail == NO_TOKEN
-        assert PI.check_token("eitri_pat_revoked000000000", stub.url)[0] == "rejected"
-        assert PI.check_token(stub.token, stub.url) == ("ok", "signed in")
-        # signed out, the tools still list (so the agent sees them) and a call says how to sign in
-        async def steps(s):
-            tools = {t.name for t in (await s.list_tools()).tools}
-            res = await s.call_tool("combined_list_projects", {})
-            return tools, res
-        tools, res = _remote(stub.url, {}, steps)
-        assert tools == set(TOOLS) and res.is_error and "eitri plugin login" in res.content[0].text
-    finally:
-        stub.close()
+def test_nothing_points_at_the_closed_server():
+    """No eitri.io MCP URL, sign-in or token step left in the package, the bundle, the installer or the docs."""
+    files = [p for p in (ROOT / "eitri").rglob("*") if p.suffix in (".py", ".md", ".json", ".mdc", ".html", ".js", "") and p.is_file()
+             and "vendor" not in p.parts and "__pycache__" not in p.parts]
+    files += [ROOT / "README.md", ROOT / "AGENTS.md", ROOT / "scripts" / "install-remote.sh", ROOT / ".claude-plugin" / "marketplace.json"]
+    files += list((ROOT / "docs").glob("*.md"))
+    for p in files:
+        try:
+            text = p.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        assert "eitri.io/mcp" not in text, p
+        assert "eitri.io/account" not in text, p
+        assert "eitri-auth-header" not in text, p
+    assert not (BUNDLE / "bin" / "eitri-auth-header").exists()

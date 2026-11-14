@@ -24,7 +24,7 @@ shell's slots). `eitri.css`, `editor.css` and `assets/fonts/` are gone; the font
 | Single-project viewer (`eitri view`, `start_viewer`) | `/` of its own server | old UI | new shell (same editor page; crumbs without a home link) |
 | Not found page (`eitri/web/message.html`): unknown address, unknown project, for a browser | any unknown path, `/p/<missing>/` | plain text | new shell (other clients still get the same plain text) |
 | In-page problems (WebGL missing, an editor that failed to start) | the editor's `#problem` overlay | old UI | new shell |
-| Old landing page `site/` (eitri.io's former static site; eitri.io is served by eitri-hosted, which keeps its own media) | nothing in this repo served it | old UI | removed |
+| Old landing page `site/` (eitri.io's former static site) | nothing in this repo served it | old UI | removed |
 | `assets/eitri.css`, `assets/editor.css`, `assets/fonts/` | `/assets/…` | old UI | removed (replaced by `design/` + `app.css`) |
 | `assets/icons.svg` (Lucide, the editor's tool icons), `assets/mark.svg` | `/assets/…` | shared | kept (4 icons added for the dock) |
 | `assets/design/` (tokens, shell, glyphs, fonts, README) | `/assets/design/…` | — | new |
@@ -40,7 +40,7 @@ shell's slots). `eitri.css`, `editor.css` and `assets/fonts/` are gone; the font
   checks, parameters, parts, edits, revisions, report…) over the chat panel. The chat sizes to its content up to half the dock, can be
   dragged taller, and collapses to its header (which then shows the last line said).
 - Status bar (mono): the tool, `core vX.Y.Z`, `local`, the project folder, the build state (`rev N · K checks pass` / `… failing`),
-  and one link: `combined workspace: eitri.io`.
+  and one link: `eitri.io` (the project page).
 - Phone (< 760 px): the rail is a bottom tab bar, the viewport takes the top of the screen, the chat and the inspector follow.
 
 ## Slots: what a host fills (window.EITRI_SHELL, set before `assets/shell-host.js`)

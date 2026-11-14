@@ -12,8 +12,8 @@ The tools come from the `eitri-combined` MCP server, which runs on this computer
 cross-domain. A project is a folder in ~/eitri-projects; the user watches it in eitri's viewer (a tab per model file). You
 write every file yourself.
 
-If these tools are missing, follow the **design** skill (eitri isn't installed yet). If the user asked for eitri.io and
-signed in, the `eitri-io` server has the same tools; use those instead and give its privacy line (see **design**).
+If these tools are missing, follow the **design** skill (eitri isn't installed yet). There is no hosted or online
+version to sign in to: everything runs here.
 
 ## The loop
 
