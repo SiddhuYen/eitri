@@ -17,7 +17,7 @@ KEYS = {"event", "id", "version", "os", "agent"}
 def sent(monkeypatch):
     """Counts on (as outside tests), every POST captured instead of sent."""
     got: list[dict] = []
-    monkeypatch.setattr(T, "_sender", lambda body: got.append(body))
+    monkeypatch.setattr(T, "_sender", lambda body: got.append(body) or 204)   # the Worker answers 204
     for v in ("EITRI_TELEMETRY", "EITRI_NO_PING", "DO_NOT_TRACK", "EITRI_SANDBOX_WORK"):
         monkeypatch.delenv(v, raising=False)
     real = T._env_off
@@ -84,6 +84,85 @@ def test_install_is_counted_once_per_id(sent):
     assert [b["event"] for b in sent] == ["install"] and sent[0]["agent"] == "cursor"
 
 
+@pytest.mark.parametrize("answer", [None, 400, 429, 500])
+def test_a_failed_install_count_is_not_marked_sent(sent, monkeypatch, answer):
+    """No answer (TLS/offline) or a refusal leaves the install unmarked, so the next `eitri plugin install` (and so
+    `eitri update`) tries again; once a 2xx arrives it is never sent again for this id."""
+    from eitri.config import get_setting
+    tries: list[dict] = []
+    monkeypatch.setattr(T, "_sender", lambda body: tries.append(body) or answer)
+    assert T.send_install() is not None and get_setting(T.INSTALL_FLAG) is None
+    assert T.send_install() is not None and len(tries) == 2                 # tried again
+    monkeypatch.setattr(T, "_sender", lambda body: tries.append(body) or 200)
+    T.send_install()
+    assert get_setting(T.INSTALL_FLAG) == T.install_id() and len(tries) == 3
+    assert T.send_install() is None and len(tries) == 3
+
+
+def test_a_sender_that_raises_leaves_the_install_unmarked(sent, monkeypatch):
+    from eitri.config import get_setting
+    def boom(body):
+        raise OSError("no network")
+    monkeypatch.setattr(T, "_sender", boom)
+    assert T.send_install() is not None and get_setting(T.INSTALL_FLAG) is None
+
+
+def test_the_old_install_ping_mark_is_ignored(sent):
+    """0.9.0-0.9.1 set "install_ping" before any answer (so failed counts were marked sent): after the update, such an install
+    is counted once."""
+    from eitri.config import set_setting
+    set_setting("install_ping", T.install_id())
+    assert T.send_install() is not None and [b["event"] for b in sent] == ["install"]
+    assert T.send_install() is None and len(sent) == 1
+
+
+def test_the_ping_uses_the_same_tls_context_as_update(monkeypatch):
+    """The bug in 0.9.0-0.9.1: urlopen without a context, so a Python with no CA file (python.org's macOS framework build)
+    failed every ping with CERTIFICATE_VERIFY_FAILED, silently. No network: urlopen is replaced."""
+    import ssl
+    import urllib.error
+    import urllib.request
+    from eitri import net, update
+    marker = ssl.create_default_context()
+    monkeypatch.setattr(net, "tls_context", lambda: marker)
+    seen: list = []
+
+    class Answer:
+        status = 204
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+        def read(self, n=-1):
+            return b""
+
+    def fake_urlopen(req, timeout=None, context=None):
+        seen.append((req.full_url, context))
+        return Answer()
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    assert T._post({"event": "install"}) == 204
+    assert seen == [(T.URL, marker)] and update._tls_context() is marker
+
+    def refused(req, timeout=None, context=None):
+        raise urllib.error.HTTPError(req.full_url, 400, "Bad Request", {}, None)
+    monkeypatch.setattr(urllib.request, "urlopen", refused)
+    assert T._post({"event": "nope"}) == 400
+
+    def tls_fail(req, timeout=None, context=None):
+        raise urllib.error.URLError(ssl.SSLCertVerificationError("CERTIFICATE_VERIFY_FAILED"))
+    monkeypatch.setattr(urllib.request, "urlopen", tls_fail)
+    assert T._post({"event": "install"}) is None
+
+
+def test_tls_context_uses_certifi_when_present():
+    import ssl
+    from eitri.net import tls_context
+    ctx = tls_context()
+    assert isinstance(ctx, ssl.SSLContext) and ctx.verify_mode == ssl.CERT_REQUIRED
+    certifi = pytest.importorskip("certifi")
+    assert ctx.cert_store_stats()["x509_ca"] > 50, certifi.where()           # certifi's bundle (a CA-less Python has 0)
+
+
 def test_a_failing_post_never_raises(monkeypatch, sent):
     def boom(body):
         raise OSError("no network")
@@ -91,7 +170,7 @@ def test_a_failing_post_never_raises(monkeypatch, sent):
     t = T.send("install")
     t.join(3)                                                               # the thread died quietly; nothing raised here
     monkeypatch.setattr(T, "URL", "http://127.0.0.1:9/api/ping")           # the real sender, nothing listening: swallowed
-    T._post({"event": "install"})
+    assert T._post({"event": "install"}) is None
 
 
 def test_first_run_notice_once(sent, capsys):

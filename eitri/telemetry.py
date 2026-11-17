@@ -13,6 +13,8 @@ at the first build of a project new_project made (a single-domain project's kind
 nothing else; like any request it reaches the server from this computer's network address, which the payload does not include.
 
 Fire-and-forget: a background thread, a 2 s timeout, no retry; a failure is ignored and never stops a build, an install or a tool.
+The install count is the one exception to "no retry": it is marked sent only when the server answers 2xx, so a failed one is
+tried again at the next `eitri plugin install` (which `eitri update` runs).
 
 Off with any of: `eitri telemetry off` (saved in config.json), EITRI_TELEMETRY=off, EITRI_NO_PING=1, DO_NOT_TRACK=1. Nothing is
 sent under pytest, inside a sandbox build (eitri.sandbox sets EITRI_TELEMETRY=off), or from builds (model code never calls this).
@@ -37,6 +39,9 @@ NOTICE = ("eitri's plugin sends two anonymous counts (an install, a project crea
           "app, the project's domain; nothing else). Turn them off with:  eitri telemetry off")
 _OFF = ("0", "off", "false", "no")
 _ON = ("1", "true", "yes", "on")
+# The setting that marks this install id's install count as received. 0.9.0-0.9.1 used "install_ping" and set it before any
+# answer, so installs whose count never arrived (every macOS Python without a CA file) were marked sent: that key is ignored.
+INSTALL_FLAG = "install_counted"
 
 
 def _env_off() -> str | None:
@@ -125,38 +130,51 @@ def payload(event: str, kind: str | None = None, agent: str | None = None) -> di
     return body
 
 
-def _post(body: dict) -> None:
+def _post(body: dict) -> int | None:
+    """POST one count. The HTTP status the server answered, or None when no answer came (offline, DNS, TLS, timeout)."""
+    import urllib.error
     import urllib.request
+    from .net import tls_context
     data = json.dumps(body, separators=(",", ":")).encode()
     req = urllib.request.Request(URL, data=data, method="POST",
                                  headers={"Content-Type": "application/json", "User-Agent": "eitri"})
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT_S) as r:
+        with urllib.request.urlopen(req, timeout=TIMEOUT_S, context=tls_context()) as r:   # noqa: S310 - a fixed https URL
             r.read(64)
-    except Exception:  # noqa: BLE001 - fire and forget: never retried, never reported
-        pass
+            return int(r.status)
+    except urllib.error.HTTPError as exc:
+        return int(exc.code)
+    except Exception:  # noqa: BLE001 - fire and forget: never reported
+        return None
 
 
 _sender = _post                      # tests replace this (no network in tests)
 
 
-def _send_quietly(body: dict) -> None:
+def _received(status) -> bool:
+    return isinstance(status, int) and 200 <= status < 300
+
+
+def _send_quietly(body: dict, result: list | None = None) -> None:
     try:
-        _sender(body)
+        status = _sender(body)
     except Exception:  # noqa: BLE001 - fire and forget
-        pass
+        status = None
+    if result is not None:
+        result.append(status)
 
 
-def send(event: str, kind: str | None = None, agent: str | None = None, wait: bool = False) -> threading.Thread | None:
+def send(event: str, kind: str | None = None, agent: str | None = None, wait: bool = False,
+         result: list | None = None) -> threading.Thread | None:
     """Send one count in the background (wait=True: wait for it, at most TIMEOUT_S + a little; a CLI about to exit). Returns the
-    thread, or None when nothing is sent."""
+    thread, or None when nothing is sent. `result`, if given, gets the server's HTTP status (None: no answer) appended."""
     try:
         if not enabled():
             return None
         body = payload(event, kind, agent)
         if body is None:
             return None
-        t = threading.Thread(target=_send_quietly, args=(body,), daemon=True, name="eitri-ping")
+        t = threading.Thread(target=_send_quietly, args=(body, result), daemon=True, name="eitri-ping")
         t.start()
         if wait:
             t.join(TIMEOUT_S + 0.5)
@@ -166,17 +184,19 @@ def send(event: str, kind: str | None = None, agent: str | None = None, wait: bo
 
 
 def send_install(agent: str | None = None) -> threading.Thread | None:
-    """The install count: once per install id (a refresh after `eitri update` re-runs the install and sends nothing)."""
+    """The install count: once per install id. It is marked only when the server answers 2xx, so a refresh after `eitri update`
+    (which re-runs the install) sends nothing once it has arrived, and tries again if it never did."""
     from .config import get_setting, set_setting
     try:
         if not enabled():
             return None
         pid = install_id()
-        if pid is None or get_setting("install_ping") == pid:
+        if pid is None or get_setting(INSTALL_FLAG) == pid:
             return None
-        t = send("install", agent=agent, wait=True)
-        if t is not None:
-            set_setting("install_ping", pid)
+        result: list = []
+        t = send("install", agent=agent, wait=True, result=result)
+        if t is not None and result and _received(result[0]):
+            set_setting(INSTALL_FLAG, pid)
         return t
     except Exception:  # noqa: BLE001
         return None

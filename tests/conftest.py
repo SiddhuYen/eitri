@@ -8,5 +8,6 @@ import pytest
 @pytest.fixture(autouse=True)
 def _isolated_config(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("EITRI_CONFIG_DIR", str(tmp_path_factory.mktemp("eitri-config")))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path_factory.mktemp("xdg-data")))   # the plugin's data folder (plugin_install.data_dir)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setenv("EITRI_TELEMETRY", "off")          # tests never send the anonymous counts (eitri.telemetry)

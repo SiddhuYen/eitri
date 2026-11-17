@@ -3,6 +3,26 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
+## 0.9.2: anonymous counts were never sent from some macOS Pythons
+
+### Fixed
+
+- **The plugin's two anonymous counts (install, project created) never reached eitri.io from some macOS Pythons.** The ping
+  used Python's default TLS settings, and a Python with no CA file (python.org's macOS framework build without its "Install
+  Certificates" step, which `uv tool install` can pick up when it is already on the Mac) failed every request with `CERTIFICATE_VERIFY_FAILED`, which
+  the fire-and-forget sender swallowed. The counts now use the same TLS context as `eitri update` (certifi's CA bundle when
+  it is installed, else the system default), shared in the new `eitri/net.py`.
+- **A failed install count was marked as sent.** `eitri plugin install` recorded the install as counted as soon as the
+  request started, so an install whose count failed was never counted. It is now recorded only when eitri.io answers 2xx,
+  under a new setting (`install_counted`); the old `install_ping` mark is ignored, so an install from 0.9.0 or 0.9.1 sends
+  its install count once after `eitri update` (which re-runs `eitri plugin install`). Nothing else changes in what is sent
+  or how to turn it off (`eitri telemetry off`).
+
+### Tests
+
+- The test suite keeps the plugin's data folder (`XDG_DATA_HOME`) per test too: on a machine with the plugin installed,
+  `test_run_update` read the real `plugin-installed.json`.
+
 ## 0.9.1: no hosted service: eitri.io's web app and remote MCP server have closed
 
 eitri.io is now only the install line (`curl -fsSL https://eitri.io/install | sh`, which serves this repository's

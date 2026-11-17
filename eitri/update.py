@@ -87,14 +87,9 @@ def fetch_latest(timeout: float = 5.0) -> tuple[str | None, str | None]:
 
 
 def _tls_context():
-    """certifi's CA bundle when it is installed (it comes with anthropic/httpx): uv's own Python builds on macOS
-    have no system CA path, so the default context fails with CERTIFICATE_VERIFY_FAILED."""
-    import ssl
-    try:
-        import certifi
-        return ssl.create_default_context(cafile=certifi.where())
-    except Exception:  # noqa: BLE001
-        return ssl.create_default_context()
+    """The shared TLS context (eitri.net.tls_context)."""
+    from .net import tls_context
+    return tls_context()
 
 
 def cache_path() -> Path:
