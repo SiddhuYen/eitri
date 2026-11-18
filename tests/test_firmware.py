@@ -3,6 +3,7 @@ the generated pin header, the usage scan, the real arduino-cli compile (skipped 
 "compiler unavailable" failure, direct edits, the pinout diagram, the reference example and the demo."""
 from __future__ import annotations
 
+import json
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -284,6 +285,84 @@ def test_a_failure_without_a_compiler_error_says_so(tmp_path, monkeypatch):
     assert c.severity == "fail" and c.measured == res.message and "error(s)" not in c.measured
     assert "Used platform" not in c.measured and "\x1b" not in c.measured
     assert not cache.exists()
+
+
+def _switchable_cli(tmp_path):
+    """A stand-in arduino-cli whose compile result and versions come from files the test changes between builds."""
+    state = tmp_path / "cli-state"
+    state.mkdir()
+    (state / "mode").write_text("fail")
+    (state / "version").write_text("1.6.0")
+    (state / "core").write_text("1.8.8")
+    (state / "compiles").write_text("")
+    fake = tmp_path / "arduino-cli"
+    fake.write_text(f'#!/bin/sh\nS="{state}"\ncase "$1" in\n'
+                    '  version) echo "{\\"VersionString\\": \\"$(cat $S/version)\\"}";;\n'
+                    '  core) echo "{\\"platforms\\": [{\\"id\\": \\"arduino:avr\\", \\"installed_version\\": \\"$(cat $S/core)\\"}]}";;\n'
+                    '  compile) echo x >> "$S/compiles"\n'
+                    '    if [ "$(cat $S/mode)" = fail ]; then\n' + _NO_DIAG.replace("exit 1\n", "exit 1\n    fi\n")
+                    + "    echo 'Sketch uses 9176 bytes (29%) of program storage space. Maximum is 30720 bytes.';;\nesac\nexit 0\n")
+    fake.chmod(0o755)
+    return fake, state
+
+
+def test_a_tool_failure_is_never_cached_and_a_later_success_replaces_it(tmp_path, monkeypatch):
+    """Seen in the smoke test: the cache (keyed on the board and the sketch only) kept a failure that no TMPDIR caused, so
+    every rebuild after the fix still failed. A failure with no compiler diagnostic is not cached; an older such entry,
+    even under the current key, is not served and is removed; the next good compile is cached and served."""
+    fake, state = _switchable_cli(tmp_path)
+    monkeypatch.setenv("EITRI_ARDUINO_CLI", str(fake))
+    folder = stage_sketch(project(), tmp_path)
+    cache = tmp_path / "out" / "compile_cache.json"
+    cache.parent.mkdir()
+    args = (folder, "arduino:avr:nano", "arduino:avr", tmp_path / "b")
+    bad = compile_sketch(*args, cache_file=cache)
+    assert not bad.ok and bad.errors == [] and not cache.exists()
+
+    # an entry like the one 0.9.1 wrote (available, not ok, no diagnostics), under the key this toolchain gives now
+    from eitri.firmware import compile as C
+    key = C._key("arduino:avr:nano", folder, C.toolchain(str(fake), "arduino:avr"))
+    cache.write_text(json.dumps({"key": key, "result": {k: v for k, v in bad.__dict__.items() if k != "cached"}}))
+    again = compile_sketch(*args, cache_file=cache)
+    assert not again.cached and not cache.exists()                    # compiled again (still failing), entry dropped
+
+    (state / "mode").write_text("ok")                                 # the cause is fixed
+    good = compile_sketch(*args, cache_file=cache)
+    assert good.ok and not good.cached and good.flash_bytes == 9176 and cache.exists()
+    served = compile_sketch(*args, cache_file=cache)
+    assert served.ok and served.cached
+    assert len((state / "compiles").read_text().split()) == 3         # the cached success did not run arduino-cli
+
+
+@pytest.mark.parametrize("change", ["version", "core", "path"])
+def test_the_cache_key_holds_the_toolchain(tmp_path, monkeypatch, change):
+    """A new arduino-cli, a core update or another binary (`eitri setup firmware`) invalidates a cached result; so does
+    the key format of 0.9.1 and earlier (board + sketch only)."""
+    fake, state = _switchable_cli(tmp_path)
+    (state / "mode").write_text("ok")
+    monkeypatch.setenv("EITRI_ARDUINO_CLI", str(fake))
+    folder = stage_sketch(project(), tmp_path)
+    cache = tmp_path / "compile_cache.json"
+    args = (folder, "arduino:avr:nano", "arduino:avr", tmp_path / "b")
+    assert not compile_sketch(*args, cache_file=cache).cached
+    assert compile_sketch(*args, cache_file=cache).cached
+    if change == "path":
+        other = tmp_path / "bin2" / "arduino-cli"
+        other.parent.mkdir()
+        other.write_text(fake.read_text())
+        other.chmod(0o755)
+        monkeypatch.setenv("EITRI_ARDUINO_CLI", str(other))
+    else:
+        (state / change).write_text("9.9.9")
+    assert not compile_sketch(*args, cache_file=cache).cached
+    from eitri.firmware import compile as C
+    data = json.loads(cache.read_text())
+    import hashlib
+    old = hashlib.sha1(b"arduino:avr:nano")                           # 0.9.1's key
+    for f in sorted(folder.iterdir()):
+        if f.is_file():
+            old.update(f.name.encode() + b"\0" + f.read_bytes())
+    assert data["key"] != old.hexdigest() and C.CACHE_FORMAT == 2
 
 
 @needs_cli

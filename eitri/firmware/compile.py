@@ -122,26 +122,56 @@ def install_hint(core: str) -> str:
             + "; or point EITRI_ARDUINO_CLI at the binary")
 
 
-def _key(fqbn: str, sketch_dir: Path) -> str:
-    h = hashlib.sha1(fqbn.encode())
+CACHE_FORMAT = 2   # 2 (0.9.2): the key holds the toolchain; a format-1 entry (fqbn + files only) never matches
+
+
+def _probe_json(cmd: list[str]) -> dict:
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30, env=cli_env(), check=False)
+        return json.loads(p.stdout) if p.returncode == 0 else {}
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return {}
+
+
+def toolchain(cli: str, core: str) -> str:
+    """What the compile result depends on besides the sketch: the arduino-cli binary (path and version) and the installed
+    version of the board's core. `eitri setup firmware`, a new arduino-cli or a core update changes it, so a cached result
+    from before no longer matches. Two quick probes (about 0.15 s each); unknown parts are '?'."""
+    ver = _probe_json([cli, "version", "--json"]).get("VersionString") or "?"
+    installed = "?"
+    for plat in _probe_json([cli, "core", "list", "--json"]).get("platforms") or []:
+        if plat.get("id") == core:
+            installed = plat.get("installed_version") or "?"
+    return f"{cli}|arduino-cli {ver}|{core} {installed}"
+
+
+def _key(fqbn: str, sketch_dir: Path, tools: str = "") -> str:
+    h = hashlib.sha1(f"eitri-compile-cache/{CACHE_FORMAT}\0{tools}\0{fqbn}".encode())
     for f in sorted(sketch_dir.iterdir()):
         if f.is_file():
             h.update(f.name.encode() + b"\0" + f.read_bytes())
     return h.hexdigest()
 
 
+def _cacheable(r: CompileResult) -> bool:
+    """Only a result the sketch decides: it compiled, or the compiler named an error. A failure with no compiler diagnostic
+    (an environment or tool fault: no TMPDIR, a broken install) must not outlive its cause."""
+    return r.available and (r.ok or bool(r.errors))
+
+
 def compile_sketch(sketch_dir: Path, fqbn: str, core: str, build_dir: Path, cache_file: Path | None = None, timeout: float = TIMEOUT_S) -> CompileResult:
     cli = find_cli()
     if cli is None:
         return CompileResult(False, False, "compiler unavailable: arduino-cli was not found; " + install_hint(core))
-    key = _key(fqbn, sketch_dir)
+    key = _key(fqbn, sketch_dir, toolchain(cli, core)) if cache_file is not None else ""
     if cache_file is not None and cache_file.is_file():
         try:
             data = json.loads(cache_file.read_text(encoding="utf-8"))
             if data.get("key") == key:
                 r = CompileResult(**data["result"])
-                r.cached = True
-                return r
+                if _cacheable(r):                 # never serve a tool failure, whoever wrote it
+                    r.cached = True
+                    return r
         except (OSError, ValueError, TypeError):
             pass
     cmd = [cli, "compile", "--fqbn", fqbn, "--build-path", str(build_dir), "--warnings", "default", str(sketch_dir)]
@@ -173,7 +203,9 @@ def compile_sketch(sketch_dir: Path, fqbn: str, core: str, build_dir: Path, cach
         r.flash_bytes, r.flash_pct = int(m.group(1)), int(m.group(2))
     if n:
         r.ram_bytes, r.ram_pct = int(n.group(1)), int(n.group(2))
-    if cache_file is not None and r.available and not no_diagnostic:   # an environment fault must not stick to the sketch
+    if cache_file is not None and not _cacheable(r):
+        cache_file.unlink(missing_ok=True)             # drop an older entry too: the next build compiles afresh
+    elif cache_file is not None:
         try:
             d = dict(r.__dict__)
             d.pop("cached", None)

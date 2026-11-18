@@ -75,8 +75,13 @@ annotated tags (`git show v0.4.0`).
   `tempfile.gettempdir()`) to every arduino-cli it runs (the compile check and `eitri setup firmware`) when it is unset or empty.
 - **A compile that fails with no compiler error says so.** The check said "1 error(s): " followed by arduino-cli's coloured
   "Used platform" table. It now says `arduino-cli failed without a compiler error (exit N); output: ...` (the last lines,
-  without colour codes or the table), and such a failure, which comes from the environment and not the sketch, is no
-  longer cached against the sketch. The pinout diagram says "failed without a compiler error".
+  without colour codes or the table). The pinout diagram says "failed without a compiler error".
+- **A cached compile failure outlived its cause.** `out/compile_cache.json` was keyed on the board and the sketch files
+  only, and it stored the failure that the missing TMPDIR caused, so after the fix every rebuild still failed from the cache. A
+  failure with no compiler diagnostic is now never cached, and such an entry is never served (it is deleted, whoever wrote it).
+  The key now also holds the arduino-cli path and version and the installed version of the board's core (two quick probes,
+  about 0.15 s each), so `eitri setup firmware`, a new arduino-cli or a core update invalidates it. Entries written by 0.9.1
+  and earlier never match (cache format 2), so a project stuck on the bad entry compiles again on its next build.
 
 ### Tests
 
@@ -86,7 +91,8 @@ annotated tags (`git show v0.4.0`).
   `/dev/tty` cannot open, a fresh HOME) through stand-in `curl` and `brew` commands, and must exit 0 with its "firmware is
   ready" last line; without `-y` it must refuse at once.
 - arduino-cli runs with a TMPDIR when ours is unset or empty (a stand-in arduino-cli that fails like 1.6 without one), and a
-  failure with no compiler error is reported as one, uncached.
+  failure with no compiler error is reported as one, uncached; an entry like 0.9.1's is not served and a later success
+  replaces it; a changed arduino-cli version, core version or binary path misses the cache.
 
 ## 0.9.1: no hosted service: eitri.io's web app and remote MCP server have closed
 
