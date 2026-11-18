@@ -3,6 +3,28 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
+## Unreleased: tickets and change packages on combined projects
+
+### Added
+
+- **A ticket on a combined project covers every model file.** `eitri ticket new` (and the agent's `ticket_new`) on a combined
+  project targets every model file at its last good build (`--base latest`) or none (`--base new`); `--file` and a revision
+  number are refused. The plan records every file's hash, and `eitri ticket approve` refuses when any file changed, appeared
+  or went since the plan. The plan gate already covered every file and every surface (the combined tools, the viewer, the CLI).
+- **`eitri package` on a combined project** rebuilds every file of the base and of the result together, in a fresh folder
+  marked as a combined project, so every cross-domain check runs again. Same refusal rule, over every check of every file:
+  a FAIL anywhere (cross-domain included) refuses, a NOT RUN refuses unless a person waived it, a file on disk with no good
+  build refuses. Check names carry their file (`mech.py: torque joint shoulder (MG996R) (masses from CAD)`); criteria may use
+  the bare name to match in any file; waivers take the qualified name (or the bare one when only one file has it).
+  The package adds a per-file table on page 1, per-file parameter and BOM diffs, one source diff over the changed files,
+  `outputs/<file>/` per file and `outputs/build_package/` (print files, consolidated BOM, cut list, wiring steps, assembly
+  order). Revision letters are the project's, under `"project"` in `tickets/revisions.json`. A file changed, added or removed
+  that the plan's `files` did not list is flagged in "Read before signing". `package.json` stays `eitri.package/1`, with
+  `design.kind: "combined"`, `design.files`, and `file` / `check` / `cross_domain` on each check row (fields added).
+- **Ticket tools on the combined MCP server** (`eitri mcp --combined`): `combined_ticket_new`, `combined_ticket_show`,
+  `combined_ticket_plan`, `combined_package`. As on the single-domain server, no tool approves, waives or closes. On a
+  combined project the commands eitri tells the person to run carry `-C <project folder>`.
+
 ## 0.9.1: no hosted service: eitri.io's web app and remote MCP server have closed
 
 eitri.io is now only the install line (`curl -fsSL https://eitri.io/install | sh`, which serves this repository's

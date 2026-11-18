@@ -7,7 +7,8 @@ description: Design a whole machine in eitri's combined workspace (the combined_
 
 The tools come from the `eitri-combined` MCP server, which runs on this computer: `combined_reference`,
 `combined_new_project`, `combined_list_projects`, `combined_read_files`, `combined_put_files`, `combined_build`,
-`combined_results` and `combined_export`. Your host may show them with a prefix (for example
+`combined_results` and `combined_export` (and, for customer work, `combined_ticket_new`, `combined_ticket_show`,
+`combined_ticket_plan` and `combined_package`). Your host may show them with a prefix (for example
 `mcp__plugin_eitri_eitri-combined__combined_build`). eitri builds every file here and runs all the checks, single-domain and
 cross-domain. A project is a folder in ~/eitri-projects; the user watches it in eitri's viewer (a tab per model file). You
 write every file yourself.
@@ -53,3 +54,17 @@ version to sign in to: everything runs here.
   firmware, then the circuit. Build after each stage and say in one line what you are adding.
 - The checks are only as good as the models and figures behind them: say which numbers are estimates or unverified
   catalog figures when they decide a margin.
+
+## Tickets (customer work)
+
+A project may work under a **ticket**: a customer's change request with acceptance criteria. A write or build refused
+with "ticket" means one is active; `combined_ticket_show(project_id)` says its state.
+- A ticket covers every model file: its package rebuilds them all together and runs every check, the cross-domain ones too.
+- Order: `combined_ticket_show` → read the files and the last build → `combined_ticket_plan(...)` (the files you will
+  change or add, parameters as `{file, name, from, to, why}`, the checks you expect to change, what will not be checked,
+  open questions) → **stop** and give the person the exact `eitri ticket approve ... -C ...` command the answer shows.
+- Only a person approves, waives or closes, in their own terminal. No tool you have does it, and those commands refuse in
+  your shell. Never say a ticket is approved until `combined_ticket_show` says APPROVED.
+- Once approved, change only what the plan lists (anything else is flagged on the package's first page), `combined_build`,
+  then `combined_package(project_id)`. It is refused while any check of any file fails or did not run: fix the design. A
+  check that did not run needs its missing input; only the person may waive it.

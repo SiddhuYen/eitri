@@ -21,6 +21,8 @@ REMOTE_TOOLS = {
     "combined_read_files": {"project_id", "paths"}, "combined_put_files": {"project_id", "files", "delete"},
     "combined_build": {"project_id"}, "combined_results": {"project_id"}, "combined_export": {"project_id", "formats"},
 }
+# added locally (tickets on a combined project, eitri.tickets.combined); none approves, waives or closes
+TICKET_TOOLS = {"combined_ticket_new", "combined_ticket_show", "combined_ticket_plan", "combined_package"}
 
 BOX = '''from eitri import *
 
@@ -177,7 +179,7 @@ def test_server_has_the_remote_contract(tmp_path, monkeypatch):
     from eitri.agent.combined_server import CombinedSession, make_server
     server = make_server(CombinedSession(root=tmp_path / "projects", open_browser=False))
     tools = {t.name: t for t in asyncio.run(server.list_tools())}
-    assert set(tools) == set(REMOTE_TOOLS)
+    assert set(tools) == set(REMOTE_TOOLS) | TICKET_TOOLS
     for name, props in REMOTE_TOOLS.items():
         assert set(props) <= set(tools[name].input_schema.get("properties") or {}), name
     text, err = _call(server, "combined_list_projects")
@@ -208,7 +210,7 @@ def test_eitri_mcp_combined_speaks_stdio_fast(tmp_path):
                 res = await s.call_tool("combined_list_projects", {})
                 return init, tools, res
     init, tools, res = asyncio.run(go())
-    assert tools == set(REMOTE_TOOLS) and "on this computer" in (init.instructions or "")
+    assert tools == set(REMOTE_TOOLS) | TICKET_TOOLS and "on this computer" in (init.instructions or "")
     assert "No combined projects yet" in res.content[0].text
 
 

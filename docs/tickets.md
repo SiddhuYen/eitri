@@ -70,8 +70,9 @@ A criterion's check is a check name as the report gives it, or a glob such as `t
 check name carries a part name that the change replaces). `ticket show` and the agent's `ticket_new` list the check
 names the base build runs.
 
-Agent tools (MCP and the API backend): `ticket_new`, `ticket_show`, `ticket_list`, `ticket_plan`, `package`. There is
-deliberately no tool to approve, waive or close.
+Agent tools (MCP and the API backend): `ticket_new`, `ticket_show`, `ticket_list`, `ticket_plan`, `package`; on the
+combined server (`eitri mcp --combined`): `combined_ticket_new`, `combined_ticket_show`, `combined_ticket_plan`,
+`combined_package`. There is deliberately no tool to approve, waive or close.
 
 ## Who can approve
 
@@ -127,13 +128,59 @@ The **Not checked** section lists what eitri's checks do not cover:
 - every waived check;
 - every check that disappeared;
 - each domain's standing limits (for example, no FEA for CAD and no dynamic loads for mechanisms);
-- cross-domain checks, which run only in a combined project (the combined workspace, `eitri mcp --combined`).
+- cross-domain checks, which run only in a combined project (a ticket on a combined project packages them: below).
 
 The **change order** is a draft. eitri fills in the reason, description, affected items, from and to revisions, and the
 originator. The number, disposition, effectivity and sign-off are left blank for a person.
 
 Revision letters follow ASME Y14.35's rule: I, O, Q, S, X and Z are not used. The first package of a design records its
 base as Rev A.
+
+## Combined projects (several model files)
+
+A combined project (the combined workspace, `eitri mcp --combined`: its `eitri.json` says `"workspace": "combined"`) is one
+machine as several model files: CAD, mechanism, harness, firmware, pneumatics, electronics. Each file's checks run on their
+own and against the others (eitri_suite's cross-domain checks: masses from the CAD into the torque check, harness routes
+against the CAD, firmware pins against the harness, the supply against the actuators that move together...). A change to one
+file can fail a check of another, so a ticket on a combined project covers **the whole project**:
+
+- **Target.** Every model file with its base revision (its last good build), or "new" for a file that has none. A blank file
+  (the empty `model.py` a new combined project starts with) is not part of the design. `--file` and a revision number are
+  refused; `--base latest` or `--base new` only.
+- **Plan and approval.** The plan records the hash of every model file. `approve` refuses when any of them changed, appeared
+  or went since the plan (`--despite-changes` accepts it, on page 1). A plan's parameters may name their file
+  (`{file: mech.py, name: payload_g, from: 50, to: 40}`).
+- **The gate** is the project's: while the ticket is not approved, no file is written or built, through the combined tools,
+  the viewer or the CLI.
+- **The package** rebuilds every file of the base and of the result **together**, in a fresh folder marked as a combined
+  project, in the workspace's build order, so every cross-domain check runs again. Check names are qualified by their file
+  (`wiring.py: overcurrent protection`). A criterion may name a check with its file, or with the bare name to match it in
+  any file. A waiver names the check with its file (a bare name is accepted when only one file has that check).
+- **The refusal rule is the same, over every file:** any check of any file (cross-domain ones included) that fails, or did
+  not run without a waiver, refuses the package; so do a file on disk with no good build and a fresh build that fails.
+- **Revision letters** are the project's (the machine's): one letter for every file together, in `revisions.json` under
+  `"project"`, each recording every file's build.
+
+The package holds the same files as a single-file one, per file where it matters: `model/rev-A/` and `model/rev-B/` with every
+model file, one `source.diff` over the files that changed (added and removed files against `/dev/null`), `parameters.csv` and
+`bom_diff.csv` with a file column, `checks.csv` with `file` and `cross_domain` columns, `outputs/<file stem>/` per file and
+`outputs/build_package/` (eitri's build package of Rev B: print files, consolidated BOM, cut list, wiring steps, assembly
+order). Page 1 adds a table of the model files: each one's change, base and result build and its checks. A file changed,
+added or removed that the plan's `files` did not list is flagged in "Read before signing". In `package.json`,
+`design.kind` is `"combined"`, `design.files` lists the files, check rows carry `file`, `check` and `cross_domain`, and the
+revisions carry `builds` (`{file: build}`; `build` is the highest of them).
+
+What a combined package still does not check: interactions between the files beyond the declared links (EMC between the
+harness and the circuit, heat, wear), and nothing was built or measured.
+
+```sh
+eitri ticket new -C ~/eitri-projects/uno-arm --title "Lighter payload" --request "Make it carry 40 g" \
+                 --criterion "shoulder holds it => torque joint shoulder*"
+# the agent writes the plan (combined_ticket_plan), the person approves:
+eitri ticket approve T-0001 -C ~/eitri-projects/uno-arm
+# the agent changes the files (combined_put_files) and builds (combined_build), then:
+eitri package T-0001 -C ~/eitri-projects/uno-arm
+```
 
 ## When eitri refuses
 

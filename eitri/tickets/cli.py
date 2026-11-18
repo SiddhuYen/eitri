@@ -25,8 +25,10 @@ def add_parsers(sub) -> None:
     n.add_argument("--criterion", action="append", default=[], help='an acceptance criterion: "text => check name" (a name or glob) '
                    'or "text => human" when no check proves it; repeat for each')
     n.add_argument("--constraint", action="append", default=[], help="a constraint; repeat for each")
-    n.add_argument("--file", default=None, help="the model file the ticket changes (default: the project's current one)")
-    n.add_argument("--base", default="latest", help='the base revision: "latest" (default), a revision number, or "new"')
+    n.add_argument("--file", default=None, help="the model file the ticket changes (default: the project's current one; a combined "
+                   "project's ticket covers every file and takes none)")
+    n.add_argument("--base", default="latest", help='the base revision: "latest" (default), a revision number, or "new" (a combined '
+                   'project: "latest" or "new")')
     n.add_argument("--customer", default="")
     n.add_argument("--by", default=None, help="who opened it (default: your user name)")
 
@@ -161,8 +163,11 @@ def package_main(args) -> int:
         return 0
     s = pkg["checks"]["summary"]["to"]
     fr = (pkg["revisions"]["from"] or {}).get("letter")
-    print(f"{pkg['ticket']['id']}: {pkg['design']['file']} " + (f"Rev {fr} -> " if fr else "") + f"Rev {pkg['revisions']['to']['letter']}")
-    print(f"checks: {s['pass']} pass, {s['warn']} warn, 0 fail, {s['not_run']} not run" + (" (waived)" if s["not_run"] else ""))
+    what = f"combined project {pkg['design']['project']} ({pkg['design']['file']})" if pkg["design"].get("combined") else pkg["design"]["file"]
+    print(f"{pkg['ticket']['id']}: {what} " + (f"Rev {fr} -> " if fr else "") + f"Rev {pkg['revisions']['to']['letter']}")
+    cross = (pkg["checks"]["summary"].get("cross_domain") or {}).get("to")
+    print(f"checks: {s['pass']} pass, {s['warn']} warn, 0 fail, {s['not_run']} not run" + (" (waived)" if s["not_run"] else "")
+          + (f"; {cross} cross-domain" if pkg["design"].get("combined") else ""))
     for w in pkg["waivers"]:
         print(f"waiver: {w['check']}: {w['reason']}")
     print(f"not checked: {len(pkg['not_checked'])} item(s) (report.md, 'Not checked')")

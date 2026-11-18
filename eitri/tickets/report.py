@@ -48,9 +48,42 @@ def _warnings(pkg: dict) -> list[str]:
 def _verdict(pkg: dict) -> str:
     c = pkg["checks"]["summary"]["to"]
     s = f"{c['total']} checks: {c['pass']} pass, {c['warn']} warn, 0 fail, {c['not_run']} not run"
+    cross = (pkg["checks"]["summary"].get("cross_domain") or {}).get("to")
+    if pkg["design"].get("combined") and cross is not None:
+        s += f", {cross} of them cross-domain (between the files)"
     if c["not_run"]:
         s += f" (waived by a person: {', '.join(w['check'] for w in pkg['waivers'])})"
     return s
+
+
+def _headline(pkg: dict) -> tuple[str, str]:
+    """(what, how many files) for page 1: the model file, or the combined project and its files."""
+    d = pkg["design"]
+    if d.get("combined"):
+        return f"Combined project {d['project']}", f"{d['label']}; {len(d.get('files') or [])} model files"
+    return d["file"], f"{d['label']}, project {d['project']}"
+
+
+def _builds(r: dict) -> str:
+    b = r.get("builds")
+    return ", ".join(f"{f} {n}" for f, n in b.items()) if isinstance(b, dict) and b else str(r.get("build"))
+
+
+FILE_CHANGE = {"changed": "changed", "same": "unchanged", "added": "ADDED", "removed": "REMOVED", "new": "new"}
+
+
+def _file_rows(pkg: dict) -> list[list[str]]:
+    out = []
+    for f in pkg["design"].get("files") or []:
+        c = f.get("checks")
+        out.append([f["file"], f.get("kind") or "", FILE_CHANGE.get(f["change"], f["change"]),
+                    "-" if f.get("from_build") is None else str(f["from_build"]), "-" if f.get("to_build") is None else str(f["to_build"]),
+                    "-" if not c else f"{c['pass']} pass, {c['warn']} warn, {c['fail']} fail, {c['not_run']} not run",
+                    str(f.get("cross_domain_checks") or 0)])
+    return out
+
+
+FILE_HEAD = ["file", "domain", "change", "base build", "result build", "checks (result)", "cross-domain"]
 
 
 def _val(v) -> str:
@@ -61,8 +94,9 @@ def report_md(pkg: dict) -> str:
     t, d = pkg["ticket"], pkg["design"]
     a, b = _labels(pkg)
     ap = pkg["approval"]
+    what, sub = _headline(pkg)
     L = [f"# {t['id']}: {t['title']}", "",
-         f"**{d['file']}** ({d['label']}, project {d['project']}): " + (f"{a} -> {b}" if a else f"{b} (a new design)"), "",
+         f"**{what}** ({sub}): " + (f"{a} -> {b}" if a else f"{b} (a new design)"), "",
          f"**Result:** {_verdict(pkg)}.", "",
          f"**Plan approved by** {ap.get('by')} at {ap.get('at')} ({ap.get('method')}" + (f", {ap['tty']}" if ap.get("tty") else "") + ")."
          + (f" Note: {ap['note']}" if ap.get("note") else ""), ""]
@@ -73,6 +107,10 @@ def report_md(pkg: dict) -> str:
     warn = _warnings(pkg)
     if warn:
         L += ["## Read before signing", ""] + [f"- {x}" for x in warn] + [""]
+    if d.get("combined"):
+        L += ["## Model files (rebuilt together: each file's checks and the checks between them)", "",
+              "| " + " | ".join(FILE_HEAD) + " |", "|" + "---|" * len(FILE_HEAD)]
+        L += ["| " + " | ".join(_md(x) for x in row) + " |" for row in _file_rows(pkg)] + [""]
     L += ["## Acceptance criteria", "", "| # | criterion | checked by | result |", "|---|---|---|---|"]
     for c in pkg["acceptance"]:
         by = ", ".join(c["matched"]) if c["matched"] else ("a person (not machine-checkable)" if c["human_verify"] else c.get("check") or "")
@@ -85,16 +123,18 @@ def report_md(pkg: dict) -> str:
     p = pkg["plan"]
     L += ["## Approved plan", "", p.get("summary") or "", ""]
     if p.get("parameters"):
-        L += [f"- {x.get('name')}: {x.get('from', '?')} -> {x.get('to', '?')}" + (f" ({x['why']})" if x.get("why") else "") for x in p["parameters"]] + [""]
+        L += [f"- {(x['file'] + ' ') if x.get('file') else ''}{x.get('name')}: {x.get('from', '?')} -> {x.get('to', '?')}" + (f" ({x['why']})" if x.get("why") else "") for x in p["parameters"]] + [""]
     if p.get("checks_affected"):
         L += ["Checks it expected to change: " + "; ".join(p["checks_affected"]), ""]
     L += ["## Revisions", "", "| rev | build | date | ticket | description |", "|---|---|---|---|---|"]
-    L += [f"| {r['letter']} | {r['build']} | {str(r['date'])[:10]} | {r.get('ticket') or '-'} | {_md(r.get('description') or '')} |" for r in pkg["revision_table"]]
+    L += [f"| {r['letter']} | {_md(_builds(r))} | {str(r['date'])[:10]} | {r.get('ticket') or '-'} | {_md(r.get('description') or '')} |" for r in pkg["revision_table"]]
     L.append("")
     if pkg["parameters"] is not None:
         ch = [x for x in pkg["parameters"] if x["change"] != "same"]
         L += ["## Parameter changes", ""]
-        if ch:
+        if ch and d.get("combined"):
+            L += [f"| file | parameter | {a} | {b} |", "|---|---|---|---|"] + [f"| {x['file']} | {x['name']} | {_val(x['from'])} | {_val(x['to'])} |" for x in ch]
+        elif ch:
             L += [f"| parameter | {a} | {b} |", "|---|---|---|"] + [f"| {x['name']} | {_val(x['from'])} | {_val(x['to'])} |" for x in ch]
         else:
             L.append("No PARAMS value changed (the change is in the model code: see source.diff).")
@@ -160,10 +200,11 @@ def report_html(pkg: dict, images: dict) -> str:
     a, b = _labels(pkg)
     ap = pkg["approval"]
     E = esc
+    what, sub = _headline(pkg)
     H = [f"<!doctype html><html><head><meta charset='utf-8'><title>{E(t['id'])} {E(t['title'])}</title><style>{CSS}</style></head><body>",
          "<section class='page1'>",
          f"<h1>{E(t['id'])}: {E(t['title'])}</h1>",
-         f"<p><b>{E(d['file'])}</b> ({E(d['label'])}, project {E(d['project'])}): " + (f"{E(a)} &rarr; {E(b)}" if a else f"{E(b)} (a new design)") + "</p>",
+         f"<p><b>{E(what)}</b> ({E(sub)}): " + (f"{E(a)} &rarr; {E(b)}" if a else f"{E(b)} (a new design)") + "</p>",
          f"<div class='box'><b>Result:</b> {E(_verdict(pkg))}.<br><b>Plan approved by</b> {E(ap.get('by'))} at {E(ap.get('at'))} "
          f"({E(ap.get('method'))}{', ' + E(ap['tty']) if ap.get('tty') else ''})." + (f" Note: {E(ap['note'])}" if ap.get("note") else "") + "</div>"]
     if pkg["waivers"]:
@@ -172,6 +213,10 @@ def report_html(pkg: dict, images: dict) -> str:
     warn = _warnings(pkg)
     if warn:
         H.append("<div class='box warnbox'><b>Read before signing</b><ul>" + "".join(f"<li>{E(x)}</li>" for x in warn) + "</ul></div>")
+    if d.get("combined"):
+        H.append("<h2>Model files</h2><p>Rebuilt together: each file's checks and the checks between them.</p><table><tr>"
+                 + "".join(f"<th>{E(h)}</th>" for h in FILE_HEAD) + "</tr>"
+                 + "".join("<tr>" + "".join(f"<td>{E(x)}</td>" for x in row) + "</tr>" for row in _file_rows(pkg)) + "</table>")
     H.append("<h2>Acceptance criteria</h2><table><tr><th>#</th><th>criterion</th><th>checked by</th><th>result</th></tr>")
     for c in pkg["acceptance"]:
         by = ", ".join(c["matched"]) if c["matched"] else ("a person (not machine-checkable)" if c["human_verify"] else c.get("check") or "")
@@ -192,13 +237,14 @@ def report_html(pkg: dict, images: dict) -> str:
     p = pkg["plan"]
     H.append(f"<h2>Approved plan</h2><p>{E(p.get('summary'))}</p>")
     if p.get("parameters"):
-        H.append("<ul>" + "".join(f"<li>{E(x.get('name'))}: {E(x.get('from', '?'))} &rarr; {E(x.get('to', '?'))}" + (f" ({E(x['why'])})" if x.get("why") else "") + "</li>" for x in p["parameters"]) + "</ul>")
+        H.append("<ul>" + "".join(f"<li>{E((x['file'] + ' ') if x.get('file') else '')}{E(x.get('name'))}: {E(x.get('from', '?'))} &rarr; {E(x.get('to', '?'))}" + (f" ({E(x['why'])})" if x.get("why") else "") + "</li>" for x in p["parameters"]) + "</ul>")
     H.append("<h2>Revisions</h2><table><tr><th>rev</th><th>build</th><th>date</th><th>ticket</th><th>description</th></tr>"
-             + "".join(f"<tr><td>{E(r['letter'])}</td><td>{E(r['build'])}</td><td>{E(str(r['date'])[:10])}</td><td>{E(r.get('ticket') or '-')}</td><td>{E(r.get('description'))}</td></tr>" for r in pkg["revision_table"]) + "</table>")
+             + "".join(f"<tr><td>{E(r['letter'])}</td><td>{E(_builds(r))}</td><td>{E(str(r['date'])[:10])}</td><td>{E(r.get('ticket') or '-')}</td><td>{E(r.get('description'))}</td></tr>" for r in pkg["revision_table"]) + "</table>")
     if pkg["parameters"] is not None:
         ch = [x for x in pkg["parameters"] if x["change"] != "same"]
-        H.append("<h2>Parameter changes</h2>" + (f"<table><tr><th>parameter</th><th>{E(a)}</th><th>{E(b)}</th></tr>"
-                 + "".join(f"<tr><td>{E(x['name'])}</td><td>{E(_val(x['from']))}</td><td>{E(_val(x['to']))}</td></tr>" for x in ch) + "</table>"
+        fc = bool(d.get("combined"))
+        H.append("<h2>Parameter changes</h2>" + (f"<table><tr>{'<th>file</th>' if fc else ''}<th>parameter</th><th>{E(a)}</th><th>{E(b)}</th></tr>"
+                 + "".join(f"<tr>{'<td>' + E(x.get('file')) + '</td>' if fc else ''}<td>{E(x['name'])}</td><td>{E(_val(x['from']))}</td><td>{E(_val(x['to']))}</td></tr>" for x in ch) + "</table>"
                  if ch else "<p>No PARAMS value changed (the change is in the model code: see source.diff).</p>"))
     if pkg["bom"] is not None:
         H.append("<h2>Parts / BOM changes</h2>")

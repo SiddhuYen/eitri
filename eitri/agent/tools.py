@@ -586,7 +586,7 @@ class Tools:
         except T.TicketError as exc:
             return ToolResult(str(exc), is_error=True)
         return ToolResult(T.store.describe(self.project, t) + "\n\nSTOP HERE: the person must approve this plan themselves by running "
-                          f"`eitri ticket approve {t.id}` in their own terminal (it asks them to type a one-time code). Show them "
+                          f"`{T.store.person_command(self.project, t)}` in their own terminal (it asks them to type a one-time code). Show them "
                           "the plan and the command; do not build, edit or say it is approved until ticket_show says APPROVED.")
 
     def package(self, ticket: str = "") -> ToolResult:
@@ -607,8 +607,9 @@ class Tools:
             return ToolResult(str(exc), is_error=True)
         s = pkg["checks"]["summary"]["to"]
         fr = (pkg["revisions"]["from"] or {}).get("letter")
+        what = f"combined project {pkg['design']['project']} ({pkg['design']['file']})" if pkg["design"].get("combined") else pkg["design"]["file"]
         return ToolResult(f"Change package written: {pkg['folder']} (and {pkg['zip']}).\n"
-                          f"{pkg['design']['file']}: " + (f"Rev {fr} -> " if fr else "") + f"Rev {pkg['revisions']['to']['letter']}; "
+                          f"{what}: " + (f"Rev {fr} -> " if fr else "") + f"Rev {pkg['revisions']['to']['letter']}; "
                           f"{s['total']} checks: {s['pass']} pass, {s['warn']} warn, 0 fail, {s['not_run']} not run" + (" (waived by a person)" if s["not_run"] else "") + ".\n"
                           f"Not checked: {len(pkg['not_checked'])} item(s), listed in report.md. Give the person report.html to review; "
                           "the change order's disposition, effectivity and sign-off are theirs to fill in.")
@@ -684,6 +685,9 @@ class Tools:
 def _check_names(project: Project, t) -> str:
     """The checks the ticket's base build ran (names to map acceptance criteria to)."""
     from ..tickets.checks import normalise
+    if t.combined:
+        from ..tickets.combined import check_names_text
+        return check_names_text(project, t)
     rev = None
     if t.base_revision is not None:
         rev = next((h for h in project.revisions_of(t.target_file) if h.number == t.base_revision), None)

@@ -78,6 +78,48 @@ def is_blank(text: str) -> bool:
     return (text or "").strip() in {b.strip() for b in BLANKS.values()}
 
 
+def model_files(folder: Path) -> list[str]:
+    """A combined project's model files in build order (CAD, mechanism, harness, firmware, pneumatics, electronics; then by
+    name): top-level lowercase .py names that define build(p)."""
+    files = []
+    for f in sorted(Path(folder).glob("*.py")):
+        if not _MODEL.match(f.name) or f.is_symlink():
+            continue
+        try:
+            text = f.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if "def build(" in text:
+            k = kind_of(text)
+            files.append((KIND_ORDER.index(k) if k in KIND_ORDER else 9, f.name))
+    return [n for _k, n in sorted(files)]
+
+
+def is_cross_domain(category: str, name: str) -> bool:
+    """A check between two files (the suite's), not one of a single domain's own."""
+    return (category or "") in _CROSS or (name or "").startswith("suite:") or "(masses from CAD)" in (name or "")
+
+
+def run_suite_job(folder: Path, model_name: str, kind: str, work: Path, timeout: float | None = None) -> dict:
+    """The consolidated BOM ("bom") or the build package ("package", strict) of the project in `folder`, in a build process of
+    its own (it runs the model files); returns its suite_result.json (ok, or refused). Raises ToolError when it did not finish."""
+    code = ("import sys; from pathlib import Path; from eitri_suite import jobs; "
+            "sys.exit(jobs.run(sys.argv[1], Path(sys.argv[2]), sys.argv[3], Path(sys.argv[4]), {'strict': True}))")
+    env = {**os.environ, "EITRI_SUITE": "1", "EITRI_AGENT_PROCESS": "1"}
+    env["PYTHONPATH"] = os.pathsep.join([str(Path(__file__).resolve().parents[1])] + [p for p in [env.get("PYTHONPATH")] if p])
+    try:
+        p = subprocess.run([sys.executable, "-c", code, kind, str(folder), model_name, str(work)], cwd=str(folder),
+                           capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=timeout or BUILD_TIMEOUT_S * 3, env=env)
+    except subprocess.TimeoutExpired:
+        raise ToolError("took too long") from None
+    try:
+        return json.loads((Path(work) / "suite_result.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        tail = (p.stderr or p.stdout or "").strip().splitlines()[-1:] or ["no output"]
+        raise ToolError(f"did not finish: {tail[0][:300]}") from None
+
+
 def default_root() -> Path:
     return Path(os.environ.get("EITRI_WORKSPACE") or (Path.home() / "eitri-projects")).expanduser()
 
@@ -293,7 +335,7 @@ def _check(c: dict) -> dict:
     name = str(c.get("name") or "")[:200]
     out = {"name": name, "ok": bool(c.get("ok")), "severity": str(c.get("severity") or ("pass" if c.get("ok") else "fail")),
            "measured": str(c.get("measured") or "")[:600], "expected": str(c.get("expected") or "")[:300],
-           "cross_domain": cat in _CROSS or name.startswith("suite:") or "(masses from CAD)" in name}
+           "cross_domain": is_cross_domain(cat, name)}
     src = c.get("source")
     if isinstance(src, list):
         out["source"] = "; ".join(str(s.get("text") or "") + (f" ({s['url']})" if s.get("url") else "") for s in src
@@ -369,18 +411,7 @@ class Workspace:
 
     def model_files(self, folder: Path) -> list[str]:
         """The project's model files in build order (CAD, mechanism, harness, firmware, pneumatics, electronics; then by name)."""
-        files = []
-        for f in sorted(folder.glob("*.py")):
-            if not _MODEL.match(f.name) or f.is_symlink():
-                continue
-            try:
-                text = f.read_text(encoding="utf-8")
-            except OSError:
-                continue
-            if "def build(" in text:
-                k = kind_of(text)
-                files.append((KIND_ORDER.index(k) if k in KIND_ORDER else 9, f.name))
-        return [n for _k, n in sorted(files)]
+        return model_files(folder)
 
     def digest(self, folder: Path) -> str:
         h = hashlib.sha256()
@@ -701,20 +732,7 @@ class Workspace:
         work = out_dir / f".{kind}-job"
         shutil.rmtree(work, ignore_errors=True)
         work.mkdir()
-        code = ("import sys; from pathlib import Path; from eitri_suite import jobs; "
-                "sys.exit(jobs.run(sys.argv[1], Path(sys.argv[2]), sys.argv[3], Path(sys.argv[4]), {'strict': True}))")
-        env = {**os.environ, "EITRI_SUITE": "1", "EITRI_AGENT_PROCESS": "1"}
-        env["PYTHONPATH"] = os.pathsep.join([str(Path(__file__).resolve().parents[1])] + [p for p in [env.get("PYTHONPATH")] if p])
-        try:
-            p = subprocess.run([sys.executable, "-c", code, kind, str(folder), project.model_path.name, str(work)], cwd=str(folder),
-                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=BUILD_TIMEOUT_S * 3, env=env)
-        except subprocess.TimeoutExpired:
-            raise ToolError("took too long") from None
-        try:
-            result = json.loads((work / "suite_result.json").read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            tail = (p.stderr or p.stdout or "").strip().splitlines()[-1:] or ["no output"]
-            raise ToolError(f"did not finish: {tail[0][:300]}") from None
+        result = run_suite_job(folder, project.model_path.name, kind, work)
         if not result.get("ok"):
             raise ToolError(str(result.get("refused") or "refused"))
         if kind == "bom":
