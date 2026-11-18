@@ -145,6 +145,20 @@ MODULES = {
                     "SDA": PinSpec("SDA", "od", roles=("i2c_sda",), pullup_ohm=10_000)},
                     spec=dict(address=0x3D, addresses=(0x3C, 0x3D)), srcs=dict(address="ssd1306"),
                     note="3-5 V on VIN (5 V-ready), about 20 mA; I2C 0x3D (0x3C by jumper); on-board 10 kΩ pull-ups"),
+    # one product and revision (the mounting outline in eitri_suite.elec_sources is the same board's): a clone or the pre-2020 board differs
+    "BME280-2652": dict(title="Adafruit 2652 BME280 breakout, STEMMA QT version (AP2112K-3.3 regulator, BSS138 level shifter, 10 kΩ pull-ups)",
+                        pins=lambda: {
+                    "VIN": PinSpec("VIN", "power_in", current_A=0.001124, v_range=(3.0, 5.0), required=True, src="adafruit-2652"),
+                    "3Vo": PinSpec("3Vo", "power_out", volts=3.3, label="3.3V out", src="adafruit-2652"),
+                    "GND": PinSpec("GND", "gnd", required=True),
+                    "SCK": PinSpec("SCK", "in", roles=("i2c_scl",), pullup_ohm=10_000, label="SCL"),
+                    "SDI": PinSpec("SDI", "od", roles=("i2c_sda",), pullup_ohm=10_000, label="SDA"),
+                    "SDO": PinSpec("SDO", "out", label="ADDR (0x76 to GND)"),
+                    "CS": PinSpec("CS", "in")},
+                    spec=dict(address=0x77, addresses=(0x76, 0x77)), srcs=dict(address="adafruit-2652"),
+                    note="3-5 V on VIN (logic at the VIN level through the level shifter); about 1.1 mA; I2C on SCK (SCL) / SDI (SDA), "
+                         "0x77 (0x76: SDO to GND); 10 kΩ pull-ups to VIN on board; SDO is 3.3 V logic, not shifted. Mounting outline: "
+                         "the same board (four M2.5 holes 20.32 x 12.7 mm apart)"),
     "HC-SR04": dict(title="HC-SR04 ultrasonic ranger (5 V)", pins=lambda: {
                     "VCC": PinSpec("VCC", "power_in", current_A=0.015, v_range=(4.5, 5.5), required=True, src="hc-sr04-range"),
                     "TRIG": PinSpec("TRIG", "in"),

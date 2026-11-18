@@ -2,7 +2,14 @@
 "electronics"). The circuit is built; its siblings (harness, firmware, mechanism, CAD) are loaded from the same folder. Every number a
 check compares against comes from a source: the electronics catalog's (eitri.electronics.sources), the harness catalog's (ampacity:
 PowerStream's chassis-wiring table; voltage drop: NEC Chapter 9 Table 8 copper at 75 C), or eitri_suite.elec_sources (outlines, mounting
-holes, screws). A check whose inputs are missing is reported as "not run: <why>" (a warning), never as a pass.
+holes, screws). A check whose inputs are missing is reported as "not run: <why>" (a warning), never as a pass. A check whose subject
+provably does not exist is "not applicable: <why>" (core eitri.checks.not_applicable: ok, blocks nothing), and only then:
+  actuators, dissipation   the project has no mechanism file AND the circuit has no servo, motor or solenoid (a circuit with one and
+                           no mechanism file: not run, it blocks)
+  pins: harness, harness power   the project has no harness file
+  pins: firmware           the project has no firmware file AND the circuit has no board (a board with no firmware file: not run)
+  mounting                 the project has no CAD file, or its CAD file is the blank one (no bodies)
+A sibling file that exists but does not build, is ambiguous (two of a kind) or is named in COUPLING and missing is never "absent".
 
 The electronics file says how it ties to the others in a module-level COUPLING (every key optional):
 
@@ -63,6 +70,12 @@ def not_run(name: str, why: str, expected: str = "", refs=()) -> HCheck:
     return c
 
 
+def not_applicable(name: str, why: str, expected: str = "", refs=()) -> HCheck:
+    """A check whose subject provably does not exist in the project (see the module docstring): ok, "not applicable: <why>"."""
+    from eitri.checks import not_applicable as mark
+    return mark(_check(name, "pass", "", expected, refs), why)
+
+
 def _lvl(value: float, limit: float) -> str:
     return "fail" if value > limit + 1e-12 else "warn" if value >= WARN_FRACTION * limit else "pass"
 
@@ -121,6 +134,11 @@ class Siblings:
         if not files:
             return None, f"the project has no {kind} file"
         return None, f"the project has {len(files)} {kind} files: name one in COUPLING {SIBLING_KEYS[kind]}="
+
+    def absent(self, kind: str) -> bool:
+        """True only when the project has no file of this kind at all and COUPLING names none (not: one that fails to build, two of a
+        kind, or a COUPLING name that is missing: those are not run)."""
+        return not self.coupling.get(SIBLING_KEYS[kind]) and not self.by_kind.get(kind)
 
     def get(self, kind: str):
         if kind in self._cache:
@@ -779,7 +797,8 @@ def mounting_checks(c, parts, anchors: list[dict], coupling: dict) -> tuple[list
         base = f"mounting: {part.name}"
         m = mounts.get(part.name)
         if ol is None:
-            out.append(not_run(f"{base} fits its CAD mount", f"eitri has no published outline and hole pattern for {part.catalog or part.kind}",
+            out.append(not_run(f"{base} fits its CAD mount", f"eitri has no published outline and hole pattern for {part.catalog or part.kind}"
+                               + f" (the catalog parts with one: {', '.join(es.OUTLINES)}; a part with no maker's drawing cannot be graded)",
                                "a catalog outline", [part.name]))
             continue
         if m is None and part.name.upper() not in by_anchor:
@@ -803,7 +822,7 @@ def mounting_checks(c, parts, anchors: list[dict], coupling: dict) -> tuple[list
         board = loc * bd.Pos(0, 0, -T / 2) * bd.Box(L, W, T)
         at, xv, yv, zv = frame(a)
         refs = [part.name, a["name"]]
-        cite_ol = es.cite(ol["src"])
+        cite_ol = "; ".join(es.cite(k) for k in (ol["src"], *ol.get("also", ())))
         # 1. the hole pattern
         screw = m.get("screw", ol["screw"])
         d = es.screw_diameter(screw)
@@ -1127,9 +1146,17 @@ def run(module, c, model_path: Path) -> tuple[list[HCheck], dict]:
 
     # actuators first: their stall currents feed the power checks
     stall: dict[str, float] = {}
-    if mech is None:
-        checks.append(not_run("actuators: every actuated joint has its actuator in the circuit", m_why or "no mechanism"))
-        checks.append(not_run("actuators: stall current vs the drivers", m_why or "no mechanism"))
+    acts = sorted(p.name for p in c.parts.values() if p.kind in ACTUATOR_KINDS)
+    no_actuators = mech is None and sib.absent("mechanism") and not acts
+    na_act = "the project has no mechanism file and the circuit has no servo, motor or solenoid (nothing is actuated)"
+    if mech is None and not no_actuators and acts and sib.absent("mechanism"):
+        m_why = f"the project has no mechanism file, but the circuit has {', '.join(acts)}: add the mechanism the actuators move"
+    if no_actuators:
+        checks.append(not_applicable("actuators: every actuated joint has its actuator in the circuit", na_act))
+        checks.append(not_applicable("actuators: stall current vs the drivers", na_act))
+    elif mech is None:
+        checks.append(not_run("actuators: every actuated joint has its actuator in the circuit", m_why or "no mechanism", "", acts))
+        checks.append(not_run("actuators: stall current vs the drivers", m_why or "no mechanism", "", acts))
     else:
         bindings, how = actuator_bindings(c, mech, fw, fw_mod, coupling)
         a_checks, stall, a_data = actuator_checks(c, an, mech, bindings, how)
@@ -1140,12 +1167,18 @@ def run(module, c, model_path: Path) -> tuple[list[HCheck], dict]:
         if pw_data:
             data["power"] = pw_data
         data["actuators"] = a_data
-    if mech is None:
-        checks.append(not_run("dissipation: regulators and drivers at the actuators' stall", m_why or "no mechanism"))
+    if no_actuators:
+        checks.append(not_applicable("dissipation: regulators and drivers at the actuators' stall", na_act))
+    elif mech is None:
+        checks.append(not_run("dissipation: regulators and drivers at the actuators' stall", m_why or "no mechanism", "", acts))
     else:
         checks += dissipation_checks(c, an, stall)
 
-    if h is None:
+    if h is None and sib.absent("harness"):
+        na = "the project has no harness file (no harness connectors or wires to check)"
+        checks.append(not_applicable("pins: harness connectors are circuit parts", na))
+        checks.append(not_applicable("harness power: rail currents in the harness", na))
+    elif h is None:
         checks.append(not_run("pins: harness connectors are circuit parts", h_why or "no harness"))
         checks.append(not_run("harness power: rail currents in the harness", h_why or "no harness"))
     else:
@@ -1155,19 +1188,40 @@ def run(module, c, model_path: Path) -> tuple[list[HCheck], dict]:
         checks += p_checks
         data["harness"] = p_data
 
-    if fw is None:
+    if fw is None and sib.absent("firmware") and not _boards(c):
+        checks.append(not_applicable("pins: firmware pins match the circuit",
+                                     "the project has no firmware file and the circuit has no board (nothing runs firmware)"))
+    elif fw is None:
+        if sib.absent("firmware"):
+            fw_why = f"the project has no firmware file, but the circuit has {', '.join(p.name for p in _boards(c))}: add its firmware"
         checks.append(not_run("pins: firmware pins match the circuit", fw_why or "no firmware"))
     else:
         checks += firmware_pin_checks(c, fw, coupling)
 
-    if cad is None:
+    if cad is None and sib.absent("cad"):
+        checks.append(not_applicable("mounting: boards and modules fit their CAD mounts",
+                                     "the project has no CAD file (no enclosure or part to mount the boards in)"))
+    elif cad is None:
         checks.append(not_run("mounting: boards and modules fit their CAD mounts", cad_why or "no CAD model"))
+    elif not len(cad) and _is_blank_file(_cp):
+        checks.append(not_applicable("mounting: boards and modules fit their CAD mounts",
+                                     f"{_cp.name} is the blank CAD file (no bodies to mount the boards in)"))
     elif not len(cad):
-        checks.append(not_run("mounting: boards and modules fit their CAD mounts", "the CAD model is still blank"))
+        checks.append(not_run("mounting: boards and modules fit their CAD mounts", "the CAD model builds no bodies"))
     else:
         from eitri.anchors import to_json as anchors_json
         m_checks, m_data = mounting_checks(c, cad, anchors_json(cad), coupling)
         checks += m_checks
         data["mounting"] = m_data
     data["not_run"] = sum(1 for k in checks if str(k.measured).startswith("not run:"))
+    data["not_applicable"] = sum(1 for k in checks if k.status == "not_applicable")
     return checks, data
+
+
+def _is_blank_file(path) -> bool:
+    """The CAD file is the combined workspace's blank one (eitri_suite.workspace.BLANK), not a design that happens to build nothing."""
+    try:
+        from .workspace import is_blank
+        return path is not None and is_blank(Path(path).read_text(encoding="utf-8"))
+    except Exception:                                       # noqa: BLE001
+        return False

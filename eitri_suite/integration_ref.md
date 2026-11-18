@@ -148,7 +148,10 @@ COUPLING = dict(
 ```
 
 Name the circuit's parts as the harness connectors: each harness pin is then the circuit pin of the same name (UNO.D9, PSU.+,
-SERVO_YAW.V+). What is checked (each number with its source; a check missing an input says "not run: <why>", which is not a pass):
+SERVO_YAW.V+). What is checked (each number with its source; a check missing an input says "not run: <why>", which is not a pass; one whose subject the project provably lacks says "not
+applicable: <why>" and blocks nothing: the actuator and dissipation checks with no mechanism file and no servo, motor or solenoid in
+the circuit, the harness checks with no harness file, the firmware-pin check with no firmware file and no board, the mounting check
+with no CAD file or the blank one):
 - pins: every pin of a mapped connector is a pin of its part; the pins one harness net joins are on one circuit net; the harness
   pins the circuit puts on one net are joined by the harness; the firmware's board and pins against the circuit (wired, output vs
   input, the internal pull-up, a servo pin reaching a servo's SIG, the servo's power where the firmware's `power=` says).

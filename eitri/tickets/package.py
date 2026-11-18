@@ -363,8 +363,13 @@ def _make(project, t, file, kind, cad, src_a, src_b, rev_a, rev_b, staging, labe
                 row["status"] = "missing"
             elif any(h["status"] == "fail" for h in hits):
                 row["status"] = "fail"
-            elif all(h["status"] == "not_run" for h in hits):
-                row["status"] = "waived" if all(h["name"] in waived for h in hits) else "not_run"
+            elif all(h["status"] == "not_applicable" for h in hits):
+                reasons.append(f"{a['id']} ({a['text']}) maps to {a['check']!r}, which does not apply to this design ("
+                               + "; ".join(f"{h['name']}: {h['measured']}" for h in hits[:3]) + "): the criterion is not met; "
+                               "the ticket's criteria change only with a new approval")
+                row["status"] = "not_applicable"
+            elif all(h["status"] in ("not_run", "not_applicable") for h in hits):
+                row["status"] = "waived" if all(h["name"] in waived for h in hits if h["status"] == "not_run") else "not_run"
             elif any(h["status"] in ("warn", "not_run") for h in hits):
                 row["status"] = "pass_with_warning"
             else:
@@ -430,6 +435,12 @@ def _make(project, t, file, kind, cad, src_a, src_b, rev_a, rev_b, staging, labe
     for w in waivers:
         if any(r["name"] == w["check"] and r["status"] == "not_run" for r in rows_b):
             not_checked.append({"kind": "waived", "what": w["check"], "why": f"did not run; waived by {w.get('by')}: {w['reason']}"})
+    for r in rows_b:
+        if r["status"] == "not_applicable":
+            was = next((x["status"] for x in rows_a or [] if x["name"] == r["name"]), None)
+            not_checked.append({"kind": "not_applicable", "what": r["name"],
+                                "why": r["measured"] + (f" (it was {was} on Rev {fl}: a person confirms its subject was meant to go)"
+                                                        if was and was != "not_applicable" else "")})
     for c in removed:
         not_checked.append({"kind": "removed_check", "what": c["name"],
                             "why": f"ran on Rev {fl} ({c['from']['status']}) and does not run on Rev {to['letter']} (renamed with the "

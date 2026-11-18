@@ -248,14 +248,15 @@ def test_a_module_without_an_outline_or_a_mount_is_not_run(tmp_path):
     d = variant(tmp_path, "module", {"elec.py": [('    return c\n', '    bme = c.module("ENV", "BME280")\n    c.connect(bme["VCC"], "UNO.3V3")\n'
                                                   '    c.connect(bme["GND"], "UNO.GND")\n    pwm = c.module("PWM", "PCA9685")\n    return c\n')]})
     checks, _ = run(d)
-    assert one(checks, "mounting: ENV fits").measured == "not run: eitri has no published outline and hole pattern for BME280"
+    assert one(checks, "mounting: ENV fits").measured.startswith("not run: eitri has no published outline and hole pattern for BME280 (")
     assert one(checks, "mounting: PWM fits").measured.startswith("not run: PWM has no mount")
 
 
 def test_without_file_names_the_project_s_only_file_is_used_and_none_is_not_run(tmp_path):
     d = variant(tmp_path, "nonames", {"elec.py": [('    harness="wiring.py", firmware="fw.py", mechanism="mech.py", cad="model.py",\n', '')]}, drop=("fw.py",))
     checks, _ = run(d)
-    assert one(checks, "firmware pins match the circuit").measured == "not run: the project has no firmware file"
+    c = one(checks, "firmware pins match the circuit")                  # the circuit has a board: not applicable is never claimed
+    assert c.status == "not_run" and c.measured == "not run: the project has no firmware file, but the circuit has UNO: add its firmware"
     assert one(checks, "UNO hole pattern").severity == "pass"
 
 

@@ -404,10 +404,13 @@ def _summarize_core(report: Report, max_parts: int = 30) -> str:
     if report.checks:
         lines.append("Checks (verify):")
         lines += ["  " + x for x in check_lines(report.checks)]
-        from .checks import not_run_line
+        from .checks import not_applicable_line, not_run_line
         off = not_run_line(report.checks)
         if off:
             lines.append(off)
+        na = not_applicable_line(report.checks)
+        if na:
+            lines.append(na)
     return "\n".join(lines)
 
 

@@ -48,6 +48,39 @@ SOURCES: dict[str, dict] = {
         url="https://amesweb.info/Screws/metric-tap-drill-chart.aspx",
         quote="M2.5 x 0.45: major diameter 2.5, drill 2.05 mm; M3 x 0.5: major diameter 3, drill 2.50 mm (a metric screw's size "
               "number is its basic major diameter, ISO 68-1)"),
+    "adafruit-326-brd": dict(
+        title="Adafruit 326 Monochrome 0.96\" 128x64 OLED, STEMMA QT version: board file 'Adafruit 0.96in 128x64 OLED STEMMA QT.brd' "
+              "(the PCB of 2020-08-06, commit 1031d659; file converted to XML 2026-06-03), repo @ 51ef8e2",
+        url="https://github.com/adafruit/Adafruit-128x64-Monochrome-OLED-PCB/tree/51ef8e242dcf460d5effc298d8565110624e6b23",
+        fetched="2026-11-18",
+        quote="layer-20 outline 29.21 x 31.75 mm bounding box (1.15 x 1.25 in; a 29.21 x 26.67 mm body and two 5.08 mm ears below it "
+              "carrying the lower holes), corner radius 2.54; four MOUNTINGHOLE_2.5_PLATED drill 2.5 at (2.54, 2.54), (26.67, 2.54), "
+              "(2.54, 29.21), (26.67, 29.21) mm from the lower-left corner; 8-pin header JP2 along the top edge (y 29.21). Fab print "
+              "(learn guide downloads, adafruit_products_0-96in_OLED_fab_print.png?1596746128) prints 1.15 x 1.25 in, body 1.05 in"),
+    "adafruit-326-page": dict(
+        title="Adafruit product 326 page (revision notes and dimensions)",
+        url="https://www.adafruit.com/product/326",
+        fetched="2026-11-18",
+        quote="\"As of August 3, 2020 - we have revised this PCB to be a little smaller ... add[ed 2 STEMMA QT connectors]\"; \"As of April "
+              "2, 2024 - We updated this PCB with Adafruit Pinguin ... both are identical other than the fancy silkscreen.\"; \"PCB: "
+              "29.2mm x 26.7mm\" (the body without the ears: the board file's 31.75 mm bounding box is used, the larger); \"Distance "
+              "between mounting holes: 24mm\" (board file 24.13 mm); \"Thickness: 6.2mm\" (the assembled height, not the PCB)"),
+    "adafruit-2652-brd": dict(
+        title="Adafruit 2652 BME280, STEMMA QT version (\"same PCB as the BMP280\", learn guide downloads): board file 'Adafruit BMP280 "
+              "STEMMA QT.brd' (U1 package BMX280_COMBO), repo @ 1ba329b (2020-07-09)",
+        url="https://github.com/adafruit/Adafruit-BMP280-Breakout-PCB/tree/1ba329baf692f9e681e0deb891c98ce6579a5c26",
+        fetched="2026-11-18",
+        quote="layer-20 outline 25.40 x 17.78 mm (1.00 x 0.70 in), corner radius 2.54; top holes MOUNTINGHOLE_2.5_PLATED drill 2.5 at "
+              "(2.54, 15.24), (22.86, 15.24); bottom holes non-plated drill 2.54 at (2.54, 2.54), (22.86, 2.54) mm from the lower-left "
+              "corner (the smaller drill, 2.5, is used for all four); 7-pin header JP1 along the bottom edge (y 2.54), VIN 3Vo GND SCK SDO "
+              "SDI CS. Fab print (adafruit_products_BME280_fab_print.png?1605727502): 1.00 x 0.70 in, holes 0.80 in apart"),
+    "adafruit-2652-page": dict(
+        title="Adafruit product 2652 page (revision notes and dimensions)",
+        url="https://www.adafruit.com/product/2652",
+        fetched="2026-11-18",
+        quote="\"As of Nov 11, 2020 we've updated this sensor to be STEMMA QT compatible ... The physical shape has changed but the pinout "
+              "is identical to the non-QT earlier version.\"; \"Dimensions: 25.2mm x 18.0mm x 4.6mm\" (the board file says 25.40 x "
+              "17.78: the larger per side, 25.40 x 18.00, is used; 4.6 mm is the assembled height)"),
     "pcb-thickness": dict(
         title="ASSUMPTION: 1.6 mm FR-4, the common board thickness",
         url="",
@@ -60,7 +93,7 @@ def cite(key: str) -> str:
     s = SOURCES.get(key)
     if s is None:
         return key
-    return f"{s['title']}" + (f", {s['url']}" if s["url"] else "") + f", fetched {FETCHED}"
+    return f"{s['title']}" + (f", {s['url']}" if s["url"] else "") + f", fetched {s.get('fetched', FETCHED)}"
 
 
 def _from_corner(w: float, h: float, pts: list[tuple[float, float]]) -> list[tuple[float, float]]:
@@ -78,6 +111,19 @@ OUTLINES: dict[str, dict] = {
     "PCA9685": dict(title="Adafruit 815 PCA9685 breakout", size=(62.23, 25.4, 1.6), src="adafruit-815-brd", thickness_src="pcb-thickness",
                     holes=_from_corner(62.23, 25.4, [(3.175, 3.175), (3.175, 22.225), (59.055, 3.175), (59.055, 22.225)]),
                     hole_d=2.5, hole_src="adafruit-815-brd", screw="M2.5"),
+    # Module frames: x along the header row, y towards the header edge (+y: the OLED's header; the BME280's is at -y), z out of the
+    # side the board's maker calls top. Each is ONE product and revision: a clone, or an earlier revision of the same product
+    # (Adafruit 326 before August 2020 is 38 x 28.5 mm with holes 32 x 22.5 mm apart), has another outline and does not fit it.
+    "SSD1306": dict(title="Adafruit 326 0.96\" 128x64 OLED, STEMMA QT version (PCB of August 2020, current; not the earlier 38 x 28.5 mm "
+                          "v2.1 board or a clone)",
+                    size=(29.21, 31.75, 1.6), src="adafruit-326-brd", thickness_src="pcb-thickness",
+                    holes=[(-12.065, -13.335), (12.065, -13.335), (-12.065, 13.335), (12.065, 13.335)],
+                    hole_d=2.5, hole_src="adafruit-326-brd", screw="M2.5", also=("adafruit-326-page",)),
+    "BME280-2652": dict(title="Adafruit 2652 BME280, STEMMA QT version (PCB of November 2020, current; not the earlier 17.78 x 19.05 mm "
+                              "board or a clone)",
+                        size=(25.4, 18.0, 1.6), src="adafruit-2652-brd", thickness_src="pcb-thickness",
+                        holes=[(-10.16, -6.35), (10.16, -6.35), (-10.16, 6.35), (10.16, 6.35)],
+                        hole_d=2.5, hole_src="adafruit-2652-brd", screw="M2.5", also=("adafruit-2652-page",)),
 }
 
 # a module that passes servo power through (its V+ terminal) and what its maker says the terminal carries (None: nothing published)

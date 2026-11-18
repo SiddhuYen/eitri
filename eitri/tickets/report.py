@@ -7,9 +7,9 @@ from pathlib import Path
 
 from .package import esc, image_data_uri
 
-STATUS = {"pass": "pass", "warn": "WARN", "fail": "FAIL", "not_run": "NOT RUN", None: "-"}
+STATUS = {"pass": "pass", "warn": "WARN", "fail": "FAIL", "not_run": "NOT RUN", "not_applicable": "n/a", None: "-"}
 CRIT = {"pass": "pass", "pass_with_warning": "pass (with a warning)", "waived": "NOT RUN, waived", "human_verify": "a person verifies",
-        "fail": "FAIL", "missing": "no such check", "not_run": "NOT RUN"}
+        "fail": "FAIL", "missing": "no such check", "not_run": "NOT RUN", "not_applicable": "NOT APPLICABLE"}
 
 
 def _labels(pkg: dict) -> tuple[str | None, str]:
@@ -47,7 +47,8 @@ def _warnings(pkg: dict) -> list[str]:
 
 def _verdict(pkg: dict) -> str:
     c = pkg["checks"]["summary"]["to"]
-    s = f"{c['total']} checks: {c['pass']} pass, {c['warn']} warn, 0 fail, {c['not_run']} not run"
+    s = f"{c['total']} checks: {c['pass']} pass, {c['warn']} warn, 0 fail, {c['not_run']} not run" + (
+        f", {c['not_applicable']} not applicable" if c.get("not_applicable") else "")
     if c["not_run"]:
         s += f" (waived by a person: {', '.join(w['check'] for w in pkg['waivers'])})"
     return s
@@ -152,7 +153,7 @@ code,pre{font:12px ui-monospace,Menlo,monospace}pre{background:#f6f8fa;padding:8
 
 
 def _cls(status) -> str:
-    return {"pass": "pass", "warn": "warn", "fail": "fail", "not_run": "nr"}.get(status or "", "")
+    return {"pass": "pass", "warn": "warn", "fail": "fail", "not_run": "nr", "not_applicable": "na"}.get(status or "", "")
 
 
 def report_html(pkg: dict, images: dict) -> str:

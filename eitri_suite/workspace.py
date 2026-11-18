@@ -945,11 +945,15 @@ each load, the supply and the BOM's supply), the firmware's pins, the mechanism'
 current, regulator and driver dissipation, and each board's mounting holes, outline and clearance against the CAD part that carries
 it. Name the circuit's parts as the harness connectors (UNO, PSU, SERVO_YAW) and declare COUPLING = dict(actuators={"yaw":
 "SERVO_YAW", ...}, mounts={"UNO": dict(anchor="UNO", stand_in="controller", carrier=["standoffs"], screw="M3", clearance_mm=1.0)})
-(combined_reference('integration')). A check whose input is missing says "not run" and why: it is not a pass.
+(combined_reference('integration')). A module mounted in the CAD needs a catalog outline: SSD1306 (Adafruit 326), BME280-2652 (Adafruit
+2652; the plain BME280 has none), PCA9685, uno, nano; tell the person which product to buy. A check whose input is missing says "not
+run" and why: it is not a pass.
 
 ## Reading results
 Each check has a name, pass or fail, what was measured, what was expected, and where the limit comes from (a datasheet, a
-standard, the catalog). Warnings pass but are worth a look; "not run" is not a pass. "Next steps" says what to do; when every
+standard, the catalog). Warnings pass but are worth a look; "not run" is not a pass. "n/a" (not applicable): what the check is
+about is not in the project (no mechanism file and nothing actuated in the circuit, no harness file); it blocks nothing. Never
+remove a file or a part to make a check n/a. "Next steps" says what to do; when every
 check in every file passes and every planned domain is built, the result says so: show the person the viewer link, and offer
 combined_export (the build package is written only when every check has run and passes).
 """
@@ -1046,15 +1050,18 @@ def results_text(r: dict, detail: str = "failing") -> str:
         checks = f.get("checks") or []
         bad = [c for c in checks if not c["ok"]]
         warn = [c for c in checks if c["ok"] and c["severity"] == "warn"]
+        na = [c for c in checks if c.get("status") == "not_applicable"]
         lines = [f"{f['file']} ({f['kind']}){' · BLANK' if f['blank'] else ''}{_rev_tag(f)} · "
-                 f"{len(checks) - len(bad)}/{len(checks)} checks pass" + (f", {len(warn)} warnings" if warn else "")]
-        shown = checks if detail == "all" else bad + warn
+                 f"{len(checks) - len(bad) - len(na)}/{len(checks) - len(na)} checks pass" + (f", {len(warn)} warnings" if warn else "")
+                 + (f", {len(na)} not applicable" if na else "")]
+        shown = checks if detail == "all" else bad + warn + na
         for c in shown:
-            tag = "FAIL" if not c["ok"] else "NOT RUN" if c.get("status") == "not_run" else "warn" if c["severity"] == "warn" else "pass"
+            tag = ("FAIL" if not c["ok"] else "NOT RUN" if c.get("status") == "not_run" else "n/a" if c.get("status") == "not_applicable"
+                   else "warn" if c["severity"] == "warn" else "pass")
             lines.append(f"  {tag} {'[cross-domain] ' if c['cross_domain'] else ''}{c['name']}: measured {c['measured'] or '-'}"
                          + (f"; expected {c['expected']}" if c["expected"] else "") + (f"; source: {c['source']}" if c.get("source") else ""))
         if detail != "all" and len(checks) > len(shown):
-            names = [c["name"] for c in checks if c["ok"] and c["severity"] != "warn"]
+            names = [c["name"] for c in checks if c["ok"] and c["severity"] != "warn" and c.get("status") != "not_applicable"]
             lines.append("  pass: " + "; ".join(names)[:1500])
         for i in f.get("issues") or []:
             lines.append(f"  geometry issue: {i}")

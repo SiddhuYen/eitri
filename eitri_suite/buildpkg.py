@@ -42,7 +42,7 @@ def suite_data(result: dict) -> dict:
 
 def _status(c: dict) -> str:
     try:
-        from eitri.checks import status_of                 # core 0.8.0: pass | warn | fail | not_run
+        from eitri.checks import status_of                 # core 0.8.0: pass | warn | fail | not_run (0.9.2: | not_applicable)
         return status_of(c)
     except ImportError:                                     # an older core: the severity and the "not run: " text
         if not c.get("ok", True) or c.get("severity") == "fail":
@@ -54,8 +54,11 @@ def _verdict(checks: list[dict]) -> dict:
     fail = [c for c in checks if _status(c) == "fail"]
     off = [c for c in checks if _status(c) == "not_run"]
     warn = [c for c in checks if _status(c) == "warn"]
-    return {"checks": len(checks), "pass": len(checks) - len(fail) - len(warn) - len(off), "warn": len(warn) + len(off), "fail": len(fail),
-            "not_run": len(off), "failing": [f"{c['name']}: {c['measured']}" for c in fail],
+    na = [c for c in checks if _status(c) == "not_applicable"]
+    return {"checks": len(checks), "pass": len(checks) - len(fail) - len(warn) - len(off) - len(na), "warn": len(warn) + len(off),
+            "fail": len(fail), "not_run": len(off), "not_applicable": len(na),
+            "not_applicable_checks": [f"{c['name']}: {c['measured']}" for c in na],
+            "failing": [f"{c['name']}: {c['measured']}" for c in fail],
             "not_run_checks": [f"{c['name']}: {c['measured']}" for c in off],
             "warnings": [f"{c['name']}: {c['measured']}" for c in warn + off]}
 
@@ -315,7 +318,8 @@ def _readme(manifest: dict, checks: dict, bom: dict, plan, files: list[str]) -> 
     if manifest["forced"]:
         lines += ["> **THIS DESIGN FAILS ITS CHECKS.** The package was written with force=True. Do not build from it until the failures below are fixed.", ""]
     for k, v in checks.items():
-        lines.append(f"- **{k}**: {v['pass']} pass, {v['warn']} warn, {v['fail']} fail of {v['checks']} checks")
+        lines.append(f"- **{k}**: {v['pass']} pass, {v['warn']} warn, {v['fail']} fail of {v['checks']} checks"
+                     + (f" ({v['not_applicable']} not applicable to this design)" if v.get("not_applicable") else ""))
     for k, v in checks.items():
         for f in v["failing"]:
             lines.append(f"  - FAIL [{k}] {f}")

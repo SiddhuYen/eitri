@@ -5,7 +5,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from ..checks import Check, from_verify, checks_not_run, stamp_status, not_run_line
+from ..checks import Check, from_verify, checks_not_run, stamp_status, not_run_line, not_applicable_line, tally
 from ..check_sources import attach, check_lines
 from ..model import Checker
 from .checks import JointInfo, TargetInfo, run_checks
@@ -58,13 +58,15 @@ def analyze(m: Mechanism, checker: Checker | None = None) -> MechanismReport:
 
 
 def summarize(rep: MechanismReport) -> str:
-    n_fail, n_warn = len(rep.failed), len(rep.warnings)
     lines = [f"Mechanism {rep.name!r}: {rep.links} links, {rep.joints} moving joint(s), {rep.targets} target(s); "
              f"total mass {rep.masses.get('total_g', 0):g} g" + (f", payload {rep.masses['payload_g']:g} g" if rep.masses.get("payload_g") else ""),
-             f"Checks: {len(rep.checks) - n_fail - n_warn} pass, {n_warn} warn, {n_fail} FAIL"]
+             f"Checks: {tally(rep.checks)}"]
     _nr = not_run_line(rep.checks)
     if _nr:
         lines.append(_nr)
+    _na = not_applicable_line(rep.checks)
+    if _na:
+        lines.append(_na)
     if rep.joint_info:
         lines.append("Joints (worst-pose load vs actuator):")
         for j in rep.joint_info:

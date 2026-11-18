@@ -3,6 +3,11 @@
 CheckResult (eitri.model) is what verify() produces: name, ok, measured, expected. A Check adds the severity (pass | warn |
 fail: a warning is ok but worth a look), the category (which checker produced it) and refs (the ids of the things it is about,
 so an editor can highlight them). Build extensions return Checks too (eitri.extensions.Check is this class).
+
+Status (pass | warn | fail | not_run | not_applicable) is derived from those. not_run: an input the check needs is missing, so
+nothing was graded; it blocks an export and a change package. not_applicable: what the check is about provably does not exist in
+the project (a cross-domain actuator check in a project with no mechanism file and no servo, motor or solenoid in its circuit);
+it is ok, says why, and blocks nothing. A checker marks a check not applicable only on such proof, never for a missing input.
 """
 from __future__ import annotations
 
@@ -27,13 +32,16 @@ class Check(CheckResult):
     def status(self) -> str:
         """pass | warn | fail | not_run. A check switched off by an unset input is not_run: its severity stays "warn" and its text
         starts "not run: ", so a reader of the older form (severity + text) still sees a warning that says why. A check that
-        passes on a declaration (Actuator(continuous=True): no travel to grade) stays a pass, though checks_not_run lists it."""
+        passes on a declaration (Actuator(continuous=True): no travel to grade) stays a pass, though checks_not_run lists it.
+        not_applicable: a passing check whose subject the project lacks (see not_applicable())."""
+        if self.severity == "pass" and (self.not_applicable or str(self.measured).startswith("not applicable: ")):
+            return "not_applicable"
         if self.severity != "warn":
             return self.severity
         return "not_run" if self.not_run or str(self.measured).startswith("not run: ") else "warn"
 
     def line(self, numbers: dict | None = None) -> str:
-        mark = {"pass": "PASS", "warn": "WARN", "fail": "FAIL"}[self.severity]
+        mark = "N/A" if self.status == "not_applicable" else {"pass": "PASS", "warn": "WARN", "fail": "FAIL"}[self.severity]
         exp = f" (expected {self.expected})" if self.expected else ""
         return f"[{mark}] {self.name}: {self.measured}{exp}{source_tag(self, numbers)}"
 
@@ -44,7 +52,8 @@ def check(category: str, name: str, severity: str, measured: str, expected: str 
                  refs=list(dict.fromkeys(refs)), not_run=list(not_run), source=list(source), kind=kind)
 
 
-STATUSES = ("pass", "warn", "fail", "not_run")
+STATUSES = ("pass", "warn", "fail", "not_run", "not_applicable")
+BLOCKING = ("fail", "not_run")                            # the statuses that stop an export or a change package
 
 
 def status_of(c) -> str:
@@ -54,6 +63,9 @@ def status_of(c) -> str:
         return c.status
     if c.get("status") in STATUSES:
         return c["status"]
+    if c.get("ok", True) and c.get("severity", "pass") == "pass" and (
+            c.get("not_applicable") or str(c.get("measured", "")).startswith("not applicable: ")):
+        return "not_applicable"
     off = bool(c.get("not_run")) or str(c.get("measured", "")).startswith("not run: ")
     if "severity" in c:                                   # a domain Check: only a warning can be "not run" (see Check.status)
         return "not_run" if c["severity"] == "warn" and off else c["severity"]
@@ -67,7 +79,45 @@ def stamp_status(d: dict, checks: Iterable) -> dict:
     for cd, c in zip(d.get("checks") or [], checks):
         cd["status"] = c.status
     d["checks_not_run"] = checks_not_run(checks)
+    d["checks_not_applicable"] = checks_not_applicable(checks)
     return d
+
+
+def not_applicable(c: CheckResult, why: str) -> CheckResult:
+    """Mark a check as not applicable: what it is about provably does not exist in the project (why says what is absent). It is
+    ok (a pass to older readers), its text says "not applicable: <why>", the report lists it under checks_not_applicable, and it
+    blocks nothing. Only for proof of absence: a missing input is not_run (switched_off), never this."""
+    c.not_applicable = str(why)[:300] or "its subject is absent"
+    c.not_run = []
+    c.ok = True
+    if hasattr(c, "severity"):
+        c.severity = "pass"
+    c.measured = "not applicable: " + c.not_applicable
+    return c
+
+
+def checks_not_applicable(checks: Iterable[CheckResult]) -> list[dict]:
+    """The checks that did not apply: [{name, category, why}] (report JSON key "checks_not_applicable"), so an edit that makes a
+    check not applicable (a file removed) is as visible as one that switches a check off."""
+    return [{"name": c.name, "category": getattr(c, "category", "") or "verify", "why": c.not_applicable or c.measured}
+            for c in checks if c.status == "not_applicable"]
+
+
+def tally(checks: Iterable[CheckResult]) -> str:
+    """"N pass, W warn, F FAIL" for a report's Checks line, plus ", K n/a" when some checks did not apply (they are not passes)."""
+    checks = list(checks)
+    sev = [getattr(c, "severity", "pass" if c.ok else "fail") for c in checks]
+    n_fail, n_warn = sev.count("fail"), sev.count("warn")
+    n_na = sum(1 for c in checks if c.status == "not_applicable")
+    return f"{len(checks) - n_fail - n_warn - n_na} pass, {n_warn} warn, {n_fail} FAIL" + (f", {n_na} n/a" if n_na else "")
+
+
+def not_applicable_line(checks: Iterable[CheckResult]) -> str | None:
+    """One summary line naming every check that did not apply and why (None when there are none)."""
+    na = [c for c in checks if c.status == "not_applicable"]
+    if not na:
+        return None
+    return "Not applicable (its subject is absent): " + "; ".join(f"{c.name} ({c.not_applicable or c.measured})" for c in na)
 
 
 def switched_off(c: CheckResult, *inputs: str) -> CheckResult:
@@ -99,7 +149,8 @@ def from_verify(r: CheckResult) -> Check:
     """A verify() result as a Check (category "verify")."""
     sev = "fail" if not r.ok else "warn" if r.status == "not_run" else "pass"      # a CheckResult that did not run is a warning
     return Check(name=r.name, ok=r.ok, measured=r.measured, expected=r.expected, severity=sev, category="verify",
-                 source=list(r.source), kind=r.kind, rule=r.rule or "verify", not_run=list(r.not_run))
+                 source=list(r.source), kind=r.kind, rule=r.rule or "verify", not_run=list(r.not_run),
+                 not_applicable=getattr(r, "not_applicable", ""))
 
 
 def level(value: float, limit: float, warn_fraction: float = 0.8, above_is_bad: bool = True) -> str:
