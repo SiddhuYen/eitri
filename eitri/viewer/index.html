@@ -3179,7 +3179,9 @@ function renderReport() {
       d.classList.add('pickable'); d.title = 'click: show which wires this is about';
       d.onclick = () => { const on = harnessEd && harnessEd.highlight(c); ch.querySelectorAll('.check.hl').forEach(x => x.classList.remove('hl')); if (on) d.classList.add('hl'); };
     }
-    d.innerHTML = `<span class="ic">${icon(sev === 'warn' ? 'triangle-alert' : c.ok ? 'circle-check' : 'circle-x', 'sm')}</span><span><span class="nm">${escHtml(c.name)}</span><br><span class="vl">${escHtml(String(c.measured ?? ''))}${c.expected ? ' · expected ' + escHtml(String(c.expected)) : ''}</span></span>`;
+    const na = c.status === 'not_applicable';                      // its subject is absent from the project: not a pass, blocks nothing
+    if (na) d.classList.add('na');
+    d.innerHTML = `<span class="ic">${icon(na ? 'info' : sev === 'warn' ? 'triangle-alert' : c.ok ? 'circle-check' : 'circle-x', 'sm')}</span><span><span class="nm">${escHtml(c.name)}${na ? ' (n/a)' : ''}</span><br><span class="vl">${escHtml(String(c.measured ?? ''))}${c.expected ? ' · expected ' + escHtml(String(c.expected)) : ''}</span></span>`;
     d.textContent.length; ch.appendChild(d);
   }
   const is = $('issues'); is.innerHTML = '';

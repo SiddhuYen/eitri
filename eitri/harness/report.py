@@ -5,7 +5,7 @@ Mirrors eitri/report.py: `analyze()` runs the built-in checks and the model's ow
 """
 from __future__ import annotations
 
-from ..checks import checks_not_run, stamp_status, not_run_line
+from ..checks import checks_not_run, stamp_status, not_run_line, not_applicable_line, tally
 from ..check_sources import attach, check_lines
 
 import time
@@ -68,14 +68,15 @@ def _from_verify(r: CheckResult) -> HCheck:
 
 
 def summarize(rep: HarnessReport) -> str:
-    n_fail, n_warn = len(rep.failed), len(rep.warnings)
-    n_pass = len(rep.checks) - n_fail - n_warn
     lines = [f"Harness {rep.name!r}: {rep.connectors} connectors, {rep.wires} wires, {rep.splices} splices, {len(rep.nets)} nets; "
              f"{rep.total_wire_mm / 1000:.2f} m of wire",
-             f"Checks: {n_pass} pass, {n_warn} warn, {n_fail} FAIL"]
+             f"Checks: {tally(rep.checks)}"]
     _nr = not_run_line(rep.checks)
     if _nr:
         lines.append(_nr)
+    _na = not_applicable_line(rep.checks)
+    if _na:
+        lines.append(_na)
     if rep.nets:
         lines.append("Nets:")
         for n in rep.nets:

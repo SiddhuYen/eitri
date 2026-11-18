@@ -94,6 +94,21 @@ _S = [
            '"Either 0111100 or 0111101, can be selected as the slave address"; Adafruit 326: "5V-ready, with an onboard regulator", "Vin to a 3 to 5V power '
            'supply", "They tend to draw ~20mA or so in practice"; the module schematic shows level shifters and 10K pull-ups (the value read from a '
            'low-resolution image)'),
+    Source("adafruit-2652", "Adafruit 2652 BME280 STEMMA QT (learn guide, schematic rev C)", "Adafruit BME280 breakout, product 2652, "
+           "STEMMA QT version (November 2020 PCB): learn guide pinouts page (last edited March 08 2024) and its schematic image "
+           "'BME280 rev C 20/7/20' (adafruit_products_BME280_sch.png?1605727658)",
+           "https://learn.adafruit.com/adafruit-bme280-humidity-barometric-pressure-temperature-sensor-breakout/pinouts",
+           '"Vin - this is the power pin. ... we have included a voltage regulator on board that will take 3-5VDC"; "3Vo - this is the 3.3V '
+           'output from the voltage regulator, you can grab up to 100mA"; "SCK - this is also the I2C clock pin"; "SDI - this is also the I2C '
+           'data pin"; "By default, the I2C address is 0x77. If you add a jumper from SDO to GND ... the address will change to 0x76." '
+           'Schematic: U2 AP2112K-3.3; BSS138 shifter on SDA/SCL; 10K pull-ups on SDI and SCK to VCC (= Vin) and to 3.3V; ON LED: 10K from '
+           '3.3V through a green LED (at most 3.3 V / 10 kΩ = 0.33 mA, whatever its Vf); SDO not shifted (3.3 V out), CS through a 1N4148. '
+           'No Adafruit page gives the board\'s current: its draw is the BME280\'s IDDP max 714 µA + the AP2112K-3.3 IQ max 80 µA + the '
+           'LED\'s 0.33 mA bound = 1.124 mA', fetched="2026-11-18"),
+    Source("diodes-ap2112", "Diodes AP2112 datasheet DS39724 Rev. 2-2", "Diodes Incorporated AP2112 600mA CMOS LDO datasheet, Document "
+           "number DS39724 Rev. 2 - 2, June 2017", "https://www.diodes.com/assets/Datasheets/AP2112.pdf",
+           '"IQ Quiescent Current VIN = 4.3V, IOUT = 0mA" 55 typ, 80 max µA (AP2112-3.3, p.8); "VIN Supply Voltage 2.5 6.0 V" (recommended); '
+           '"VCC Power Supply Voltage 6.5 V" (absolute maximum)', fetched="2026-11-18"),
     Source("hc-sr04", "HC-SR04 datasheet (ElecFreaks)", "ElecFreaks HC-SR04 ultrasonic ranging module datasheet (SparkFun copy, 2011)",
            "https://cdn.sparkfun.com/datasheets/Sensors/Proximity/HCSR04.pdf",
            '"Working Voltage DC 5 V"; "Working Current 15mA"; "Trigger Input Signal 10uS TTL pulse"; "Echo Output Signal Input TTL lever signal". No '

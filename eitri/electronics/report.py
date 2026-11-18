@@ -5,7 +5,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from ..checks import Check, from_verify, checks_not_run, stamp_status, not_run_line
+from ..checks import Check, from_verify, checks_not_run, stamp_status, not_run_line, not_applicable_line, tally
 from ..check_sources import attach, check_lines
 from ..model import Checker
 from .analysis import INF, Analysis
@@ -86,12 +86,14 @@ def analyze(c: Circuit, checker: Checker | None = None) -> ElectronicsReport:
 
 
 def summarize(rep: ElectronicsReport) -> str:
-    n_fail, n_warn = len(rep.failed), len(rep.warnings)
     lines = [f"Circuit {rep.name!r}: {rep.part_count} parts, {rep.net_count} nets, {len(rep.rails)} rail(s)",
-             f"Checks: {len(rep.checks) - n_fail - n_warn} pass, {n_warn} warn, {n_fail} FAIL"]
+             f"Checks: {tally(rep.checks)}"]
     _nr = not_run_line(rep.checks)
     if _nr:
         lines.append(_nr)
+    _na = not_applicable_line(rep.checks)
+    if _na:
+        lines.append(_na)
     if rep.rails:
         lines.append("Rails:")
         for r in rep.rails:

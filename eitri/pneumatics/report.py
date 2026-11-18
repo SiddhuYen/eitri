@@ -5,7 +5,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from ..checks import Check, from_verify, checks_not_run, stamp_status, not_run_line
+from ..checks import Check, from_verify, checks_not_run, stamp_status, not_run_line, not_applicable_line, tally
 from ..check_sources import attach, check_lines
 from ..model import Checker
 from .checks import CylinderInfo, PathInfo, StrokeInfo, SupplyInfo, run_checks
@@ -63,12 +63,14 @@ def analyze(c: Circuit, checker: Checker | None = None) -> CircuitReport:
 
 
 def summarize(rep: CircuitReport) -> str:
-    n_fail, n_warn = len(rep.failed), len(rep.warnings)
     lines = [f"Pneumatic circuit {rep.name!r}: {rep.components} components, {rep.tubes} tubes, {len(rep.cylinders)} cylinder(s)",
-             f"Checks: {len(rep.checks) - n_fail - n_warn} pass, {n_warn} warn, {n_fail} FAIL"]
+             f"Checks: {tally(rep.checks)}"]
     _nr = not_run_line(rep.checks)
     if _nr:
         lines.append(_nr)
+    _na = not_applicable_line(rep.checks)
+    if _na:
+        lines.append(_na)
     if rep.to_verify:
         lines.append("For a person to verify (declared safeguards that checks passed on; eitri does not assess them): " + "; ".join(rep.to_verify))
     for cy in rep.cylinders:

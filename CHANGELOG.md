@@ -28,6 +28,35 @@ annotated tags (`git show v0.4.0`).
   the part, drawing or PLC rule. Either check then passes on the declaration, prints it as its basis, and the build lists it
   under "For a person to verify" (report `to_verify`). Nothing checks that the declared measure exists.
 - Both checks say what they are: design rules on the valve states, not an ISO 12100 risk assessment or ISO 13849 validation.
+- **"Not applicable", a check status of its own** (`eitri.checks.not_applicable`, status `not_applicable`, printed `[N/A]`,
+  counted as "n/a" apart from the passes, listed in the report under `checks_not_applicable`). It means what the check is about
+  provably does not exist in the project; unlike "not run" (an input is missing) it blocks neither `combined_export` nor a
+  ticket's change package. It is ok to readers older than 0.9.2 (severity pass, text "not applicable: <why>"). A ticket
+  acceptance criterion that maps only to n/a checks is not met (the package is refused), and the package lists every n/a
+  check under "not checked", saying when it applied on the base revision.
+
+### Fixed (combined projects)
+
+- **A combined project with no mechanism could never be exported.** The electronics file's cross-domain actuator checks
+  (every actuated joint has its actuator; stall current vs the drivers; regulator and driver dissipation at stall) were "not
+  run: the project has no mechanism file" in a sensor box or an enclosure with electronics, and an export is refused while a
+  check has not run. They are now n/a, but only when the project has no mechanism file AND the circuit has no servo, motor
+  or solenoid. A circuit with one and no mechanism file stays not run (and says which part needs a mechanism); so does a
+  mechanism file that does not build, two of them, or one named in COUPLING that is missing.
+- The same rule for the electronics file's other sibling checks: the harness checks are n/a with no harness file; the
+  firmware-pin check is n/a with no firmware file and no board in the circuit (a board with no firmware file stays not run);
+  the mounting check is n/a with no CAD file or the workspace's blank one (a CAD file that builds no bodies stays not run).
+  The other cross-domain checks (coupling, kinematics, stability, power, assembly, pinout) were audited: none reports "not
+  run" for an absent file (they run only when their files exist, or fail when a named one is missing).
+- **The 0.96" OLED and the BME280 could never pass the mounting check** ("eitri has no published outline and hole pattern").
+  Two sourced outlines, each for one product and revision (a clone, or an earlier revision, has another outline and does not
+  fit it): `SSD1306` = Adafruit 326, STEMMA QT PCB of August 2020 (29.21 x 31.75 mm with its ears, four 2.5 mm holes 24.13 x
+  26.67 mm apart; Adafruit's board file and fab print); the new `BME280-2652` = Adafruit 2652, STEMMA QT PCB of November 2020
+  (25.4 x 18.0 mm, four holes 20.32 x 12.7 mm apart, M2.5). PCB thickness stays the 1.6 mm ASSUMPTION (no maker prints it).
+- **New module `BME280-2652`** (Adafruit 2652 BME280 STEMMA QT): VIN 3-5 V, about 1.1 mA (BME280 714 µA + AP2112K-3.3 IQ max
+  80 µA + the power LED's 0.33 mA bound), 10 kΩ pull-ups to VIN, I2C on SCK / SDI at 0x77 (0x76: SDO to GND). The plain
+  `BME280` entry (no regulator, no pull-ups: no maker publishes a drawing of such a breakout) keeps no outline, and its mounting
+  check stays not run; the message now lists the catalog parts that have one.
 
 ### Changed
 
