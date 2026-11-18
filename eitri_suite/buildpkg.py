@@ -412,7 +412,7 @@ def _readme(manifest: dict, checks: dict, bom: dict, plan, files: list[str]) -> 
                   f"Estimates are marked ESTIMATE in the check text ({', '.join(est)}).", ""]
     fwp = manifest.get("firmware")
     if fwp:
-        lines += [f"**Firmware:** `firmware/{fwp['sketch']}/` is the sketch exactly as this package's build compiled it for {fwp['fqbn'] or 'its board'} "
-                  f"(compile check: {fwp['compile']}). Open `{fwp['main']}` in the Arduino IDE and upload it; eitri never uploads.", ""]
+        lines += [(f"**Firmware:** `firmware/{fwp['sketch']}/` is the sketch exactly as this package's build compiled it for {fwp['fqbn'] or 'its board'} "
+                   f"(compile check: {fwp['compile']}). Open `{fwp['main']}` in the Arduino IDE and upload it; eitri never uploads."), ""]
     lines += ["## Contents", ""] + [f"- `{f}`" for f in files]
     return "\n".join(lines) + "\n"
