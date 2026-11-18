@@ -202,6 +202,28 @@ def print_manifest(plan, files: dict) -> tuple[dict, str]:
 
 # ---------------------------------------------------------------------------- the package
 
+def stand_ins(others: dict, cad: Path) -> dict[str, str]:
+    """{CAD body: the board it stands in for} from the electronics file's COUPLING mounts (stand_in=), when that file's mounts are on
+    this CAD file: those bodies are the bought boards' places in the model, not parts to print."""
+    if "electronics" not in others:
+        return {}
+    from eitri.model import load_model
+    from .electronics import coupling_of
+    try:
+        coupling = coupling_of(load_model(others["electronics"][0]).module)
+    except Exception:                                       # noqa: BLE001 - its own build reports the error
+        return {}
+    named = coupling.get("cad")
+    if named and Path(str(named)).name != Path(cad).name:
+        return {}
+    out = {}
+    for board, m in (coupling.get("mounts") or {}).items():
+        s = (m or {}).get("stand_in") if isinstance(m, dict) else None
+        if s:
+            out[str(s)] = f"the circuit's {board}"
+    return out
+
+
 def build_package(project, out_dir: str | Path | None = None, force: bool = False, bed: tuple[float, float] = (220.0, 220.0),
                   strict: bool = False) -> dict:
     """Write the build package for a project. Raises PackageRefused unless every check passes (or force). With strict
@@ -254,7 +276,8 @@ def build_package(project, out_dir: str | Path | None = None, force: bool = Fals
         lm = load_model(art.cad)
         parts = lm.build()
         hardware = set((getattr(lm.module, "HARDWARE", None) or {}))
-        plan = make_plan(parts, PrintSettings(bed=bed, exclude=sorted(hardware)), report=cad_data.get("report"))
+        plan = make_plan(parts, PrintSettings(bed=bed, exclude=sorted(hardware), stand_ins=stand_ins(others, art.cad)),
+                         report=cad_data.get("report"))
         written = export_plan(plan, out / "print", formats=("stl",), stem=art.cad.stem, make_zip=False)
         stl = {Path(f).stem: str(Path(f).relative_to(out)) for f in written["files"] if f.endswith(".stl") and "/parts/" in f}
         pm, pmd = print_manifest(plan, stl)
@@ -317,6 +340,11 @@ def _readme(manifest: dict, checks: dict, bom: dict, plan, files: list[str]) -> 
     lines = [f"# Build package: {manifest['project']}", ""]
     if manifest["forced"]:
         lines += ["> **THIS DESIGN FAILS ITS CHECKS.** The package was written with force=True. Do not build from it until the failures below are fixed.", ""]
+    unprinted = (manifest.get("print") or {}).get("problems") or {}
+    if unprinted:
+        lines += ["> **NOT EVERY PART COULD BE WRITTEN FOR PRINTING.** No print file for: "
+                  + "; ".join(f"{n} ({why})" for n, why in unprinted.items())
+                  + ". Fix the model and write the package again before printing.", ""]
     for k, v in checks.items():
         lines.append(f"- **{k}**: {v['pass']} pass, {v['warn']} warn, {v['fail']} fail of {v['checks']} checks"
                      + (f" ({v['not_applicable']} not applicable to this design)" if v.get("not_applicable") else ""))

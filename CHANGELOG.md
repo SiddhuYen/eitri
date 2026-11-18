@@ -112,6 +112,13 @@ annotated tags (`git show v0.4.0`).
   about 0.15 s each), so `eitri setup firmware`, a new arduino-cli or a core update invalidates it. Entries written by 0.9.1
   and earlier never match (cache format 2), so a project stuck on the bad entry compiles again on its next build.
 
+- **The build package counted the boards' stand-in bodies as printable parts** ("5 printable part(s)" for a case, a lid and three
+  board stand-ins). The bodies an electronics file's `COUPLING mounts` name as `stand_in=` are now left out of the print plan as
+  bought ("3 bought part(s) left out: controller, oled, bme280"); `PrintSettings(stand_ins=...)` in `eitri.printexport`.
+- **A part whose mesh failed the print check was left out of the package without a word.** The README now opens with "NOT EVERY
+  PART COULD BE WRITTEN FOR PRINTING" and names each part and why (found on the smoke test's box: corner bosses tangent to the walls
+  leave edges shared by more than two faces, so the base had no STL).
+
 ### Tests
 
 - The test suite keeps the plugin's data folder (`XDG_DATA_HOME`) per test too: on a machine with the plugin installed,

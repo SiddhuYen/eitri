@@ -26,7 +26,7 @@ def build(p):
 
     base = shell_box(L, W, zt, p.wall, floor=p.floor, corner_radius=3.0)
     # corner bosses for the lid screws, tapped M3
-    bx, by = ix - p.boss_od / 2, iy - p.boss_od / 2
+    bx, by = ix - p.boss_od / 2 + 0.5, iy - p.boss_od / 2 + 0.5   # into the walls: a boss tangent to a wall leaves a non-manifold edge
     corners = [(sx * bx, sy * by) for sx in (-1, 1) for sy in (-1, 1)]
     for (x, y) in corners:
         base = base + Pos(x, y, p.floor - 0.1) * Cylinder(p.boss_od / 2, zt - p.floor + 0.1, align=(Align.CENTER, Align.CENTER, Align.MIN))

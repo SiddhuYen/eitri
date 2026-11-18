@@ -146,3 +146,42 @@ def test_wiring_steps_for_splices_and_other_terminations():
 
 
 
+
+
+SENSOR_BOX = Path(__file__).resolve().parent / "fixtures" / "sensor-box"
+
+
+def test_the_boards_stand_ins_are_not_counted_as_printable_parts(tmp_path):
+    """The electronics file's mounts name the CAD bodies that stand in for the bought boards: the package does not print them."""
+    folder = tmp_path / "box"
+    shutil.copytree(SENSOR_BOX, folder, ignore=shutil.ignore_patterns("fw.py", "__pycache__"))
+    m = build_package(Project(folder, name="model"), force=True)
+    readme = (folder / "build_package" / "README.md").read_text(encoding="utf-8")
+    assert "Print: 2 printable part(s)" in readme, readme[:600]
+    assert "3 bought part(s) left out: controller, oled, bme280" in readme
+    pm = json.loads((folder / "build_package" / "print" / "print_manifest.json").read_text(encoding="utf-8"))
+    assert {p["name"] for p in pm["parts"]} == {"base", "lid"}
+    assert sorted(p.name for p in (folder / "build_package" / "print" / "parts").glob("*.stl")) == ["base.stl", "lid.stl"]
+    assert not m["forced"] and "NOT EVERY PART" not in readme          # every check passes: nothing was forced
+
+
+def test_a_part_whose_mesh_cannot_be_written_is_said_on_the_first_page(tmp_path):
+    """A corner boss tangent to two walls leaves edges shared by more than two faces: that part gets no STL, and the README says so."""
+    folder = tmp_path / "box"
+    shutil.copytree(SENSOR_BOX, folder, ignore=shutil.ignore_patterns("fw.py", "__pycache__"))
+    f = folder / "model.py"
+    f.write_text(f.read_text(encoding="utf-8").replace(" + 0.5, iy - p.boss_od / 2 + 0.5", ", iy - p.boss_od / 2"), encoding="utf-8")
+    build_package(Project(folder, name="model"), force=True)
+    readme = (folder / "build_package" / "README.md").read_text(encoding="utf-8")
+    assert "NOT EVERY PART COULD BE WRITTEN FOR PRINTING" in readme and "base (" in readme and "shared by more than two faces" in readme
+
+
+def test_make_plan_leaves_a_stand_in_out_even_when_forced_in():
+    import build123d as bd
+    from eitri.printexport import PrintSettings, make_plan
+    parts = [type("P", (), {"name": n, "shape": bd.Box(10, 10, 2), "color": "#888888"})() for n in ("case", "pcb")]
+    plan = make_plan(parts, PrintSettings(stand_ins={"pcb": "the circuit's NANO"}, include=["pcb"], orient=False))
+    by = {q.name: q for q in plan.parts}
+    assert by["case"].included and not by["pcb"].included and by["pcb"].bought
+    assert by["pcb"].bought_reason == "stand-in for the circuit's NANO (bought, not printed)"
+    assert plan.summary.startswith("1 printable part(s)")

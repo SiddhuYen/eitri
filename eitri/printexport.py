@@ -39,6 +39,8 @@ class PrintSettings:
     include_bought: bool = False
     include: list[str] = field(default_factory=list)     # force these parts in
     exclude: list[str] = field(default_factory=list)     # leave these parts out
+    # CAD bodies that stand in for a bought board or module (a combined project's electronics COUPLING mounts stand_in=): {name: what}
+    stand_ins: dict[str, str] = field(default_factory=dict)
     orient: bool = True
     critical_deg: float = 45.0
 
@@ -112,8 +114,10 @@ def make_plan(parts, settings: PrintSettings | None = None, report: dict | None 
         ref = getattr(p, "reference", None)
         if ref:                                               # the customer's part: never printed
             bought, why = True, f"reference part (the customer's, from {ref.get('path')}; not printed)"
+        elif p.name in st.stand_ins:                          # a body standing in for a bought board: never printed
+            bought, why = True, f"stand-in for {st.stand_ins[p.name]} (bought, not printed)"
         included = (st.include_bought or not bought) and p.name not in st.exclude
-        if p.name in st.include and not ref:
+        if p.name in st.include and not ref and p.name not in st.stand_ins:
             included = True
         pp = PrintPart(p.name, p.color, bought, why, included, round(abs(measure.signed_volume(shape)), 2))
         if included:
