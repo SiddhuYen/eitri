@@ -10,15 +10,22 @@ from fractions import Fraction
 from ..check_sources import Rule, assumption, doc, model_file, requirement, rule
 from .model import ASSUMED_RATED_FRACTION, catalog_actuator
 
-ISO_80000_3 = doc("ISO 80000-3: standard gravity 9.80665 m/s^2 (1 kgf.cm = 0.0980665 N.m)", "", "ISO 80000-3")
+ISO_80000_3 = doc("standard gravity g_n = 9.80665 m/s^2 defines the kilogram-force (1 kgf.cm = 0.0980665 N.m): NIST SP 811",
+                  "https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication811e2008.pdf",
+                  "NIST Special Publication 811, 2008 edition, Appendix B.8 and footnote 23 p.53 ('1 kgf = 9.806 65 E+00 N exactly'); "
+                  "read 2026-11-17 (ISO 80000-3:2019 not read)")
 STS3215 = doc("Feetech STS3215 product specification, edition A/0, s5: rated 4 kg.cm at 6 V",
               "https://www.feetechrc.com/Data/feetechrc/upload/file/20260622/6391772523943436695270694.pdf",
               "Feetech STS3215 product specification edition A/0, 2020-04-10 (re-read 2026-11-07)")
-ROBOTIS = doc("ROBOTIS e-Manual (XL-320 / AX-12A): a steady load of 1/5 of stall", "", "ROBOTIS e-Manual")
+ROBOTIS = doc("ROBOTIS e-Manual (XL-320 / AX-12A): a steady load of 1/5 of stall", "https://emanual.robotis.com/docs/en/dxl/x/xl320/",
+              "ROBOTIS e-Manual, XL-320 and AX-12A pages (no page date), specifications NOTE: 'Stable motions are possible with robots "
+              "designed for loads with 1/5 or less of the stall torque'; read 2026-11-17")
 CATALOG_DOCS = {
     "STS3215": STS3215,
-    "MG996R": doc("TowerPro MG996R datasheet: stall 9.4 kgf.cm at 4.8 V", "", "fetched 2026-10-26"),
-    "SG90": doc("TowerPro SG90 datasheet: stall 1.8 kgf.cm at 4.8 V", "", "fetched 2026-10-26"),
+    "MG996R": doc("TowerPro MG996R datasheet: stall 9.4 kgf.cm at 4.8 V", "https://towerpro.com.tw/product/mg996r/",
+                  "TowerPro MG996R product page (no page date): 'Stall torque: 9.4kg/cm (4.8v); 11kg/cm (6.0v)'; read 2026-11-17"),
+    "SG90": doc("TowerPro SG90 datasheet: stall 1.8 kgf.cm at 4.8 V", "https://towerpro.com.tw/product/sg90-7/",
+                "TowerPro SG90 product page (no page date): 'Stall torque: 1.8kg/cm(4.8v)'; read 2026-11-17"),
 }
 RATED_ASSUMED = assumption(f"continuous = {Fraction(ASSUMED_RATED_FRACTION).limit_denominator(20)} of stall where the maker publishes no "
                            "rating (the lower of Feetech STS3215's 0.24 and ROBOTIS's 1/5)")

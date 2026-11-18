@@ -1,9 +1,10 @@
 """What each supported board's pins can do. Sources: the Arduino Uno Rev3 and Nano pinout sheets (ATmega328P: PWM on D3, D5, D6,
 D9, D10, D11; external interrupts on D2, D3; A6/A7 on the Nano are analog-only inputs; Serial on D0/D1; I2C on A4/A5; SPI on
-D10-D13; the LED on D13), and Espressif's ESP32 datasheet and ESP32-DevKitC pin layout (GPIO6-11 are wired to the module's flash
-and must not be used; GPIO34-39 are input-only without pull-ups; ADC1 is GPIO32-39, ADC2 is GPIO0, 2, 4, 12-15, 25-27 and is
-unusable while Wi-Fi runs; GPIO0, 2, 5, 12, 15 are boot strapping pins; LEDC PWM on any output-capable GPIO; DAC on GPIO25/26;
-UART0 on GPIO1/3; default I2C on GPIO21/22)."""
+D10-D13; the LED on D13), and Espressif's ESP32 Series Datasheet v5.3 (2026.07), the ESP32-DevKitC V4 guide and ESP-IDF's GPIO
+summary (checked 2026-11-17, URLs in eitri.firmware.rules): GPIO6-11 are wired to the module's flash (Espressif: "avoid"; eitri
+forbids them); GPIO34-39 are input-only without pull-ups; ADC1 is GPIO32-39, ADC2 is GPIO0, 2, 4, 12-15, 25-27 and is unusable
+while Wi-Fi runs; GPIO0, 2, 5, 12, 15 are boot strapping pins; LEDC PWM on any output-capable GPIO; DAC on GPIO25/26; UART0 on
+GPIO1/3; default I2C on GPIO21/22 (the Arduino-ESP32 core's default, not a hardware limit)."""
 from __future__ import annotations
 
 import re

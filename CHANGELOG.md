@@ -3,6 +3,22 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
+## Unreleased
+
+### Fixed
+
+- **Every document a check cites now has a URL and a revision** (30 that had neither or one; each re-read 2026-11-17): JST XH/PH,
+  Amphenol Mini-PV, Molex Micro-Fit, Amass XT30/XT60/XT90, TE FASTON, NEC Chapter 9 Table 8, USB 2.0, the fuse datasheets'
+  temperature tables and Blue Sea's article, TowerPro MG996R/SG90, ROBOTIS, the ESP32 datasheet v5.3 and DevKitC guide, the
+  pneumatics default pressure ratings, ISO 6358 / ISO 1217 / ISO 68-1 (paywalled: catalogue page, marked not read). A new test
+  fails on any cited document without both.
+- **The 3 % voltage-drop default is sourced**: NFPA 70 (2023) 210.19 Informational Note, plus ABYC E-11's 3 % for critical DC
+  circuits. It is a recommendation, and the check line says so; it is no longer listed as an ASSUMPTION.
+- Citation text corrected where the document says something else: TE 108-106496 gives current by wire size in s3.4, not s3.2;
+  SMC SY3000 single solenoid is 0.15-0.7 MPa (0.1-0.7 is the double solenoid; the 0.7 MPa maximum eitri grades on is
+  unchanged); Amphenol states its 3 A with 32 AWG wire; standard gravity is cited from NIST SP 811 (ISO 80000-3 not read).
+  No limit changed.
+
 ## 0.9.1: no hosted service: eitri.io's web app and remote MCP server have closed
 
 eitri.io is now only the install line (`curl -fsSL https://eitri.io/install | sh`, which serves this repository's

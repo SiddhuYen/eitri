@@ -150,7 +150,9 @@ POWER_DOCS = {
                   "Arduino Nano full pinout A000005"),
     SRC_UNO_USB: doc("Arduino UNO R3 schematic: 500 mA USB polyfuse", "https://docs.arduino.cc/resources/schematics/A000066-schematics.pdf",
                   "Arduino UNO R3 schematic A000066"),
-    SRC_USB2: doc("USB 2.0 Specification s7.2.1: 500 mA per port", "", "USB 2.0 Specification"),
+    SRC_USB2: doc("USB 2.0 Specification s7.2.1: 500 mA per port", "https://usb.org/developers/docs/usb20_docs",
+                  "Universal Serial Bus Specification Revision 2.0, April 27, 2000, s7.2.1 Classes of Devices p.171 (read in the copy "
+                  "at pjrc.com/tmp/usb20.pdf; usb.org ships it in a zip); read 2026-11-17"),
     SRC_UNO_REG: doc("MaxLinear SPX1117 datasheet: 0.8 A, 125 C, 85 C/W (the Uno's 5 V regulator)", "https://www.maxlinear.com/ds/spx1117.pdf",
                   "MaxLinear SPX1117 datasheet Rev. 2.2.0, June 10 2025; Arduino UNO R3 datasheet A000066 rev 4"),
     SRC_NANO_VIN: doc("Arduino Nano datasheet A000005: no VIN regulator rating published",

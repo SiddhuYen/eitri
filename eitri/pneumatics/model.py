@@ -31,7 +31,8 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-P_ATM = 1.01325           # bar, standard atmosphere (ISO 6358 uses ANR: 1.01325 bar abs, 20 C, 65 % RH)
+P_ATM = 1.01325           # bar, standard atmosphere. NOTE: ISO 8778:2003 Table 1 sets ANR at 100 kPa (1 bar), 20 C, 65 % RH; using
+                          # 1.01325 here makes ANR volumes ~1.3 % low (open question, 2026-11-17)
 # Valve ports are the ISO 5599 numbers: 1 supply, 2 and 4 working, 3 and 5 exhaust; pilot / coil 14 connects 1 with 4, 12 (or the
 # return spring) connects 1 with 2. As printed by both makers in the catalogue (fetched 2026-11-12):
 # - SMC CAT.EUS11-83 SY series (https://static.smc.eu/pdf/SY_EU.pdf), PDF p.14 (printed p.5) "Construction", JIS symbols: 2 position
@@ -66,13 +67,13 @@ LEGACY_LETTERS = {"P": "1", "A": "2", "B": "4", "R": "3", "S": "5"}
 # A cylinder's duty defaults to "moving", the strictest that applies to most designs.
 LOAD_RATIOS = {"moving": 0.5, "static": 0.7, "guided": 1.0}
 
-# Maximum working pressure by kind, when a component gives no max_bar of its own (fetched 2026-10-26; vendor datasheets as listed
-# by distributors). The supply is not rated: it is the source.
+# Maximum working pressure by kind, when a component gives no max_bar of its own (fetched 2026-10-26; each re-read in the maker's
+# document 2026-11-17, URLs in eitri.pneumatics.rules.PRESSURE_DOCS). The supply is not rated: it is the source.
 PRESSURE_RATINGS = {
     "regulator": (10.0, "SMC AR20-AR60 regulators: maximum operating pressure 1.0 MPa (SMC AR_EU.pdf, standard specifications; "
                   "Festo LR-D-MINI takes 16 bar: the lower is used)"),
-    "frl": (10.0, "Festo MS4-LFR filter regulators: variants listed at 0.8-14, 1-10 and 2-12 bar; the lowest maximum is used"),
-    "valve": (7.0, "SMC SY3000 5-port solenoid valve: 0.1-0.7 MPa (internal pilot)"),
+    "frl": (10.0, "Festo MS4-LFR filter regulators: variants listed at 0.8-14, 1-10 and 2-10 bar; the lowest maximum is used"),
+    "valve": (7.0, "SMC SY3000 5-port solenoid valve, internal pilot: 0.15-0.7 MPa single, 0.1-0.7 MPa double solenoid"),
     "flow_control": (10.0, "SMC AS speed controllers: maximum operating pressure 1 MPa"),
     "cylinder": (10.0, "Festo DSNU round cylinders (ISO 6432): maximum operating pressure 10 bar"),
     "silencer": (10.0, "Festo U silencers: operating pressure 0-10 bar"),

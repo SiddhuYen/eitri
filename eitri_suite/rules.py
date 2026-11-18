@@ -16,6 +16,7 @@ import re
 from typing import Any
 
 from eitri.check_sources import CheckSource, Rule, assumption, doc, find_rule, model_file, rule
+from eitri.harness.rules import NEC_TABLE_8 as NEC        # one record for the same table in core and the suite
 
 SUITE_CATALOG = assumption("eitri parts catalog figures: the maker's published figures as remembered, "
                            "verified=False")
@@ -25,8 +26,9 @@ IEC_62368 = assumption("tipping margin h x tan 10 deg borrowed from IEC 62368-1 
                        "published summaries, the normative text not read")
 POWERSTREAM = doc("chassis-wiring ampacity, PowerStream Wire_Size table", "https://www.powerstream.com/Wire_Size.htm",
                   "dated 2023-04-18, fetched 2026-10-26")
-NEC = doc("NFPA 70 (NEC) Chapter 9 Table 8, copper at 75 C (K = 12.9)", "", "NFPA 70 Chapter 9 Table 8")
-ISO_68 = doc("ISO 68-1 metric thread profile (screw major diameter), as published in the AMES thread chart", "", "fetched 2026-11-12")
+ISO_68 = doc("ISO 68-1 metric thread profile (screw major diameter), as published in the AMES thread chart",
+             "https://amesweb.info/Screws/metric-tap-drill-chart.aspx",
+             "AMES metric tap drill chart, fetched 2026-11-12; the standard itself (ISO 68-1:2023, iso.org/standard/85107.html) not read")
 CONNECTIVITY = rule("connectivity: the files name the same pins and nets")
 GEOMETRY = rule("geometry of the CAD bodies posed through the mechanism (contact within 0.5 mm, overlap above 1 mm^3)")
 SEQUENCE = model_file("the firmware SEQUENCE and the mechanism's joint limits; a hobby servo turns 0-180 deg")

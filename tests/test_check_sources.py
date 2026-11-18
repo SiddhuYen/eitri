@@ -280,3 +280,28 @@ def test_an_assumption_named_in_electronics_text_is_structured():
     attach([c], _rules("electronics"))
     assert [s.basis for s in c.source] == ["document", "assumption"]
     assert c.source[0].url.startswith("https://www.nxp.com/") and c.source[1].text == "ASSUMPTION: 50 pF of wiring: no source"
+
+
+# ---------------------------------------------------------------------------- every document a rule cites has a URL and a revision
+
+# Rule-level entries that are not documents themselves: the electronics rules list "the part datasheet figure the check's text cites";
+# each check resolves it to the cited record in eitri/electronics/sources.py, which has its URL (tested in the electronics tests).
+_PLACEHOLDER = "the part datasheet figure the check's text cites"
+
+
+def _documents():
+    from eitri import power
+    from eitri.harness import rules as hr
+    import eitri_suite.rules as sr
+    rules = [r for _d, r in REGISTRY] + list(sr.RULES)
+    extra = list(power.POWER_DOCS.values()) + list(hr.RATING_DOCS.values()) + list(hr.AWG_DOCS.values())
+    extra += list(importlib.import_module("eitri.mechanism.rules").CATALOG_DOCS.values())
+    extra += list(importlib.import_module("eitri.firmware.rules").PINOUT_DOCS.values())
+    extra += list(importlib.import_module("eitri.pneumatics.rules").PRESSURE_DOCS.values())
+    srcs = [s for r in rules for s in r.source] + extra + list(hr._all_fuse_docs())
+    return list(dict.fromkeys(s for s in srcs if s.basis == "document" and _PLACEHOLDER not in s.text))
+
+
+def test_every_cited_document_has_a_url_and_a_revision():
+    missing = [s.text for s in _documents() if not s.url or not s.rev]
+    assert not missing, "documents with no URL or revision: " + "; ".join(missing)

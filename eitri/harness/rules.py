@@ -16,21 +16,45 @@ from .catalog import CATALOG, normalize_type
 # where the table gives one; a table that names only a site keeps it in the text.
 CHASSIS_AMPACITY = doc("chassis-wiring ampacity, Handbook of Electronic Tables and Formulas for AWG (PowerStream table)",
                        "https://www.powerstream.com/Wire_Size.htm", "PowerStream Wire_Size page dated 2023-04-18, fetched 2026-10-26")
-NEC_TABLE_8 = doc("NFPA 70 (NEC) Chapter 9 Table 8, copper at 75 C (K = 12.9)", "", "NFPA 70 Chapter 9 Table 8")
-DROP_DEFAULT = assumption("max_drop_pct is 3 % when the model does not give it: no cited source (the usual NEC 210.19 informational-note "
-                          "figure; its wording and number vary by edition and were not checked)")
-TE_FASTON = doc("TE 108-106496 Rev C (FASTON terminals), s3.2 by wire size", "", "TE product specification 108-106496 Rev C, 27 Jun 2025")
+NEC_TABLE_8 = doc("NFPA 70 (NEC) Chapter 9 Table 8, stranded uncoated copper at 75 C (K = 12.9; e.g. 12 AWG 1.98 ohm/kft)",
+                  "https://www.nfpa.org/codes-and-standards/nfpa-70-standard-development/70",
+                  "NFPA 70 Chapter 9 Table 8; values read in the 2011 edition (reproduction at necaibewelectricians.com); current edition "
+                  "2026 (free read-only access at nfpa.org), its table not read; read 2026-11-17")
+# The 3 % default (max_drop_pct when the model gives none): the NEC's branch-circuit recommendation. It is an informational note
+# (advice, not an enforceable requirement); ABYC E-11 uses the same 3 % for critical DC circuits (10 % for the rest).
+DROP_DEFAULT = doc("max_drop_pct is 3 % when the model does not give it: NFPA 70 (NEC) 2023, 210.19 Informational Note, a "
+                   "recommendation ('a voltage drop exceeding 3 percent at the farthest outlet'), not a requirement",
+                   "https://docinfofiles.nfpa.org/files/AboutTheCodes/70/70_A2025_NEC_P02_FD_PrelimFR.pdf",
+                   "NFPA 70 2023 edition, 210.19 Informational Note (feeders: 215.2(A)(2) Informational Note No. 2; 2017: 210.19(A)(1) "
+                   "IN No. 4), wording read as reproduced in NFPA's CMP-2 A2025 first-draft report FR-7573; 2026 numbering not checked; "
+                   "read 2026-11-17")
+DROP_DC = doc("ABYC E-11: 3 % maximum voltage drop for critical DC circuits (navigation lights, electronics, main feeders), 10 % for the rest",
+              "https://abycinc.org/what-is-voltage-drop", "ABYC 'What Is Voltage Drop?' (08/18/2026), on E-11; read 2026-11-17")
+TE_FASTON = doc("TE 108-106496 Rev C (FASTON terminals), s3.4 current by wire size at 30 C rise",
+                "https://www.te.com/commerce/DocumentDelivery/DDEController?Action=srchrtrv&DocNm=108-106496&DocType=SS&DocLang=EN",
+                "TE product specification 108-106496 Rev C, 27 Jun 2025, s3.4 Temperature Rising p.3 (s3.2 gives only 3-24 A); read 2026-11-17")
 MOLEX_PS43045 = doc("Molex PS-43045 Rev P s4.2 (Micro-Fit 3.0, wire-to-wire)", "https://cdn.eicom.ru/media/PDF/183992.pdf",
                     "Molex PS-43045 Product Specification Rev P, 2017-10-27 (copy at cdn.eicom.ru; molex.com timed out)")
 RATING_DOCS = {
-    "JST-XH": doc("JST XH series page (jst-mfg.com, series 277): 3 A", "", "fetched 2026-10-26"),
-    "JST-PH": doc("JST PH series page (jst-mfg.com, series 199): 2 A", "", "fetched 2026-10-26"),
-    "DUPONT-2.54": doc("Amphenol FCI Mini-PV 48235-000LF: 3 A (as listed by Heilind / RS)", "", "fetched 2026-10-26"),
+    "JST-XH": doc("JST XH series catalogue (series 277): 3 A AC/DC (AWG #22)", "https://www.jst-mfg.com/product/pdf/eng/eXH.pdf",
+                  "JST eXH.pdf p.1 (no revision printed; file dated 2025-07-30); read 2026-11-17"),
+    "JST-PH": doc("JST PH series catalogue (series 199): 2 A AC/DC (AWG #24)", "https://www.jst-mfg.com/product/pdf/eng/ePH.pdf",
+                  "JST ePH.pdf p.1 (no revision printed; file dated 2026-01-27); read 2026-11-17"),
+    "DUPONT-2.54": doc("Amphenol FCI Mini-PV (PV wire-to-board): 3.0 A single circuit with 32 AWG, larger wires allow more",
+                       "https://mm.digikey.com/Volume0/opasdata/d220001/medias/docus/6257/bwb_pv_wtb.pdf",
+                       "Amphenol 'PV Wire-to-Board and Wire-to-Wire Connector System' BWBPVWTB0323EA4 (2023-03), p.2 (copy at digikey; "
+                       "amphenol-cs.com answers 403; product spec BUS-12-067 not found); read 2026-11-17"),
     "MOLEX-MICROFIT-3.0": MOLEX_PS43045,
-    "XT30": doc("Amass XT30U-M product page (china-amass.net): 20 A", "", "fetched 2026-10-26"),
-    "XT60": doc("Amass XT60 datasheet V1.2: 30 A, 60 A instantaneous", "",
-                "Amass XT60 datasheet V1.2; XT60-M page re-read 2026-11-07 (35 A there; the lower 30 A is used)"),
-    "XT90": doc("Amass XT90E-M product page (china-amass.net): 45 A; burst 90 A from Holybro's AMASS rating table", "", "fetched 2026-10-26"),
+    "XT30": doc("Amass XT30U-M specification: 20 A (16 AWG, rise <= 85 K)", "https://www.china-amass.net/uploads/94.XT30U-M-SPEC-2025V0.pdf",
+                "Amass XT30U-M specification Version 2025V0, p.1 (also the xt30u-m-product page); read 2026-11-17"),
+    "XT60": doc("Amass XT60 datasheet V1.2: 30 A, 60 A instantaneous",
+                "https://mrsdprojects.ri.cmu.edu/2025teamb/wp-content/uploads/sites/84/2025/05/xt60.pdf",
+                "Amass XT60 specification V1.2 pp.1-2 (copy on a CMU project site; Amass's 2025V0 XT60-M spec would not open); the current "
+                "XT60-M page says 35 A (12 AWG): the lower 30 A is used; Holybro's AMASS table also 30 A / 60 A; read 2026-11-17"),
+    "XT90": doc("Amass XT90E-M specification: 45 A (10 AWG); burst 90 A (1 minute) from Holybro's AMASS rating table",
+                "https://www.china-amass.net/uploads/80.XT90E-M-SPEC-2025V0.pdf",
+                "Amass XT90E-M specification Version 2025V0, p.1; burst from Holybro 'Connector & Wire Rating' (row 'XT90', no date, "
+                "docs.holybro.com/power-module-and-pdb/power-module/connector-and-wire-rating); read 2026-11-17"),
     "SPADE-2.8": TE_FASTON, "SPADE-4.8": TE_FASTON, "SPADE-6.3": TE_FASTON,
     "M8-3": doc("Pepperl+Fuchs V3-WM-10M-PUR data sheet p.1: 4 A, 60 V DC / 48 V AC (M8 3-pin A-coded female cordset)",
                 "https://files.pepperl-fuchs.com/selector_files/navi/productInfo/pds/116463_eng.pdf",
@@ -49,10 +73,18 @@ RATING_DOCS = {
                           "WAGO data sheet 2002-1201, version 12.05.2023 (copy at cdn.gescan.com), pages 1-2"),
 }
 AWG_DOCS = {
-    "JST-XH": doc("JST XH series page (series 277): AWG #30 to #22", "", "fetched 2026-10-26"),
-    "JST-PH": doc("JST PH series page (series 199): AWG #32 to #24", "", "fetched 2026-10-26"),
-    "DUPONT-2.54": doc("Amphenol FCI Mini-PV contacts 48235-000LF 22-26 AWG, 48237-000LF 28-32 AWG (Heilind, Farnell)", "", "fetched 2026-10-26"),
-    "MOLEX-MICROFIT-3.0": doc("Molex Micro-Fit 3.0 43030 terminals: 18-30 AWG (element14, RS)", "", "fetched 2026-10-26"),
+    "JST-XH": doc("JST XH series catalogue (series 277): AWG #30 to #22", "https://www.jst-mfg.com/product/pdf/eng/eXH.pdf",
+                  "JST eXH.pdf p.1 (no revision printed; file dated 2025-07-30); read 2026-11-17"),
+    "JST-PH": doc("JST PH series catalogue (series 199): AWG #32 to #24", "https://www.jst-mfg.com/product/pdf/eng/ePH.pdf",
+                  "JST ePH.pdf p.1 (no revision printed; file dated 2026-01-27); read 2026-11-17"),
+    "DUPONT-2.54": doc("Amphenol FCI Mini-PV contacts 48235-000LF 22-26 AWG, 48237-000LF 28-32 AWG",
+                       "https://mm.digikey.com/Volume0/opasdata/d220001/medias/docus/6257/bwb_pv_wtb.pdf",
+                       "Amphenol 'PV Wire-to-Board and Wire-to-Wire Connector System' BWBPVWTB0323EA4 (2023-03), p.4 contact table; "
+                       "read 2026-11-17"),
+    "MOLEX-MICROFIT-3.0": doc("Molex PS-43045 Rev P: Micro-Fit 3.0 system (43030 female crimp terminal) for 18-30 AWG stranded wire",
+                              "https://cdn.eicom.ru/media/PDF/183992.pdf",
+                              "Molex PS-43045 Product Specification Rev P, 2017-10-27, p.1 scope (the system range; each 43030 part "
+                              "takes a narrower range); read 2026-11-17"),
 }
 AWG_DOCS["WAGO-2002-1201"] = RATING_DOCS["WAGO-2002-1201"]
 
@@ -98,7 +130,7 @@ def _drop(c, h):
     what = f"{net.name} max_drop_pct {net.max_drop_pct:g} %" if net is not None else "max_drop_pct"
     out = [requirement(what), NEC_TABLE_8]
     if net is not None and net.max_drop_pct == 3.0:        # the default: the model may not have given it
-        out.append(DROP_DEFAULT)
+        out += [DROP_DEFAULT, DROP_DC]
     return out
 
 
@@ -117,22 +149,23 @@ def _supply(c, h):
 
 # ---------------------------------------------------------------------------- overcurrent protection (eitri.harness.protection)
 # The protection checks cite a short source in their text ("[source: Littelfuse ATOF 287 datasheet rev. 12/06/2022, p.1]");
-# eitri.harness.fuses.FUSE_SOURCES holds each one's full quote with the address the document was read at. Here they become records:
-# the short cite as the text (it names the revision and page), the address from the quote as the URL.
-_ADDR = re.compile(r"((?:[a-z0-9-]+\.)+[a-z]{2,}/[^\s,;)']+)")
+# eitri.harness.fuses.FUSE_SOURCES holds each one's full quote and FUSE_URLS the address of the document it was read from. Here they
+# become records: the short cite as the text (it names the revision and page), the document's address as the URL.
 
 
-def _fuse_doc(short: str):
-    from .fuses import FUSE_SOURCES
-    full = FUSE_SOURCES.get(short)
-    if full is None:
-        return None
-    m = _ADDR.search(full)
-    return doc(short, "https://" + m.group(1).rstrip(".") if m else "", short)
+def _fuse_doc_list(short: str) -> list:
+    from .fuses import FUSE_SOURCES, FUSE_URLS
+    if short not in FUSE_SOURCES:
+        return []
+    out = []
+    for u in FUSE_URLS.get(short) or ("",):
+        url, rev = u if isinstance(u, tuple) else (u, short)
+        out.append(doc(short, url, rev))
+    return out
 
 
 def _fuse_docs(*shorts):
-    return tuple(d for d in (_fuse_doc(x) for x in shorts) if d is not None)
+    return tuple(d for x in shorts for d in _fuse_doc_list(x))
 
 
 def _all_fuse_docs():
@@ -160,9 +193,7 @@ def _cited(c):
             if part == GIVEN:
                 out.append(model_file("the device's own figure"))
                 continue
-            d = _fuse_doc(part)
-            if d is not None:
-                out.append(d)
+            out += _fuse_doc_list(part)
     return out
 
 
@@ -190,7 +221,7 @@ def _device_docs(*keys):
             if t == GIVEN:
                 out.append(model_file(f"{c.refs[0]} {k}"))
             elif t:
-                out.append(_fuse_doc(t) or model_file(f"{c.refs[0]} {k}"))
+                out += _fuse_doc_list(t) or [model_file(f"{c.refs[0]} {k}")]
         return out
     return extra
 
@@ -246,7 +277,7 @@ RULES = [
     Rule(R + "terminal-fit", "terminal fit", r"wires fit the ", tuple(AWG_DOCS.values()), _terminal_fit),
     Rule(R + "connector-voltage", "voltage rating", r"connector voltage ", tuple(RATING_DOCS[k] for k in ("M8-3", "M8-4", "M12-4", "M12-5",
          "WAGO-2002-1201")) + (model_file("net voltage_V"),), _connector_voltage),
-    Rule(R + "voltage-drop", "voltage drop", r"voltage drop ", (requirement("max_drop_pct"), NEC_TABLE_8, DROP_DEFAULT), _drop),
+    Rule(R + "voltage-drop", "voltage drop", r"voltage drop ", (requirement("max_drop_pct"), NEC_TABLE_8, DROP_DEFAULT, DROP_DC), _drop),
     Rule(R + "one-gauge-per-net", "consistency", r"one gauge per net$", (rule("a thinner wire carries no more than a thicker one of its net"),)),
     Rule(R + "one-colour-per-net", "consistency", r"one colour per net$", (rule("one wire colour per net (a convention)"),)),
     Rule(R + "shield-terminated", "consistency", r"shield terminated: ", (rule("a cable's shield is connected at one end or both"),)),

@@ -34,7 +34,7 @@ from typing import Any, Iterable
 
 import numpy as np
 
-G = 9.80665                    # m/s^2, standard gravity (ISO 80000-3)
+G = 9.80665                    # m/s^2, standard gravity (NIST SP 811 2008, App. B.8)
 KGCM_PER_NM = 1.0 / 0.0980665  # 1 kgf.cm = 0.0980665 N.m (the kilogram-force is defined with standard gravity)
 # The share of stall torque (or force) taken as the continuous rating when neither the model nor the actuator catalog gives one.
 # It is an ASSUMPTION, not a spec, and the checks say so: hobby-servo makers publish stall only. The sourced ratios are Feetech's
