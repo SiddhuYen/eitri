@@ -476,6 +476,7 @@ def run_checks(c: Circuit) -> tuple[list[Check], list[CylinderInfo], list[Supply
     checks += _failsafe_checks(c)
     checks += _manifold_checks(c, infos)
     checks += _sequence_checks(c, infos)
+    checks += _start_state_checks(c, infos)
     if estimated:
         checks.append(_check("flow data", "flow data estimated", "warn",
                              "no C, b from a datasheet for " + ", ".join(f"{k} ({v})" for k, v in list(estimated.items())[:8]) + ("..." if len(estimated) > 8 else "") + ": graded with conservative estimates",
@@ -700,6 +701,91 @@ def _sequence_checks(c: Circuit, infos: list[CylinderInfo]) -> list[Check]:
                           f"ESTIMATE {p.cycle_s:.2f} s per cycle (a lower bound: " + "; ".join(seq.ASSUMPTIONS[1:3]) + f") against {target:.2f} s for "
                           f"{max(rates):g} cycles/min", f"<= {target:.2f} s (within 80 % passes; the estimate leaves out pressure build-up)",
                           [cy.name for cy in c.cylinders]))
+    return out
+
+
+def _declared(c: Circuit, cyl: str, cover: str) -> str:
+    sg = c.safeguards_for(cyl, cover)
+    return "; ".join(f"{d['measure']}: {d['evidence']}" for d in sg)
+
+
+def _start_state_checks(c: Circuit, infos: list[CylinderInfo]) -> list[Check]:
+    """At the start of the cycle (power-up, the loading / idle step) each sequenced cylinder must be where its valve puts it with
+    every coil off and air on; and when air returns after a loss, no cylinder may be driven without a new command. Either may pass
+    on a declared safeguard (c.safeguard(...)), printed as the basis and listed for a person to verify. See failsafe.py."""
+    from . import failsafe, sequence as seq
+    out: list[Check] = []
+    tag = f" [{failsafe.DISCLAIMER}]"
+    p = seq.plan(c, infos) if c.sequence else None
+    sequenced = list(dict.fromkeys(m for st in c.sequence for m, _mv in st.moves))
+    if p is None:                                       # no sequence: grade the cylinders whose idle state is declared (c.start)
+        graded = [cy.name for cy in c.cylinders if cy.name in c.start_state]
+        undeclared = [cy.name for cy in c.cylinders if cy.name not in c.start_state]
+        if undeclared:
+            out.append(switched_off(_check("fail-safe", "start state", "warn",
+                                           f"neither a step sequence nor an idle state is declared for {', '.join(undeclared)}, so "
+                                           f"{'its' if len(undeclared) == 1 else 'their'} start state (the idle / loading position) is not "
+                                           "graded against the state the valves give at power-up",
+                                           "c.start(C1='retracted' | 'extended', ...) for every cylinder, or c.step(...)", undeclared),
+                                    "c.start"))
+    else:
+        graded = sequenced
+    for name in graded:
+        cyl = c.components[name]
+        start = c.start_state.get(name, "retracted")
+        how_start = "declared c.start" if name in c.start_state else "c.start default"
+        want = failsafe.STATE_OF[start]
+        kind, st, how = failsafe.power_up(c, cyl, p)
+        decl = _declared(c, name, "start")
+        refs = [name] + [v.name for v in failsafe._valves_of(c, cyl)]
+        cname = f"start state {name}"
+        exp = (f"{start} at power-up: a spring-return valve whose de-energised state gives it, or a declared safeguard "
+               "(c.safeguard(cylinder, measure, evidence, covers='start'))")
+        if kind == "drives" and st == want:
+            out.append(_check("fail-safe", cname, "pass", f"{name} starts {start} ({how_start}); with every coil off and air on its valves drive it "
+                                                          f"to {st} ({how}){tag}", exp, refs))
+            continue
+        if kind == "drives":
+            what = (f"{name} starts {start} ({how_start}) but with every coil off and air on its valves drive it to {st} ({how}): at power-up, or "
+                    f"while the operator loads, it moves to {st} by itself")
+            sev = "fail"
+        elif kind == "held" and p is None:
+            what = (f"{name} starts {start} ({how_start}); its double-solenoid valve has no rest position: at power-up it is in the last position "
+                    "it was switched to, which the design cannot know (no sequence is declared to say where a normal cycle leaves it; SMC "
+                    "M-E03-3-02 p.1 item 10)")
+            sev = "warn"
+        elif kind == "held":
+            what = (f"{name} starts {start} ({how_start}); its double-solenoid valve has no rest position: at power-up it is in the last position "
+                    f"it was switched to, which the design cannot know. After a normal cycle end it drives {name} to {st}; after an interrupted "
+                    "cycle, an emergency stop or on first use it may be either (SMC M-E03-3-02 p.1 item 10)")
+            sev = "warn"
+        else:
+            what = (f"{name} starts {start} ({how_start}); with every coil off its 5/3 centre does not drive it ({st}: {how}): it stays wherever it "
+                    "stopped and lurches when first pressurised (SMC M-E03-3-03 p.1 items 8, 12)")
+            sev = "warn"
+        if decl:
+            out.append(_check("fail-safe", cname, "pass", f"PASS ON A DECLARATION, for a person to verify: {decl}. Without it: {what}{tag}", exp, refs))
+        else:
+            out.append(_check("fail-safe", cname, sev, f"{what}{tag}", exp, refs))
+    for cyl in c.cylinders:
+        if p is not None and cyl.name not in sequenced:
+            continue
+        moves = failsafe.air_return(c, cyl, p)
+        cname = f"air return {cyl.name}"
+        refs = [cyl.name] + [v.name for v in failsafe._valves_of(c, cyl)]
+        exp = ("no move without a command when pressure returns, or a declared safeguard (a soft-start / dump valve, a restart reset: "
+               "c.safeguard(cylinder, measure, evidence, covers='air return'))")
+        if not moves:
+            out.append(_check("fail-safe", cname, "pass", f"when air returns after a loss, {cyl.name}'s valves do not drive it anywhere it was not held{tag}", exp, refs))
+            continue
+        where = "; ".join(f"{lab}: driven to {d} (during the loss: {loss})" for lab, d, loss in moves[:6]) + (" ..." if len(moves) > 6 else "")
+        what = (f"when air returns with the power on, the internally piloted valves shift to their commanded positions again and {cyl.name} is "
+                f"driven without a new command, from vented chambers so it lurches (SMC M-E03-3-03 p.1 items 8, 11): {where}")
+        decl = _declared(c, cyl.name, "air return")
+        if decl:
+            out.append(_check("fail-safe", cname, "pass", f"PASS ON A DECLARATION, for a person to verify: {decl}. Without it: {what}{tag}", exp, refs))
+        else:
+            out.append(_check("fail-safe", cname, "warn", f"{what}{tag}", exp, refs))
     return out
 
 

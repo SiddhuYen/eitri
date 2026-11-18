@@ -344,7 +344,7 @@
 <text x="778.0" y="761.0" font-size="9.5" fill="#1b2430"></text>
 <line x1="696.0" y1="766.0" x2="996.0" y2="766.0" stroke="#2b3a4a" stroke-width="0.6"/>
 <text x="700.0" y="778.0" font-size="8" fill="#6b7686">eitri checks</text>
-<text x="778.0" y="778.0" font-size="9.5" fill="#1b2430">87 pass, 1 warn, 0 fail, 0 not run</text>
+<text x="778.0" y="778.0" font-size="9.5" fill="#1b2430">89 pass, 3 warn, 0 fail, 0 not run</text>
 <line x1="696.0" y1="783.0" x2="996.0" y2="783.0" stroke="#2b3a4a" stroke-width="0.6"/>
 <text x="700.0" y="795.0" font-size="8" fill="#6b7686">Sheet</text>
 <text x="778.0" y="795.0" font-size="9.5" fill="#1b2430">1 / 1</text>

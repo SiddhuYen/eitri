@@ -23,6 +23,7 @@ class CircuitReport:
     checks: list[Check] = field(default_factory=list)
     issues: list[str] = field(default_factory=list)
     analysis_seconds: float = 0.0
+    to_verify: list[str] = field(default_factory=list)     # declared safeguards a check passed on: a person must verify each one
 
     @property
     def ok(self) -> bool:
@@ -55,7 +56,8 @@ def analyze(c: Circuit, checker: Checker | None = None) -> CircuitReport:
     for r in (checker.results if checker else []):
         checks.append(from_verify(r))
     attach(checks, RULES, c)
-    rep = CircuitReport(name=c.name, components=len(c.components), tubes=len(c.tubes), cylinders=cyls, supplies=sups, checks=checks)
+    rep = CircuitReport(name=c.name, components=len(c.components), tubes=len(c.tubes), cylinders=cyls, supplies=sups, checks=checks,
+                        to_verify=[f"{d['cylinder']} ({', '.join(d['covers'])}): {d['measure']}: {d['evidence']}" for d in getattr(c, "safeguards", [])])
     rep.analysis_seconds = round(time.time() - t0, 3)
     return rep
 
@@ -67,6 +69,8 @@ def summarize(rep: CircuitReport) -> str:
     _nr = not_run_line(rep.checks)
     if _nr:
         lines.append(_nr)
+    if rep.to_verify:
+        lines.append("For a person to verify (declared safeguards that checks passed on; eitri does not assess them): " + "; ".join(rep.to_verify))
     for cy in rep.cylinders:
         bits = [f"Ø{cy.bore_mm:g}/{cy.rod_mm:g} x {cy.stroke_mm:g} mm {cy.acting}-acting" + (f" at {cy.pressure_bar:g} bar" if cy.pressure_bar is not None else ", NO SUPPLY")]
         for s in cy.strokes:

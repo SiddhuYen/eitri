@@ -75,6 +75,14 @@ def build(p):
     c.step("pusher back", "C1-", until="B1")            # the clamp holds the part
     c.step("machine", dwell_s=p.machining_s)            # machining (the machine's own cycle)
     c.step("unclamp", "C2-", until="B3")
+
+    # the idle / loading state: both retracted (pusher back, clamp open). V1 rests there by itself (spring, port 2 to the rod end).
+    # V2 is double solenoid: at power-up it holds whatever it was last switched to, so the PLC start-up rule below brings it home.
+    c.start(C1="retracted", C2="retracted")
+    c.safeguard("C2", "restart reset", covers="start",
+                evidence="DESIGN.md 'Start-up and air return': after power-up, an emergency stop or low air, the PLC energises no "
+                         "output until the operator presses RESET with the guard closed; RESET first pulses CLAMP_OPEN and waits for "
+                         "CLAMP_OPEN_POS. To be implemented in the PLC program and verified on the machine.")
     return c
 
 

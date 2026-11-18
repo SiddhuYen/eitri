@@ -88,7 +88,7 @@ def test_tools(tmp_path):
     pr = Project(tmp_path / "t", name="t")
     tools = Tools(pr)
     res = tools.build_model(MODEL, "first")
-    assert not res.is_error and "Pneumatic circuit 'Pusher'" in res.text and res.images and "schematic" in res.text and "ATTENTION" not in res.text
+    assert not res.is_error and "Pneumatic circuit 'Pusher'" in res.text and res.images and "schematic" in res.text and "FAILED" not in res.text and "air return C1" in res.text   # warnings only: no soft-start valve, no sequence
     out = tools.inspect("cylinders()\npaths()\nprint(round(flow(1.0, 0.3, 7.0, 1.0), 3))\nprint(round(tube_C(6, 1.0)[0], 2))")
     assert not out.is_error, out.text
     assert "C1: Ø32/12 x 100 mm, double-acting, 6 bar at the cylinder" in out.text and "C1.CAP supply: T1 -> FRL -> T2 -> V1 -> T3" in out.text and "7.0" in out.text and "2.19" in out.text

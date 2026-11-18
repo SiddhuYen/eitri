@@ -26,6 +26,7 @@ def build(p):
     c.tube("T5", fc["B"], cyl["ROD"], id_mm=6, length_m=0.5)
     c.silencer(v["3"])
     c.silencer(v["5"])
+    c.start(C1="extended")       # idle = shut: V1 at rest feeds CAP, so the clamp opens only while V1's coil is on (to load / unload)
     return c
 
 

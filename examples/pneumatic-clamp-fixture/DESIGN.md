@@ -41,3 +41,19 @@ the spring connects 1-2 and 4-5; coil 14 connects 1-4 and 2-3. Plumbing: V1 port
 pusher stays back on a power cut), port 4 (A) to its cap end (PUSHER_EXTEND); V2 port 4 (A) to the clamp's cap end (CLAMP_CLOSE,
 coil 14), port 2 (B) to its rod end (CLAMP_OPEN, coil 12). The deliverables before this date labelled the valve ports "A" (meaning
 port 2) and "B" (port 4): read against SMC's marking that is backwards. Use the drawing of 2026-11-12 or later.
+
+## Start-up and air return (added 2026-11-12, eitri start-state / air-return checks)
+- Idle / loading state: C1 pusher retracted, C2 clamp open (retracted).
+- C1: V1 is spring return with port 2 to the rod end, so with every coil off and air on it holds the pusher back: no hazard at
+  power-up (check passes on the valve itself).
+- C2: V2 is double solenoid. At power-up it is in the last position it was switched to (SMC M-E03-3-02 p.1 item 10), which
+  the design cannot know. **PLC start-up rule (a requirement on the PLC program):** after power-up, an emergency stop or a
+  low-air signal, energise no output until the operator presses RESET with the guard closed; RESET first pulses
+  CLAMP_OPEN and waits for CLAMP_OPEN_POS before step 1. Declared in the model as a safeguard; the build lists it for a
+  person to verify. It is not verified by eitri.
+- **Open item: air return.** When air comes back after a loss with the power on, the valves shift to their commanded
+  positions again and both cylinders are driven from vented chambers, so they lurch (SMC M-E03-3-03 p.1 item 8). The design
+  needs a soft-start / dump valve after the AW20 (slow pressure build-up, exhausts on a safety stop). eitri's catalogue has
+  none yet, so this stays a warning: choose the part and declare it with c.safeguard(..., "soft-start valve", evidence=...).
+- These are design-rule checks on the valve states, not a risk assessment to ISO 12100 or a validation of safety functions to
+  ISO 13849: the machine builder's risk assessment decides the measures.

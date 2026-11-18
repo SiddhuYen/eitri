@@ -149,6 +149,7 @@ def plan(c: Circuit, infos=None) -> SeqPlan | None:
                 else:
                     pick = want.get(v.name, pick)
                     want[v.name] = pick
+                    mv.position = pick
                     pilot, mode = coil_for(v, pick)
                     coils = {p: s for p, s, _t in v.coils}
                     if pilot is not None and pilot not in coils:

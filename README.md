@@ -367,7 +367,7 @@ eitri finds `arduino-cli` on `PATH`, at the path in `EITRI_ARDUINO_CLI`, or in `
 
 ```bash
 eitri build eitri/demos/pan-tilt/pan_tilt.py         # 12 pass, 0 warn, 0 FAIL
-eitri build eitri/demos/air-clamp/air_clamp.py       # 25 pass, 1 warn, 0 FAIL
+eitri build eitri/demos/air-clamp/air_clamp.py       # 26 pass, 2 warn, 0 FAIL
 eitri build eitri/demos/servo-sweep/servo_sweep.py   # 12 pass, 0 warn, 0 FAIL with arduino-cli and arduino:avr installed
 eitri bom ~/eitri-projects/clamp                     # pneumatics: the bill of materials (--csv)
 ```

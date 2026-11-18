@@ -111,6 +111,14 @@ SMC_VALVE_PRECAUTIONS = doc("SMC 3/4/5-port solenoid valve precautions M-E03-3-0
                             "https://www.smcworld.com/upfiles/pl/M-E03-3-02.pdf", "SMC M-E03-3-02, fetched 2026-11-12")
 SMC_SY_SYMBOLS = doc("SMC SY series CAT.EUS11-83: the valves' ISO 1219 symbols (rest positions, centres)", "https://static.smc.eu/pdf/SY_EU.pdf",
                      "SMC CAT.EUS11-83 (SY_EU.pdf) p.1-3, fetched 2026-11-12")
+SMC_ACTUATOR_PRECAUTIONS = doc("SMC Actuators Precautions M-E03-3-03, p.1 items 8 (lurching when starting up after residual pressure is "
+                               "exhausted), 9 (emergency stop), 11 (restarting), 12 (closed centre does not hold)",
+                               "https://www.smcworld.com/upfiles/pl/M-E03-3-03.pdf", "SMC M-E03-3-03, fetched 2026-11-12")
+SMC_SAFETY = doc("SMC Safety Instructions M-E03-3-01 p.1 item 3: before restart, take measures to prevent unexpected operation",
+                 "https://www.smcworld.com/upfiles/pl/M-E03-3-01.pdf", "SMC M-E03-3-01, fetched 2026-11-12")
+FESTO_VUVG = doc("Festo VUVG: data sheet 574371 (internal pilot air, pilot pressure 0.3-0.8 MPa, mechanical spring reset); catalogue "
+                 "2010/08 p.12 (5/2 spring box 1-2, 4-5; 5/3 C / U / E normal positions)",
+                 "https://ftp.festo.com/public/PNEUMATIC/SOFTWARE_SERVICE/DataSheet/EN_GB/574371.pdf", "Festo 574371 (10/8/26); VUVG catalogue 2010/08")
 THEORETICAL_FORCE = rule("theoretical force = pressure x piston area (rod side: minus the rod's area)")
 
 
@@ -194,6 +202,22 @@ def _manifold_supply(c, circ):
             + _manifold_doc(c, circ) + _flow_sources(c.refs[1:], circ))
 
 
+def _start_state(c, circ):
+    cyl = _cyl(c, circ)
+    out = [requirement("c.start / c.step (the idle state and sequence)"), SMC_SY_SYMBOLS, SMC_VALVE_PRECAUTIONS, SMC_ACTUATOR_PRECAUTIONS, FESTO_VUVG]
+    if cyl is not None and circ.safeguards_for(cyl.name, "start"):
+        out.append(model_file(f"{cyl.name} safeguard (declared, for a person to verify)"))
+    return out
+
+
+def _air_return(c, circ):
+    cyl = _cyl(c, circ)
+    out = [SMC_ACTUATOR_PRECAUTIONS, SMC_SAFETY, SMC_VALVE_PRECAUTIONS, _cat_doc("smc-sy"), FESTO_VUVG]
+    if cyl is not None and circ.safeguards_for(cyl.name, "air return"):
+        out.append(model_file(f"{cyl.name} safeguard (declared, for a person to verify)"))
+    return out
+
+
 def _estimated(c, circ):
     return [rule("every component graded with estimated flow data is named")] + _flow_sources(c.refs, circ)
 
@@ -251,6 +275,10 @@ RULES = [
          (requirement("cycles_per_min"), _cat_doc("smc-sy"), _cat_doc("festo-smt-8m-a"), ISO_6358,
           assumption("cycle time is a lower bound: pressure build-up, load acceleration, controller scan and cushioning are left out; a sensor "
                      "with no switch-on time is taken at 1.3 ms (Festo SMT-8M-A)"))),
+    Rule(P + "start-state", "fail-safe", r"start state", (requirement("c.start / c.step (the idle state and sequence)"), SMC_SY_SYMBOLS,
+                                                          SMC_VALVE_PRECAUTIONS, SMC_ACTUATOR_PRECAUTIONS, FESTO_VUVG, model_file("safeguard")), _start_state),
+    Rule(P + "air-return", "fail-safe", r"air return ", (SMC_ACTUATOR_PRECAUTIONS, SMC_SAFETY, SMC_VALVE_PRECAUTIONS, _cat_doc("smc-sy"),
+                                                         FESTO_VUVG, model_file("safeguard")), _air_return),
     Rule(P + "flow-data", "flow data", r"flow data estimated$", (rule("every component graded with estimated flow data is named"),) + tuple(FLOW_DOCS.values()),
          _estimated),
 ]
