@@ -114,10 +114,11 @@
     },
     "waivers": {
       "type": "array",
-      "description": "checks that did not run, waived by a person with a reason (failed checks are never waived); print on page 1",
-      "items": {"type": "object", "required": ["check", "reason", "by", "at"],
+      "description": "checks that will not grade the result, waived by a person with a reason (failed checks are never waived); print on page 1. kind: not_run (did not run, on the base either), switched_off (ran on the base, this change switched it off), removed (ran on the base, gone from the result)",
+      "items": {"type": "object", "required": ["check", "reason", "by", "at", "kind"],
                 "properties": {"check": {"type": "string"}, "reason": {"type": "string"}, "by": {"type": "string"},
-                               "at": {"type": "string"}, "method": {"type": "string"}}}
+                               "at": {"type": "string"}, "method": {"type": "string"},
+                               "kind": {"enum": ["not_run", "switched_off", "removed"]}}}
     },
     "acceptance": {
       "type": "array",
@@ -161,7 +162,11 @@
         }
       }
     },
-    "removed_checks": {"type": "array", "items": {"type": "string"}, "description": "ran on the base, absent on the result"},
+    "removed_checks": {"type": "array", "items": {"type": "string"}, "description": "ran on the base, absent on the result under any name eitri can pair; each has a removed waiver (else no package)"},
+    "switched_off_checks": {"type": "array", "items": {"type": "string"}, "description": "ran on the base, switched off on the result (not run, or passing on a declaration with an input unset); each has a switched_off waiver (else no package)"},
+    "renamed_checks": {"type": "array", "description": "base names paired with result names (the same rule about the same ids, or the same name with a different bracket); compared as one check",
+                       "items": {"type": "object", "required": ["from", "to", "why"],
+                                 "properties": {"from": {"type": "string"}, "to": {"type": "string"}, "why": {"type": "string"}}}},
     "unplanned_changes": {"type": "array", "items": {"type": "string"}, "description": "parameters changed that the plan did not list"},
     "parameters": {
       "type": ["array", "null"],
@@ -180,7 +185,7 @@
     "not_checked": {
       "type": "array",
       "items": {"type": "object", "required": ["kind", "what", "why"],
-                "properties": {"kind": {"enum": ["plan", "human_verify", "waived", "removed_check", "domain", "scope"]},
+                "properties": {"kind": {"enum": ["plan", "human_verify", "waived", "removed_check", "switched_off", "domain", "scope"]},
                                "what": {"type": "string"}, "why": {"type": "string"}}}
     },
     "change_order": {

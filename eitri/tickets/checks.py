@@ -63,7 +63,7 @@ def normalise(result: dict) -> list[dict]:
         rows.append({"name": str(c.get("name", "check")), "status": status, "category": cat,
                      "measured": str(c.get("measured", "")), "expected": str(c.get("expected", "")),
                      "source": source_text(srcs) if srcs else _source(text, cat, kind), "sources": srcs,
-                     "rule": str(c.get("rule") or ""), "inputs_unset": unset})
+                     "rule": str(c.get("rule") or ""), "inputs_unset": unset, "refs": [str(x) for x in c.get("refs") or []]})
     if kind == "cad":
         for p in rep.get("parts") or []:
             name = p.get("name", "part")
@@ -88,6 +88,77 @@ def _issue_key(text: str) -> str:
     """A stable name for a geometry finding (its numbers removed, so the before/after table pairs the same finding)."""
     t = re.sub(r"\(?[-+]?\d+(?:\.\d+)?(?:e[-+]?\d+)?\)?", "#", text.split(" at ")[0])
     return re.sub(r"\s+", " ", t).strip()[:80]
+
+
+def is_finding(row: dict) -> bool:
+    """A CAD geometry finding (a thin wall, a free edge): a warning about the solid, not a check. It goes away when the design
+    is fixed, so its disappearing is never a lost check. "geometry valid: <part>" is a check."""
+    return row.get("category") == "geometry" and row["name"].startswith("geometry: ")
+
+
+def _ran(row: dict) -> bool:
+    return row["status"] != "not_run" and not row.get("inputs_unset")
+
+
+def _stem(name: str) -> str:
+    """The name without a trailing "(...)": "torque joint tilt (SG90)" -> "torque joint tilt" (the actuator in brackets changes
+    when the actuator does)."""
+    return re.sub(r"\s*\([^()]*\)\s*$", "", " ".join(name.lower().split()))
+
+
+def _same_check(x: dict, y: dict) -> str | None:
+    """Why y is x under a new name, or None: the same rule of the same domain about the same things (rule id and refs), or the
+    same name once a trailing "(...)" is dropped, in the same category."""
+    if x.get("rule") and x.get("rule") == y.get("rule") and x.get("rule") != "verify" and x.get("refs") and set(x["refs"]) == set(y.get("refs") or []):
+        return f"same rule {x['rule']} about {', '.join(x['refs'])}"
+    if x.get("category") == y.get("category") and _stem(x["name"]) == _stem(y["name"]) and _stem(x["name"]) != " ".join(x["name"].lower().split()):
+        return f"same check ({_stem(x['name'])}), its bracket changed"
+    return None
+
+
+def lost_checks(before: list[dict] | None, after: list[dict]) -> tuple[list[dict], list[dict]]:
+    """The checks the base ran that the result does not, and the renames that explain the rest.
+
+    lost: [{kind: "removed" | "switched_off", check, from, to, inputs, renamed_from}]
+      removed       a check of the base with no counterpart in the result (dropped, a verify() line deleted, or renamed in a
+                    way eitri cannot pair: a harness wire id changed); "check" is its name on the base
+      switched_off  it ran on the base (pass, warn or fail, no input unset) and on the result it is "not run" or passes on a
+                    declaration with an input unset (Actuator(travel_deg=None), continuous=True, a rating set to None); "check"
+                    is its name on the result
+    renamed: [{from, to, why}]: a removed name paired one to one with an added name (same rule about the same ids, or the same
+      name with a different bracket); those are compared as one check, so a rename that also switches it off is still caught.
+    Geometry findings are left out (is_finding). A new design (no base) loses nothing."""
+    if before is None:
+        return [], []
+    bmap = {r["name"]: r for r in before if not is_finding(r)}
+    amap = {r["name"]: r for r in after if not is_finding(r)}
+    gone = [n for n in bmap if n not in amap]
+    new = [n for n in amap if n not in bmap]
+    cands = {g: [n for n in new if _same_check(bmap[g], amap[n])] for g in gone}
+    claimed: dict[str, list[str]] = {}
+    for g, ns in cands.items():
+        for n in ns:
+            claimed.setdefault(n, []).append(g)
+    pairs = {g: ns[0] for g, ns in cands.items() if len(ns) == 1 and len(claimed[ns[0]]) == 1}
+    renamed = [{"from": g, "to": n, "why": _same_check(bmap[g], amap[n])} for g, n in pairs.items()]
+    lost: list[dict] = []
+    for g in gone:
+        if g not in pairs:
+            x = bmap[g]
+            lost.append({"kind": "removed", "check": g, "from": _brief(x), "to": None, "inputs": [], "renamed_from": None})
+    for name, x in bmap.items():
+        to = name if name in amap else pairs.get(name)
+        if to is None:
+            continue
+        y = amap[to]
+        if _ran(x) and not _ran(y):
+            lost.append({"kind": "switched_off", "check": to, "from": _brief(x), "to": _brief(y), "inputs": list(y.get("inputs_unset") or []),
+                         "renamed_from": name if to != name else None})
+    return lost, renamed
+
+
+def _brief(r: dict) -> dict:
+    return {k: r.get(k) for k in ("name", "status", "measured", "expected", "inputs_unset")}
 
 
 def counts(rows: list[dict]) -> dict:

@@ -3,6 +3,26 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
+## Unreleased: a removed or switched-off check blocks a ticket's change package
+
+### Changed
+
+- **`eitri package` refuses a check the base revision ran that the result lost.** REMOVED: the result has no such check
+  under any name eitri can pair (a deleted `verify()` line, an actuator taken off a joint). SWITCHED OFF: it ran on the
+  base with every input set, and on the result an input is unset, so it is "not run" or passes on a declaration:
+  `Actuator(travel_deg=None)`, the edit-model bench's Haiku evasion, and `travel_deg=None, continuous=True`, which before
+  this packaged as a clean pass. Before, a disappeared check only printed a warning on page 1, and a switched-off check was
+  an ordinary "not run".
+- Renamed checks are paired, not refused: the same rule about the same ids (`torque joint tilt (SG90)` ->
+  `torque joint tilt (MG996R)`), or the same name with a different bracket. `verify()` lines and ambiguous matches are never
+  paired. The pairs are listed in package.json `renamed_checks` and on page 1.
+- **`eitri ticket waive`** takes several check names, or `--lost` for every check the change removed or switched off. Each
+  waiver records its kind (`not_run`, `switched_off`, `removed`), worked out against the ticket's base. The package accepts a
+  loss only with a waiver of the same kind. The person sees each check and what happened to it before confirming. A failed
+  check is still never waived.
+- package.json: `switched_off_checks`, `renamed_checks`, `waivers[].kind`; `not_checked` kind `switched_off`.
+  `removed_checks` now lists only waived removals (a package with an unwaived one is not written).
+
 ## 0.9.1: no hosted service: eitri.io's web app and remote MCP server have closed
 
 eitri.io is now only the install line (`curl -fsSL https://eitri.io/install | sh`, which serves this repository's

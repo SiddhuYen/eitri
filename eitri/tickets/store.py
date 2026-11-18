@@ -540,35 +540,72 @@ def approve(project, tid: str | int, *, by: str | None = None, note: str = "", d
     return t
 
 
-def waive(project, tid: str | int, check: str, reason: str, *, by: str | None = None,
+WAIVER_KINDS = ("not_run", "removed", "switched_off")
+
+
+def waive(project, tid: str | int, check: str | Iterable[str], reason: str, *, by: str | None = None,
           confirm: Callable[[str, str], dict] = terminal_confirm, method: str = "cli-terminal") -> Ticket:
-    """A person waives one check that did not run, with a written reason (printed on the package's first page). A failed check
-    can never be waived: package refuses on it regardless."""
+    """A person accepts one or more checks that will not grade the result, with a written reason (printed on the package's
+    first page). Three kinds, told apart by comparing the last build with the ticket's base revision:
+
+        not_run       the check did not run in the last build (an input is unset), and it did not run on the base either
+        switched_off  it ran on the base and the edit switched it off (now "not run", or passing on a declaration with an
+                      input unset: travel_deg=None, continuous=True, a rating set to None)
+        removed       it ran on the base and the last build has no such check, not even under a new name eitri can pair
+
+    The package refuses each kind without a waiver of that kind. A failed check can never be waived: package refuses on it
+    regardless. One confirmation covers every check named (each gets its own signed record)."""
     require_person("eitri ticket waive")
     t = load(project, tid)
     if t.status not in WORK_STATES:
         raise TicketError(f"{t.id} is {t.status.replace('_', ' ')}: waivers are given on an approved ticket")
-    check, reason = str(check).strip(), str(reason).strip()
-    if not check:
+    names = [check] if isinstance(check, str) else list(check)
+    names = list(dict.fromkeys(str(c).strip() for c in names if str(c).strip()))
+    reason = str(reason).strip()
+    if not names:
         raise TicketError("name the check to waive, exactly as the report names it")
     if len(reason) < 15:
         raise TicketError("give a written reason (a sentence: why it is acceptable that this check does not run)")
-    last = _last_check_state(project, t, check)
-    if last == "fail":
-        raise TicketError(f"{check!r} FAILED in the last build: a failed check is never waived; fix the design")
-    if last in ("pass", "warn"):
-        raise TicketError(f"{check!r} ran in the last build ({last}); only a check that did not run can be waived")
-    if last == "missing":
-        raise TicketError(f"the last build has no check named {check!r}; name it exactly as the report does")
-    extra = confirm(f"Waive the check {check!r} on {t.id} ({t.data.get('title')}).\nReason: {reason}\n"
-                    "The waiver and its reason are printed on the first page of the change package.", f"waive {check!r}")
-    rec = {"check": check, "reason": reason, **_who(by), "at": now_iso(), "method": method, **(extra or {}),
-           "content_sha256": content_sha256(t.data)}
-    rec["signature"] = _SIGNER.sign({"ticket": t.id, "waiver": {k: v for k, v in rec.items() if k != "signature"}})
-    t.data["waivers"] = [w for w in (t.data.get("waivers") or []) if w.get("check") != check] + [rec]
+    state = _check_states(project, t)
+    kinds: dict[str, str] = {}
+    for name in names:
+        lost = state["lost"].get(name)
+        last = state["last"].get(name, "missing") if state["last"] is not None else None
+        if last == "fail":
+            raise TicketError(f"{name!r} FAILED in the last build: a failed check is never waived; fix the design")
+        if lost:
+            kinds[name] = lost["kind"]
+        elif last == "not_run":
+            kinds[name] = "not_run"
+        elif last in ("pass", "warn"):
+            raise TicketError(f"{name!r} ran in the last build ({last}); only a check that did not run, was switched off or "
+                              "was removed can be waived")
+        elif last == "missing":
+            raise TicketError(f"the last build has no check named {name!r}, and the base revision has none that is gone; "
+                              "name it exactly as the report does")
+        else:
+            raise TicketError(f"{name!r}: there is no build of {t.target_file} to look at; build it first")
+    what = {"not_run": "did not run", "switched_off": "RAN on the base revision and this change SWITCHED IT OFF",
+            "removed": "RAN on the base revision and is GONE from the result"}
+    lines = "\n".join(f"  - {n}: {what[kinds[n]]}" + (f" ({', '.join(state['lost'][n]['inputs'])} unset)" if state["lost"].get(n, {}).get("inputs") else "")
+                      for n in names)
+    extra = confirm(f"Waive {len(names)} check(s) on {t.id} ({t.data.get('title')}):\n{lines}\nReason: {reason}\n"
+                    "Each waiver, its kind and the reason are printed on the first page of the change package.",
+                    f"waive {names[0]!r}" if len(names) == 1 else f"waive {len(names)} checks")
+    for name in names:
+        rec = {"check": name, "kind": kinds[name], "reason": reason, **_who(by), "at": now_iso(), "method": method, **(extra or {}),
+               "content_sha256": content_sha256(t.data)}
+        rec["signature"] = _SIGNER.sign({"ticket": t.id, "waiver": {k: v for k, v in rec.items() if k != "signature"}})
+        t.data["waivers"] = [w for w in (t.data.get("waivers") or []) if w.get("check") != name] + [rec]
+        t.event("waived", **{("waiver_kind" if k == "kind" else k): v for k, v in rec.items() if k != "signature"})
     t.save()
-    t.event("waived", **{k: v for k, v in rec.items() if k != "signature"})
     return t
+
+
+def lost_since_base(project, t: Ticket) -> list[dict]:
+    """The checks the ticket's base revision ran that its last good build lost (removed or switched off), from the stored
+    builds: what `eitri ticket waive --lost` offers. The package recomputes it from fresh builds."""
+    return list(_check_states(project, t)["lost"].values())
 
 
 def verify_waiver(t: Ticket, w: dict) -> bool:
@@ -577,18 +614,23 @@ def verify_waiver(t: Ticket, w: dict) -> bool:
     return _SIGNER.verify({"ticket": t.id, "waiver": {k: v for k, v in w.items() if k != "signature"}}, w.get("signature", ""))
 
 
-def _last_check_state(project, t: Ticket, name: str) -> str | None:
-    """pass | warn | fail | not_run for a check in the target file's last good build, "missing" when that build has no such
-    check, None when there is no build to look at."""
-    from .checks import normalise
+def _check_states(project, t: Ticket) -> dict:
+    """{"last": {name: status} of the target file's last good build (None when there is none), "lost": {name: lost record}
+    against the base revision (eitri.tickets.checks.lost_checks)}."""
+    from .checks import lost_checks, normalise
     last = project.last_ok_revision(model=t.target_file) if t.target_file else None
     data = project.build_result(last) if last else None
     if not data:
-        return None
-    for row in normalise(data):
-        if row["name"] == name:
-            return row["status"]
-    return "missing"
+        return {"last": None, "lost": {}}
+    rows = normalise(data)
+    lost = {}
+    base_n = t.base_revision
+    base = next((h for h in project.revisions_of(t.target_file) if h.number == base_n and h.ok), None) if base_n is not None else None
+    base_data = project.build_result(base) if base is not None and base.number != last.number else None
+    if base_data:
+        found, _ = lost_checks(normalise(base_data), rows)
+        lost = {x["check"]: x for x in found}
+    return {"last": {r["name"]: r["status"] for r in rows}, "lost": lost}
 
 
 def close(project, tid: str | int, *, by: str | None = None, cancel: bool = False, note: str = "",
