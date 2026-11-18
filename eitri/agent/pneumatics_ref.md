@@ -43,8 +43,8 @@ c.step(name, "C1+", "C2-", until="B2", dwell_s=0)                one step of the
     ESTIMATED cycle time (valve response + stroke / mean speed + sensor + dwell: a lower bound) against cycles_per_min. A circuit
     with a control voltage or sensors and no sequence gets a "not run" notice. Outputs <name>.sequence.pdf/.svg (the
     displacement-step diagram with the coil signals) and <name>.sequence.md (the step table with times and assumptions).
-c.start(C1="retracted", C2="retracted")                          ALWAYS declare the idle / loading state of every sequenced cylinder:
-    the start-state check compares it with what its valve does at power-up with every coil off.
+c.start(C1="retracted", C2="retracted")                          ALWAYS declare the idle / loading state of every cylinder
+    (sequence or not): the start-state check compares it with what its valve does at power-up with every coil off.
 c.safeguard("C2", "restart reset", evidence="...", covers=("start", "air return"))   how a start or air-return move is made safe
     when the valve does not do it: measure two-hand control | interlocked guard | soft-start valve | dump valve | restart reset |
     other; evidence names the part, drawing or PLC rule that does it. The check then passes ON THE DECLARATION, prints it, and the
@@ -121,12 +121,12 @@ is used (the smallest of those sizes: valve 0.6, silencer 1.0, flow control 0.3)
   the air (a WARNING for "hold": SMC says it may not hold for long), exhaust releases, pressure extends; manual/pilot valves keep
   their position; on a loss of air every chamber joined to the supply or an exhaust loses its force, a spring returns a
   single-acting cylinder) against `on_power_loss=` / `on_air_loss=`. Not declared: "not run" (a warning naming what to declare).
-- start state, per sequenced cylinder: the declared c.start state (default retracted, said so) against the state its valves give
+- start state, per sequenced cylinder (no sequence: per cylinder with a declared c.start): the declared c.start state (default retracted, said so) against the state its valves give
   at power-up with every coil off and air on. A spring-return valve (or a 5/3 pressure centre) that drives it elsewhere: FAIL (it
   moves by itself at power-up or while the operator loads: plumb port 2 to the end the idle state needs, or declare a safeguard).
   A double-solenoid valve: WARNING (it holds whatever it was last switched to: unknowable at power-up, SMC M-E03-3-02 item 10). A
-  5/3 closed or exhaust centre: WARNING (it does not drive the cylinder; it lurches when first pressurised). No sequence: "not
-  run". A declared safeguard: pass on the declaration, listed for a person to verify.
+  5/3 closed or exhaust centre: WARNING (it does not drive the cylinder; it lurches when first pressurised). Neither a sequence
+  nor a c.start for a cylinder: "not run". A declared safeguard: pass on the declaration, listed for a person to verify.
 - air return, per cylinder: when air comes back after a loss with the power on, internally piloted valves shift to their
   commanded positions again and drive the cylinder from vented chambers, so it lurches (SMC M-E03-3-03 items 8, 11): a WARNING
   naming the steps, unless a soft-start / dump valve or a restart reset is declared (c.safeguard(..., covers="air return")).

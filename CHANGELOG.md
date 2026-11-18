@@ -3,6 +3,41 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
+## 0.9.2: pneumatics start-state and air-return checks
+
+> **A design that built clean on 0.9.1 can now FAIL.** If a pneumatic circuit declares a sequence (`c.step`), every sequenced
+> cylinder is now graded on what its valves do at power-up with every coil off. A spring-return valve that drives a cylinder
+> away from its idle state (`c.start`, default retracted) is a FAIL: at power-up, or while the operator loads the fixture, the
+> cylinder moves by itself. Fix it in the plumbing (port 2 to the end the idle state needs) or, if the design really has one,
+> declare the safeguard that covers it. A circuit with neither a sequence nor `c.start(...)` gets a "not run", and a combined
+> export or a ticket package is refused while a check has not run: declare each cylinder's idle state.
+
+### Added
+
+- **Start state** (rule `pneumatics.start-state`): each sequenced cylinder's idle state (`c.start`; the default, retracted, is
+  printed as such) is graded against its valves at power-up with every coil off and air on. Without a sequence, each cylinder
+  with a declared `c.start` is graded the same way; a cylinder with neither: NOT RUN. A
+  spring-return valve (or a 5/3 pressure centre) that drives it elsewhere: FAIL. A double-solenoid valve (it holds whatever it
+  was last switched to, unknowable at power-up; SMC M-E03-3-02 p.1 item 10): WARN. A 5/3 closed or exhaust centre (no drive; it
+  lurches when first pressurised; SMC M-E03-3-03 items 8, 12): WARN.
+- **Air return** (rule `pneumatics.air-return`): when air comes back after a loss with the power on, internally piloted valves
+  (SMC SY p.2, Festo VUVG 574371) shift back to their commanded positions and drive the cylinder from vented chambers, so it
+  lurches (SMC M-E03-3-03 p.1 items 8, 11; M-E03-3-01 item 3): WARN naming the steps.
+- **`c.safeguard(cylinder, measure, evidence, covers)`**: declares how a start or air-return move is made safe where the valve
+  does not do it (two-hand control, interlocked guard, soft-start valve, dump valve, restart reset, other), with evidence naming
+  the part, drawing or PLC rule. Either check then passes on the declaration, prints it as its basis, and the build lists it
+  under "For a person to verify" (report `to_verify`). Nothing checks that the declared measure exists.
+- Both checks say what they are: design rules on the valve states, not an ISO 12100 risk assessment or ISO 13849 validation.
+
+### Changed
+
+- `examples/pneumatic-clamp-fixture`: idle states declared; a PLC restart reset declared for the double-solenoid clamp (written
+  in DESIGN.md; nothing in the example implements it); air return stays a warning (the catalogue has no soft-start or dump
+  valve yet). 89 pass, 3 warn, 0 fail.
+- `eitri/demos/air-clamp` and the combined `robot-arm` demo's `pneu.py` declare their idle state (`c.start(C1="extended")`: the
+  clamp's valve at rest feeds the cap end, so it rests shut and opens only while the coil is on). air-clamp: 26 pass, 2 warn
+  (estimated flow data; air return). robot-arm pneu.py: 24 pass, 4 warn (the two force ratios, air return, flow data).
+
 ## 0.9.1: no hosted service: eitri.io's web app and remote MCP server have closed
 
 eitri.io is now only the install line (`curl -fsSL https://eitri.io/install | sh`, which serves this repository's

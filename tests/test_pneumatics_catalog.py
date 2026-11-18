@@ -719,7 +719,20 @@ def test_start_state_not_run_without_a_sequence():
     c = _seq_circuit(dict(cls="5/2", returns="spring"))
     c.sequence.clear()
     nr = one(analyze(c), "start state")
-    assert status_of(nr) == "not_run" and nr.not_run == ["c.step"] and "no step sequence is declared" in nr.measured
+    assert status_of(nr) == "not_run" and nr.not_run == ["c.start"] and "neither a step sequence nor an idle state" in nr.measured
+    assert "C1" in nr.measured
+    # no sequence, but the idle state declared: graded on c.start alone (a combined export / package is not held up by a not-run)
+    for cap_port, start, sev in (("2", "retracted", "fail"), ("2", "extended", "pass"), ("4", "retracted", "pass")):
+        c2 = _seq_circuit(dict(cls="5/2", returns="spring"), cap_port=cap_port, start=start)
+        c2.sequence.clear()
+        rep = analyze(c2)
+        assert _st(c2).severity == sev and "declared c.start" in _st(c2).measured, (cap_port, start)
+        assert not [x for x in rep.checks if x.name == "start state"]
+    # a double-solenoid valve with no sequence: a warning (its last position is unknowable), not a crash
+    c3 = _seq_circuit(dict(cls="5/2", returns="solenoid"), start="retracted")
+    c3.sequence.clear()
+    d = _st(c3)
+    assert d.severity == "warn" and "no sequence is declared" in d.measured
     with pytest.raises(PneumaticsError, match="evidence"):
         c.safeguard("C1", "interlocked guard", " ")
     with pytest.raises(PneumaticsError, match="measure"):

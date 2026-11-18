@@ -134,7 +134,7 @@ def test_cylinder_force_and_consumption():
 
 def test_good_pusher_passes():
     rep = analyze(pusher(load=200))
-    # the only warnings: no sequence (start state not run) and no soft-start valve (C1 lurches when air returns, SMC M-E03-3-03 item 8)
+    # the only warnings: no sequence or idle state (start state not run) and no soft-start valve (C1 lurches when air returns, SMC M-E03-3-03 item 8)
     assert rep.ok and {w.name for w in rep.warnings} == {"start state", "air return C1"}, summarize(rep)
     cy = rep.cylinders[0]
     assert cy.pressure_bar == 6.0 and cy.strokes[0].usable_N == pytest.approx(434.3, abs=0.2) and cy.strokes[0].status == "pass"
@@ -389,7 +389,8 @@ def test_air_clamp_demo():
     lm = load_model(demo)
     c = lm.build()
     rep = analyze(c, lm.verify(c))
-    assert rep.ok and sorted(w.name for w in rep.warnings) == ["air return C1", "flow data estimated", "start state"], summarize(rep)
+    assert rep.ok and sorted(w.name for w in rep.warnings) == ["air return C1", "flow data estimated"], summarize(rep)
+    assert one(rep, "start state C1").severity == "pass"      # idle shut (c.start), and V1 at rest keeps it shut
     fast = load_model(demo, config="fast")
     cf = fast.build()
     assert one(analyze(cf), "speed C1 extend").severity == "fail"

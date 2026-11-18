@@ -717,14 +717,20 @@ def _start_state_checks(c: Circuit, infos: list[CylinderInfo]) -> list[Check]:
     out: list[Check] = []
     tag = f" [{failsafe.DISCLAIMER}]"
     p = seq.plan(c, infos) if c.sequence else None
-    if p is None:
-        if c.cylinders:
-            out.append(switched_off(_check("fail-safe", "start state", "warn",
-                                           "no step sequence is declared, so the cylinders' start state (the idle / loading step) is not graded against "
-                                           "the state their valves give at power-up", "c.step(...) and c.start(...)", [cy.name for cy in c.cylinders]),
-                                    "c.step"))
     sequenced = list(dict.fromkeys(m for st in c.sequence for m, _mv in st.moves))
-    for name in sequenced:
+    if p is None:                                       # no sequence: grade the cylinders whose idle state is declared (c.start)
+        graded = [cy.name for cy in c.cylinders if cy.name in c.start_state]
+        undeclared = [cy.name for cy in c.cylinders if cy.name not in c.start_state]
+        if undeclared:
+            out.append(switched_off(_check("fail-safe", "start state", "warn",
+                                           f"neither a step sequence nor an idle state is declared for {', '.join(undeclared)}, so "
+                                           f"{'its' if len(undeclared) == 1 else 'their'} start state (the idle / loading position) is not "
+                                           "graded against the state the valves give at power-up",
+                                           "c.start(C1='retracted' | 'extended', ...) for every cylinder, or c.step(...)", undeclared),
+                                    "c.start"))
+    else:
+        graded = sequenced
+    for name in graded:
         cyl = c.components[name]
         start = c.start_state.get(name, "retracted")
         how_start = "declared c.start" if name in c.start_state else "c.start default"
@@ -743,6 +749,11 @@ def _start_state_checks(c: Circuit, infos: list[CylinderInfo]) -> list[Check]:
             what = (f"{name} starts {start} ({how_start}) but with every coil off and air on its valves drive it to {st} ({how}): at power-up, or "
                     f"while the operator loads, it moves to {st} by itself")
             sev = "fail"
+        elif kind == "held" and p is None:
+            what = (f"{name} starts {start} ({how_start}); its double-solenoid valve has no rest position: at power-up it is in the last position "
+                    "it was switched to, which the design cannot know (no sequence is declared to say where a normal cycle leaves it; SMC "
+                    "M-E03-3-02 p.1 item 10)")
+            sev = "warn"
         elif kind == "held":
             what = (f"{name} starts {start} ({how_start}); its double-solenoid valve has no rest position: at power-up it is in the last position "
                     f"it was switched to, which the design cannot know. After a normal cycle end it drives {name} to {st}; after an interrupted "
