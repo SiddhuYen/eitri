@@ -211,7 +211,7 @@ def test_other_domains_list_their_switched_off_checks():
     pc.tube("T2", v["2"], cyl["CAP"], id_mm=6, length_m=1, C=2.0)
     pc.silencer(v["3"], C=1, b=0.3)
     inputs = sorted(i for x in p_analyze(pc).to_dict()["checks_not_run"] for i in x["inputs"])
-    assert inputs == ["AIR.flow_l_min", "C1.on_air_loss", "C1.on_power_loss", "C1.spring_N", "c.step"]   # + the start-state check (no sequence)       # + the fail-safe declarations (pneu-catalog)
+    assert inputs == ["AIR.flow_l_min", "C1.on_air_loss", "C1.on_power_loss", "C1.spring_N", "c.start"]   # + the start-state check (no sequence, no c.start)       # + the fail-safe declarations (pneu-catalog)
 
     from eitri.harness import Connector, Harness, Wire
     from eitri.harness.report import analyze as h_analyze
