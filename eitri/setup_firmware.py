@@ -6,7 +6,8 @@ arduino:avr core (Uno, Nano) and the Servo library, and with --esp32 add Espress
 esp32:esp32 and ESP32Servo. Steps already done are skipped. Then a one-line test sketch is compiled for each
 board family, so you know the firmware check will work.
 
-Installing arduino-cli itself always asks first (or needs --yes). --dry-run prints every command and runs
+Installing arduino-cli itself always asks first on the terminal (or needs --yes). Without a terminal (an agent's
+shell: stdin not a TTY, no /dev/tty) it never waits: the answer is no unless --yes. --dry-run prints every command and runs
 nothing that changes the machine (it only asks the existing arduino-cli what is already installed).
 eitri never uploads to a board; neither does this.
 """
@@ -21,6 +22,7 @@ from pathlib import Path
 from typing import Callable
 
 ESP32_INDEX = "https://espressif.github.io/arduino-esp32/package_esp32_index.json"
+BREW_PLACES = ("/opt/homebrew/bin/brew", "/usr/local/bin/brew")
 ARDUINO_INSTALL_SH = "https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh"
 
 Runner = Callable[[list[str], bool], "tuple[int, str]"]
@@ -61,7 +63,7 @@ def _first_column(listing: str) -> set[str]:
 
 def install_command() -> tuple[list[str] | None, str]:
     """How to install arduino-cli here: (command, description) or (None, why not)."""
-    brew = shutil.which("brew") or next((b for b in ("/opt/homebrew/bin/brew", "/usr/local/bin/brew") if Path(b).is_file()), None)
+    brew = shutil.which("brew") or next((b for b in BREW_PLACES if Path(b).is_file()), None)
     if sys.platform == "darwin" and brew:
         return [brew, "install", "arduino-cli"], "Homebrew"
     if shutil.which("curl") and shutil.which("sh"):
@@ -128,7 +130,8 @@ def run_setup_firmware(esp32: bool = False, dry_run: bool = False, yes: bool = F
             + ("" if dry_run else f":\n    {' '.join(cmd)}"))
         if not dry_run:
             if not (yes or ask("Install arduino-cli now?")):
-                say("not installed. Run that command yourself, or `eitri setup firmware --yes`, then run this again.")
+                say("not installed. Run that command yourself, or `eitri setup firmware --yes` (needed when there is no terminal "
+                    "to ask on, as in an agent's shell), then run this again.")
                 return 1
             if not step(cmd, "installing arduino-cli"):
                 return 1

@@ -52,3 +52,6 @@ Open the skill you picked (**combined**, or **cad**, **wires**, **motion**, **pn
 **electronics**) and follow it. Two rules hold everywhere:
 - Never finish while a check fails or did not run. Fix the design, never the check.
 - Never finish without looking at the latest review image or view.
+- A firmware `compiles (arduino-cli)` check that says "compiler unavailable" means arduino-cli is missing: install it
+  yourself with `eitri setup firmware -y` after one line telling the user what it installs (the **combined** and
+  **firmware** skills say how), rather than asking the user to run it.

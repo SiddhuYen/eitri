@@ -177,7 +177,8 @@ def test_installer_plugin_flag_needs_0_9(tmp_path, version, ok):
     rc, out, err = _installer(tmp_path, version, combined=ok)
     if ok:
         assert rc == 0 and "PLUGIN plugin install" in out, out + err
-        assert "Done. Now run   claude" in out and "login" not in out and "token" not in out.replace("no token", "")
+        assert "login" not in out and "token" not in out.replace("no token", "")
+        assert "Done. Now run" not in out and "setup firmware" not in out   # the closing lines come from `eitri plugin install` only
     else:
         assert rc == 1 and "PLUGIN" not in out
         assert "needs eitri 0.9.0 or newer" in err and "eitri 0.8.1" in err
@@ -293,6 +294,34 @@ def test_eitri_mcp_speaks_stdio(tmp_path):
 
 
 # ------------------------------------------------------------------------------------------------ install / login
+def test_install_says_done_once_and_to_start_a_new_session(home, capsys):
+    """The closing lines of `eitri plugin install`: what to run, and that an open Claude Code session must be restarted (a
+    plugin installed during a session does not load in it)."""
+    assert PI.run_install(["claude"]) == 0
+    out = capsys.readouterr().out
+    assert out.count("Done. Now run  claude") == 1
+    assert "If Claude Code is already open, start a new session" in out and "setup firmware" not in out
+
+
+def test_skills_install_arduino_cli_themselves():
+    """A firmware compile that says "compiler unavailable": the plugin's agent tells the person in one line and runs
+    `eitri setup firmware -y` itself (the host still asks before running it); it no longer stops for the person to type it.
+    The app's own firmware prompt is unchanged: `eitri web`'s Claude has no shell."""
+    skills = ROOT / "eitri" / "plugin_bundle" / "skills"
+    for name in ("combined", "firmware"):
+        text = " ".join((skills / name / "SKILL.md").read_text(encoding="utf-8").split())
+        assert "run `eitri setup firmware -y` in your shell (Bash) with a 10-minute timeout" in text, name
+        assert "about 65 MB" in text and "Add `--esp32`" in text and "1.2 GB" in text, name
+        assert "show the user its error and the steps by hand" in text, name
+        assert "it's their call" not in text and "ask the user to run" not in text, name
+    design = " ".join((skills / "design" / "SKILL.md").read_text(encoding="utf-8").split())
+    assert "install it yourself with `eitri setup firmware -y`" in design
+    assert "setup firmware" not in (ROOT / "eitri" / "agent" / "firmware_prompt.md").read_text(encoding="utf-8")
+    from eitri_suite.workspace import HINTS
+    hint = dict(HINTS)["compiles"]
+    assert "run `eitri setup firmware -y` yourself" in hint and "the person runs" not in hint
+
+
 def test_install_everywhere_and_uninstall(home):
     assert PI.run_install(cursor_rules=str(home / "proj")) == 0
     copy = home / ".local" / "share" / "eitri" / "plugin"

@@ -55,6 +55,20 @@ task that spans domains belongs in the combined workspace instead).
 """
 
 
+# plugin-only notes per skill, after the preamble: the app's prompts are shared with `eitri web`, whose Claude has no shell
+_PLUGIN_NOTES = {
+    "firmware": """**arduino-cli in this plugin.** When the `compiles (arduino-cli)` check fails with "compiler unavailable", install it
+yourself instead of stopping to ask the user to: say in one visible line what it installs ("Installing arduino-cli and the
+Arduino AVR board core, about 65 MB, with Homebrew if you have it, else Arduino's official script into ~/.local/bin"), then
+run `eitri setup firmware -y` in your shell (Bash) with a 10-minute timeout, then `rebuild()`. Add `--esp32` for an ESP32 board, and say
+that one is about 1.2 GB (run it in the background). Your host still asks the user before the command runs, so it stays
+their decision. If it fails, show the user its error and the steps by hand from the check's measured text. It is once per
+machine, and it never uploads to a board.
+
+""",
+}
+
+
 def domain_skill(name: str) -> str:
     kind, prompt_file, ref, desc = DOMAINS[name]
     text = (_AGENT / prompt_file).read_text(encoding="utf-8").strip()
@@ -67,7 +81,8 @@ def domain_skill(name: str) -> str:
              "firmware": "firmware", "electronics": "electronics"}[kind]
     front = f"---\nname: {name}\ndescription: {json.dumps(desc)}\n---\n\n"
     tickets = (_AGENT / "tickets_prompt.md").read_text(encoding="utf-8").strip()
-    return front + _PREAMBLE.format(title=title, kind=kind if kind != "cad" else "CAD", ref=ref) + text + "\n\n" + tickets + "\n"
+    return (front + _PREAMBLE.format(title=title, kind=kind if kind != "cad" else "CAD", ref=ref) + _PLUGIN_NOTES.get(name, "")
+            + text + "\n\n" + tickets + "\n")
 
 
 def cursor_rule() -> str:

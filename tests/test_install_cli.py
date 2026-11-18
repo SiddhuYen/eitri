@@ -267,10 +267,92 @@ def test_setup_firmware_asks_before_installing_arduino_cli(monkeypatch, tmp_path
 
 
 def test_install_hint_points_at_setup():
+    """The failed compile check's text: the exact command (with -y, so it runs in an agent's shell with no terminal), that
+    an agent may run it itself after telling the person what it installs, and the steps by hand for a person."""
     from eitri.firmware.compile import install_hint
-    assert "`eitri setup firmware`" in install_hint("arduino:avr")
-    assert "`eitri setup firmware --esp32`" in install_hint("esp32:esp32")
-    assert "arduino-cli core install arduino:avr" in install_hint("arduino:avr")
+    avr, esp = install_hint("arduino:avr"), install_hint("esp32:esp32")
+    assert "eitri setup firmware -y` installs it" in avr and "--esp32" not in avr
+    assert "eitri setup firmware -y --esp32` installs it" in esp
+    assert "An agent with a shell may run that command itself: first tell the person in one line what it installs" in avr
+    assert "about 65 MB" in avr and "about 1.2 GB" in esp and "10-minute timeout" in avr
+    assert "arduino-cli core install arduino:avr" in avr and "brew install arduino-cli" in avr          # by hand, for a person
+    assert "package_esp32_index.json" in esp
+
+
+def test_install_hint_names_eitri_by_full_path_when_it_is_not_on_path(monkeypatch, tmp_path):
+    """The plugin's server may run ~/.local/bin/eitri for an agent whose PATH lacks it: the command must run as written."""
+    from eitri.firmware import compile as C
+    monkeypatch.setattr(C.shutil, "which", lambda name: None)
+    monkeypatch.setattr(C.sys, "executable", str(tmp_path / "venv" / "bin" / "python"))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert C.setup_command("arduino:avr") == "eitri setup firmware -y"               # nothing found: the plain name
+    (tmp_path / ".local" / "bin").mkdir(parents=True)
+    exe = tmp_path / ".local" / "bin" / "eitri"
+    exe.write_text("#!/bin/sh\n")
+    exe.chmod(0o755)
+    assert C.setup_command("esp32:esp32") == f"{exe} setup firmware -y --esp32"
+    monkeypatch.setattr(C.shutil, "which", lambda name: "/usr/bin/" + name)
+    assert C.setup_command("arduino:avr") == "eitri setup firmware -y"
+
+
+_FAKE_CLI = """#!/bin/sh
+case "$1" in
+  version) echo "arduino-cli  Version: 9.9.9 Commit: fake";;
+  core) case "$2" in list) echo "ID Installed Latest Name";; *) echo "fake core $2";; esac;;
+  lib) case "$2" in list) echo "Name Installed";; *) echo "fake lib $2";; esac;;
+  compile) echo "Sketch uses 924 bytes (2%) of program storage space. Maximum is 32256 bytes.";;
+esac
+exit 0
+"""
+
+
+def _setup_without_terminal(tmp_path, args, via="script"):
+    """`eitri setup firmware ARGS` the way an agent's Bash tool runs it: stdin /dev/null, no controlling terminal (a new
+    session, so /dev/tty cannot open), a fresh HOME and a PATH without arduino-cli. Installing arduino-cli goes through a
+    stand-in `curl` (Arduino's install script, into ~/.local/bin) or a stand-in `brew`; they write a fake arduino-cli."""
+    import subprocess
+    tools, home = tmp_path / "tools", tmp_path / "home"
+    tools.mkdir()
+    home.mkdir()
+    (tmp_path / "fake-arduino-cli").write_text(_FAKE_CLI)
+    if via == "script":   # what `curl ... install.sh` prints is a script that `sh` runs with BINDIR set
+        (tools / "curl").write_text(f'#!/bin/sh\necho \'mkdir -p "$BINDIR" && cp "{tmp_path}/fake-arduino-cli" "$BINDIR/arduino-cli" '
+                                    f'&& chmod +x "$BINDIR/arduino-cli" && echo installed into "$BINDIR"\'\n')
+    else:
+        (tools / "brew").write_text(f'#!/bin/sh\n[ "$1 $2" = "install arduino-cli" ] || exit 2\n'
+                                    f'cp "{tmp_path}/fake-arduino-cli" "{tools}/arduino-cli" && chmod +x "{tools}/arduino-cli"\n')
+    for f in tools.iterdir():
+        f.chmod(0o755)
+    code = ("import sys, eitri.setup_firmware as s, eitri.firmware.compile as c\n"
+            "s.BREW_PLACES = (); c.CLI_PLACES = ()\n"
+            f"from eitri.cli import main\nsys.exit(main(['setup', 'firmware'] + {args!r}))\n")
+    env = {"HOME": str(home), "PATH": f"{tools}:/usr/bin:/bin", "PYTHONPATH": str(ROOT), "EITRI_TELEMETRY": "off",
+           "EITRI_LAZY_IMPORT": "1", "LANG": "en_US.UTF-8"}
+    return subprocess.run([sys.executable, "-c", code], stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                          encoding="utf-8", env=env, cwd=str(home), start_new_session=True, timeout=300, check=False), home, tools
+
+
+@pytest.mark.parametrize("via", ["script", pytest.param("brew", marks=pytest.mark.skipif(
+    sys.platform != "darwin", reason="Homebrew is the Mac route; elsewhere it is Arduino's script"))])
+def test_setup_firmware_yes_runs_without_a_terminal(tmp_path, via):
+    """`eitri setup firmware -y` in an agent's shell: no prompt, no wait, exit 0, a clear last line (0.8.0 shipped a /dev/tty
+    bug that only real use showed). Both ways of installing arduino-cli; the test compile runs against the fake."""
+    p, home, tools = _setup_without_terminal(tmp_path, ["-y"], via)
+    assert p.returncode == 0, p.stdout + p.stderr
+    out = p.stdout
+    assert ("Arduino's install script" if via == "script" else "Homebrew") in out and "[y/N]" not in out + p.stderr
+    assert "core install arduino:avr" in out and "lib install Servo" in out and "ok   compiled a test sketch for arduino:avr:uno" in out
+    assert out.strip().splitlines()[-1].startswith("firmware is ready: firmware builds now compile their sketch with arduino-cli")
+    cli = (home / ".local" / "bin" / "arduino-cli") if via == "script" else (tools / "arduino-cli")
+    assert cli.is_file()
+
+
+def test_setup_firmware_without_yes_and_without_a_terminal_says_no_at_once(tmp_path):
+    """No -y and no terminal to ask on: nothing is installed, it does not wait for an answer, and it says to add --yes."""
+    t0 = time.time()
+    p, home, _tools = _setup_without_terminal(tmp_path, [])
+    assert p.returncode == 1 and "`eitri setup firmware --yes` (needed when there is no terminal" in p.stdout, p.stdout + p.stderr
+    assert not (home / ".local" / "bin" / "arduino-cli").exists() and time.time() - t0 < 240
 
 
 def _plugin_step(tmp_path, install_out: str, install_rc: int):
@@ -307,5 +389,7 @@ def test_installer_plugin_step_with_no_agent_app_exits_0(tmp_path, rc):
 def test_installer_plugin_step_keeps_exit_1_for_a_real_failure(tmp_path):
     p = _plugin_step(tmp_path, "  FAIL Claude Code: claude plugin install failed", 1)
     assert p.returncode == 1 and "could not be registered" in p.stderr
-    ok = _plugin_step(tmp_path, "  ok   Claude Code: installed", 0)
-    assert ok.returncode == 0 and "Done. Now run   claude" in ok.stdout and "login" not in ok.stdout
+    ok = _plugin_step(tmp_path, "  ok   Claude Code: installed\n\nDone. Now run  claude  and ask it for a machine", 0)
+    assert ok.returncode == 0 and "login" not in ok.stdout
+    assert ok.stdout.count("Done. Now run") == 1            # `eitri plugin install` says it; the script does not say it again
+    assert "setup firmware" not in ok.stdout                 # the agent installs arduino-cli itself when a design needs it

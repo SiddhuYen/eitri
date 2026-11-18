@@ -396,6 +396,9 @@ def run_install(agents: list[str] | None = None, cursor_rules: str | None = None
         print(("Done. Now run  claude  and ask it for a machine" if first == "claude" else
                "Done. Restart your agent and ask it for a machine") +
               ", for example: \"design a desk robot arm with three MG996R servos and an Arduino Uno, powered from a 5 V supply\".")
+        if first == "claude":
+            print("If Claude Code is already open, start a new session (quit it and run  claude  again): a plugin installed "
+                  "during a session does not load in that session.")
     return 0 if ok_all else 1
 
 

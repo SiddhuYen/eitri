@@ -38,6 +38,24 @@ annotated tags (`git show v0.4.0`).
   clamp's valve at rest feeds the cap end, so it rests shut and opens only while the coil is on). air-clamp: 26 pass, 2 warn
   (estimated flow data; air return). robot-arm pneu.py: 24 pass, 4 warn (the two force ratios, air return, flow data).
 
+- **The plugin's agent installs arduino-cli itself.** On a first firmware project the `compiles (arduino-cli)` check said
+  "compiler unavailable" and Claude stopped and asked the person to type `eitri setup firmware`, which happened on nearly
+  every first project. The combined, firmware and design skills, the combined workspace's next step and the check's own text now
+  tell the agent to say in one line what it installs (arduino-cli and the Arduino AVR board core, about 65 MB, with Homebrew
+  if the Mac has it, else Arduino's official script into ~/.local/bin; the ESP32 core is about 1.2 GB), run
+  `eitri setup firmware -y` (with `--esp32` for an ESP32) with a 10-minute timeout, and build again; if it fails, show its
+  error and the steps by hand, which the check still lists. The agent's host still asks the person before the command runs.
+  The check names eitri by its full path when `eitri` is not on PATH. `eitri web`'s own Claude has no shell, so its prompt
+  is unchanged and the person runs the command there.
+- `eitri setup firmware` without `--yes` and without a terminal (an agent's shell) says at once that `--yes` is needed, and
+  does not wait. With `-y` it was already prompt-free; it is now tested that way: stdin `/dev/null`, no controlling terminal,
+  both the Homebrew and Arduino install-script routes.
+- **The installer's closing lines.** `curl -fsSL https://eitri.io/install | sh -s -- --plugin` printed "Done. Now run claude"
+  twice (once from `eitri plugin install`, once from the script) and told the person to run `eitri setup firmware`
+  themselves. It now prints it once, from `eitri plugin install`, which also says to start a new Claude Code session if one
+  is open (a plugin installed during a session does not load in it). The app route (no `--plugin`) still names
+  `eitri setup firmware`.
+
 ### Fixed
 
 - **The plugin's two anonymous counts (install, project created) never reached eitri.io from some macOS Pythons.** The ping
@@ -55,6 +73,9 @@ annotated tags (`git show v0.4.0`).
 
 - The test suite keeps the plugin's data folder (`XDG_DATA_HOME`) per test too: on a machine with the plugin installed,
   `test_run_update` read the real `plugin-installed.json`.
+- `eitri setup firmware -y` runs in a subprocess the way an agent's Bash tool does (stdin `/dev/null`, a new session so
+  `/dev/tty` cannot open, a fresh HOME) through stand-in `curl` and `brew` commands, and must exit 0 with its "firmware is
+  ready" last line; without `-y` it must refuse at once.
 
 ## 0.9.1: no hosted service: eitri.io's web app and remote MCP server have closed
 

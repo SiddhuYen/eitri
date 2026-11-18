@@ -201,14 +201,11 @@ eitri_install() {
         err "the plugin could not be registered in every agent app (see the lines above); fix that and run: $eitri plugin install"
         exit 1 ;;
     esac
-    say ""
+    # `eitri plugin install` printed the closing "Done. Now run claude ..." lines (and the new-session note) above: not again
     if [ "$on_path" = "0" ]; then
-      say "Open a new terminal first (eitri was added to your PATH), then:"
+      say ""
+      say "eitri was added to your PATH: open a new terminal before you run claude."
     fi
-    say "Done. Now run   claude   and ask it for a machine, for example:"
-    say "      \"design a desk robot arm with three MG996R servos and an Arduino Uno, powered from a 5 V supply\""
-    say "      Everything runs on this computer: no account, no token, no API key (Claude Code uses your own subscription)."
-    say "      Firmware compile checks need arduino-cli once:  eitri setup firmware"
     return 0
   fi
 

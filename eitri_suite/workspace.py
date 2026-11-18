@@ -781,8 +781,10 @@ HINTS = [
      "(\"YAW\": \"UNO.D9\")."),
     ("declared checks are kept", "This build declares fewer cross-domain items (routes, mating faces, coupled links, mapped pins) than an earlier one: "
      "put them back. A declared check cannot be deleted to make it pass; fix the design instead."),
-    ("compiles", "The sketch does not compile: the measured text is the compiler's error (\"compiler unavailable\": the person runs "
-     "`eitri setup firmware` once to install arduino-cli)."),
+    ("compiles", "The sketch does not compile: the measured text is the compiler's error. \"compiler unavailable\" means arduino-cli or the "
+     "board core is missing: tell the person in one line what it installs (arduino-cli and the board core, about 65 MB; the ESP32 core "
+     "about 1.2 GB), run `eitri setup firmware -y` yourself (add --esp32 for an ESP32 board) with a 10-minute timeout, then build again; "
+     "if it fails, show its error and the steps by hand from the measured text."),
     ("torque", "A joint's torque margin fails: shorten the links, lighten the parts it carries, lower the payload or pick a stronger actuator "
      "(the check names the joint and the pose)."),
     ("reach", "A target is out of reach: lengthen the links, move the target, or widen the joint limits."),

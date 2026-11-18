@@ -46,8 +46,13 @@ version to sign in to: everything runs here.
 
 ## Notes
 
-- A firmware file's `compiles (arduino-cli)` check fails with "compiler unavailable" until arduino-cli is installed: ask the
-  user to run `eitri setup firmware` once in a terminal (it installs system software, so it's their call), then rebuild.
+- A firmware file's `compiles (arduino-cli)` check fails with "compiler unavailable" until arduino-cli is installed. Install
+  it yourself, don't stop and ask the user to: say in one visible line what it installs ("Installing arduino-cli and the
+  Arduino AVR board core, about 65 MB, with Homebrew if you have it, else Arduino's official script into ~/.local/bin"),
+  then run `eitri setup firmware -y` in your shell (Bash) with a 10-minute timeout, then `combined_build` again. Add `--esp32` when the
+  project uses an ESP32, and say that one is about 1.2 GB (run it in the background). Your host still asks the user before the
+  command runs, so it stays their decision. If it fails, show the user its error and the steps by hand from the check's
+  measured text. Run it once per machine, not per project; it never uploads to a board.
 - Results give each failing check's numbers and source. Quote them to the user when you explain a change.
 - Work in visible stages on a big machine: get the structure and motion right first, then wiring and power, then
   firmware, then the circuit. Build after each stage and say in one line what you are adding.

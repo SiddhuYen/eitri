@@ -11,13 +11,16 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 TIMEOUT_S = 300.0
+CLI_PLACES = ("/opt/homebrew/bin/arduino-cli", "/usr/local/bin/arduino-cli")   # Homebrew's, besides ~/.local/bin
 _DIAG = re.compile(r"^(?P<file>[^:\n]+?):(?P<line>\d+):(?:(?P<col>\d+):)?\s*(?P<kind>error|warning|fatal error):\s*(?P<msg>.*)$", re.M)
 _SIZE = re.compile(r"Sketch uses (\d+) bytes \((\d+)%\) of program storage space")
 _RAM = re.compile(r"Global variables use (\d+) bytes \((\d+)%\) of dynamic memory")
@@ -48,18 +51,44 @@ def find_cli() -> str | None:
     if found:
         return found
     # where `eitri setup firmware` (and Homebrew) put it, for an eitri started without them on PATH
-    for cand in (Path.home() / ".local" / "bin" / "arduino-cli", Path("/opt/homebrew/bin/arduino-cli"), Path("/usr/local/bin/arduino-cli")):
+    for cand in [Path.home() / ".local" / "bin" / "arduino-cli"] + [Path(c) for c in CLI_PLACES]:
         if cand.is_file() and os.access(cand, os.X_OK):
             return str(cand)
     return None
 
 
+# measured 2026-11-18 on a clean HOME (reports/2026-11-18-agent-setup-firmware.md): arduino-cli + arduino:avr + Servo is about
+# 65 MB to download and 450 MB on disk, 1 to 2 minutes; the ESP32 core is about 1.2 GB to download (Espressif's index, 3.3.13)
+SETUP_WHAT = {"avr": "arduino-cli and the Arduino AVR board core, about 65 MB to download, 1 to 2 minutes",
+              "esp32": "arduino-cli and the ESP32 board core, about 1.2 GB to download, often over 10 minutes"}
+
+
+def _eitri() -> str:
+    """`eitri`, or its full path when it is not on PATH (the plugin's server may run ~/.local/bin/eitri from an agent whose
+    PATH lacks it): the command in the message must run as written in the agent's shell."""
+    if shutil.which("eitri"):
+        return "eitri"
+    for cand in (Path(sys.executable).parent / "eitri", Path.home() / ".local" / "bin" / "eitri"):
+        if cand.is_file() and os.access(cand, os.X_OK):
+            return shlex.quote(str(cand))
+    return "eitri"
+
+
+def setup_command(core: str) -> str:
+    return f"{_eitri()} setup firmware -y" + (" --esp32" if core.startswith("esp32") else "")
+
+
 def install_hint(core: str) -> str:
-    setup = "`eitri setup firmware --esp32`" if core.startswith("esp32") else "`eitri setup firmware`"
-    return (f"run {setup} (it installs arduino-cli and the board core), or by hand: install arduino-cli (https://arduino.github.io/arduino-cli/latest/installation/: "
+    """What a failed compile check says when arduino-cli or the core is missing: read by an agent and by a person."""
+    esp = core.startswith("esp32")
+    what = SETUP_WHAT["esp32" if esp else "avr"]
+    return (f"`{setup_command(core)}` installs it ({what}; with Homebrew if the Mac has it, else Arduino's official install script into "
+            f"~/.local/bin). An agent with a shell may run that command itself: first tell the person in one line what it installs, "
+            f"give the command a 10-minute timeout{' (or run it in the background)' if esp else ''}, then rebuild; if it fails, show "
+            f"its error and the steps by hand below. By hand: install arduino-cli (https://arduino.github.io/arduino-cli/latest/installation/: "
             f"`curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh`, or `brew install arduino-cli`), then "
             f"`arduino-cli core update-index && arduino-cli core install {core}`" + (" (add the ESP32 package index first: "
-            "`arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json`)" if core.startswith("esp32") else "")
+            "`arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json`)" if esp else "")
             + "; or point EITRI_ARDUINO_CLI at the binary")
 
 

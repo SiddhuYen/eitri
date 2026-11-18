@@ -348,6 +348,9 @@ eitri setup firmware --esp32      # also the ESP32 board package and ESP32Servo
 eitri setup firmware --dry-run    # only print the commands
 ```
 
+In the plugin, your agent runs `eitri setup firmware -y` itself the first time a design has firmware, after one line
+saying what it installs (about 65 MB: arduino-cli and the AVR core); Claude Code asks you before the command runs.
+
 It runs the same steps you would run by hand:
 
 ```sh
