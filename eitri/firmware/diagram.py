@@ -98,7 +98,7 @@ def build_scene(fw: Firmware, rep=None, status: dict[str, str] | None = None, fo
     sc.height = max(sc.height, py + MARGIN)
     c = rep.compile if rep else {}
     if c:
-        verdict = c.get("message") if not c.get("available") else ("compiled" + (f": flash {c['flash_pct']}%, RAM {c['ram_pct']}%" if c.get("flash_pct") is not None else "")) if c.get("ok") else f"compile failed: {len(c.get('errors') or [])} error(s)"
+        verdict = c.get("message") if not c.get("available") else ("compiled" + (f": flash {c['flash_pct']}%, RAM {c['ram_pct']}%" if c.get("flash_pct") is not None else "")) if c.get("ok") else (f"compile failed: {len(c['errors'])} error(s)" if c.get("errors") else "failed without a compiler error")
         colr = "#1a7f4b" if c.get("ok") else FAIL
         items.append({"t": "text", "x": MARGIN, "y": sc.height - 6, "s": f"arduino-cli: {verdict}", "size": FONT, "weight": "700", "fill": colr, "g": "compile"})
         sc.height += 14

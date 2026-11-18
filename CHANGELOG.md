@@ -69,6 +69,15 @@ annotated tags (`git show v0.4.0`).
   its install count once after `eitri update` (which re-runs `eitri plugin install`). Nothing else changes in what is sent
   or how to turn it off (`eitri telemetry off`).
 
+- **Firmware compiles failed with TMPDIR unset or empty.** arduino-cli 1.6 then exits 1 with no compiler error ("Error
+  during build: exit status 1"), and eitri reported a real compile failure for a sketch that compiles. A normal login always
+  has TMPDIR, but agents and CI often run with a stripped environment. eitri now passes `TMPDIR` (Python's
+  `tempfile.gettempdir()`) to every arduino-cli it runs (the compile check and `eitri setup firmware`) when it is unset or empty.
+- **A compile that fails with no compiler error says so.** The check said "1 error(s): " followed by arduino-cli's coloured
+  "Used platform" table. It now says `arduino-cli failed without a compiler error (exit N); output: ...` (the last lines,
+  without colour codes or the table), and such a failure, which comes from the environment and not the sketch, is no
+  longer cached against the sketch. The pinout diagram says "failed without a compiler error".
+
 ### Tests
 
 - The test suite keeps the plugin's data folder (`XDG_DATA_HOME`) per test too: on a machine with the plugin installed,
@@ -76,6 +85,8 @@ annotated tags (`git show v0.4.0`).
 - `eitri setup firmware -y` runs in a subprocess the way an agent's Bash tool does (stdin `/dev/null`, a new session so
   `/dev/tty` cannot open, a fresh HOME) through stand-in `curl` and `brew` commands, and must exit 0 with its "firmware is
   ready" last line; without `-y` it must refuse at once.
+- arduino-cli runs with a TMPDIR when ours is unset or empty (a stand-in arduino-cli that fails like 1.6 without one), and a
+  failure with no compiler error is reported as one, uncached.
 
 ## 0.9.1: no hosted service: eitri.io's web app and remote MCP server have closed
 

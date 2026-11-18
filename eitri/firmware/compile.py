@@ -15,6 +15,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -41,6 +42,35 @@ class CompileResult:
     seconds: float = 0.0
     cached: bool = False
     command: list[str] = field(default_factory=list)
+
+
+_ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
+def cli_env() -> dict[str, str]:
+    """The environment for arduino-cli: ours, with TMPDIR set when it is unset or empty. Without it `arduino-cli compile`
+    exits 1 with no compiler error at all ("Error during build: exit status 1"; seen 2026-11-18 in a stripped agent
+    environment). A normal login always has TMPDIR; agents and CI often do not."""
+    env = dict(os.environ)
+    if not env.get("TMPDIR"):
+        env["TMPDIR"] = tempfile.gettempdir()
+    return env
+
+
+def _plain_output(log: str, keep: int = 5) -> str:
+    """arduino-cli's output without colour codes and without its "Used platform" / "Used library" table: the last lines."""
+    lines, in_table = [], False
+    for ln in _ANSI.sub("", log).splitlines():
+        if re.match(r"\s*Used (platform|library)\b", ln):
+            in_table = True
+            continue
+        if in_table and re.match(r"\s*\S+\s+\S+\s+(/|[A-Za-z]:\\)", ln):     # a row: id, version, path
+            continue
+        in_table = False
+        if ln.strip():
+            lines.append(ln.strip())
+    text = " / ".join(lines[-keep:])
+    return text[-600:] if text else "(no output)"
 
 
 def find_cli() -> str | None:
@@ -117,7 +147,8 @@ def compile_sketch(sketch_dir: Path, fqbn: str, core: str, build_dir: Path, cach
     cmd = [cli, "compile", "--fqbn", fqbn, "--build-path", str(build_dir), "--warnings", "default", str(sketch_dir)]
     t0 = time.time()
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
+                              env=cli_env())
     except subprocess.TimeoutExpired:
         return CompileResult(True, False, f"arduino-cli did not finish within {timeout:g} s", seconds=round(time.time() - t0, 1), command=cmd)
     except OSError as exc:
@@ -133,15 +164,16 @@ def compile_sketch(sketch_dir: Path, fqbn: str, core: str, build_dir: Path, cach
     warnings = [d for d in diags if d["kind"] == "warning"]
     r = CompileResult(True, proc.returncode == 0, "compiled" if proc.returncode == 0 else f"compile failed (arduino-cli exit {proc.returncode})",
                       errors=errors, warnings=warnings, log=log[-8000:], seconds=seconds, command=cmd)
-    if proc.returncode != 0 and not errors:
-        tail = [ln for ln in log.strip().splitlines() if ln.strip()][-3:]
-        r.errors = [dict(file="", line=0, col=0, kind="error", msg=" / ".join(tail) or "arduino-cli failed without a diagnostic")]
+    no_diagnostic = proc.returncode != 0 and not errors
+    if no_diagnostic:
+        # not a compile error in the sketch: say what arduino-cli printed, not "1 error(s)" made of its platform table
+        r.message = f"arduino-cli failed without a compiler error (exit {proc.returncode}); output: {_plain_output(log)}"
     m, n = _SIZE.search(log), _RAM.search(log)
     if m:
         r.flash_bytes, r.flash_pct = int(m.group(1)), int(m.group(2))
     if n:
         r.ram_bytes, r.ram_pct = int(n.group(1)), int(n.group(2))
-    if cache_file is not None and r.available:
+    if cache_file is not None and r.available and not no_diagnostic:   # an environment fault must not stick to the sketch
         try:
             d = dict(r.__dict__)
             d.pop("cached", None)

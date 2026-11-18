@@ -31,10 +31,11 @@ Runner = Callable[[list[str], bool], "tuple[int, str]"]
 def _run(cmd: list[str], capture: bool) -> tuple[int, str]:
     """capture=True: a read-only probe, output returned. capture=False: a step, output shown as it runs."""
     try:
+        from .firmware.compile import cli_env              # TMPDIR set: arduino-cli fails without one
         if capture:
-            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+            p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120, env=cli_env())
             return p.returncode, (p.stdout or "") + (p.stderr or "")
-        return subprocess.call(cmd), ""
+        return subprocess.call(cmd, env=cli_env()), ""
     except (OSError, subprocess.TimeoutExpired) as exc:
         return 127, f"{type(exc).__name__}: {exc}"
 

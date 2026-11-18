@@ -240,6 +240,52 @@ def test_compile_error_parsing_without_a_compiler(tmp_path, monkeypatch):
     assert one(rep, "compiler warnings in the sources").severity == "warn"
 
 
+# what arduino-cli 1.6 prints when it fails without a compiler error (seen with TMPDIR empty): its coloured platform table
+_NO_DIAG = ("printf '\\033[92mUsed platform\\033[0m \\033[92mVersion\\033[0m \\033[90mPath\\033[0m\\n"
+            "\\033[93marduino:avr\\033[0m   1.8.8   \\033[90m/x/packages/arduino/hardware/avr/1.8.8\\033[0m\\n'\n"
+            "echo 'Error during build: exit status 1' >&2\nexit 1\n")
+
+
+@pytest.mark.parametrize("tmpdir", ["", None])
+def test_arduino_cli_gets_a_tmpdir_when_it_is_unset_or_empty(tmp_path, monkeypatch, tmpdir):
+    """arduino-cli 1.6 fails every compile ("Error during build: exit status 1", no compiler error) when TMPDIR is unset or
+    empty, as in a stripped agent or CI environment. eitri sets it for arduino-cli; the fake fails the same way without it."""
+    fake = tmp_path / "arduino-cli"
+    fake.write_text('#!/bin/sh\nif [ -z "$TMPDIR" ]; then\n' + _NO_DIAG + "fi\n"
+                    "echo 'Sketch uses 9176 bytes (28%) of program storage space. Maximum is 32256 bytes.'\nexit 0\n")
+    fake.chmod(0o755)
+    monkeypatch.setenv("EITRI_ARDUINO_CLI", str(fake))
+    if tmpdir is None:
+        monkeypatch.delenv("TMPDIR", raising=False)
+    else:
+        monkeypatch.setenv("TMPDIR", tmpdir)
+    folder = stage_sketch(project(), tmp_path)
+    res = compile_sketch(folder, "arduino:avr:uno", "arduino:avr", tmp_path / "b")
+    assert res.ok and res.flash_bytes == 9176, res.message
+    from eitri.firmware.compile import cli_env
+    assert cli_env()["TMPDIR"]
+    monkeypatch.setenv("TMPDIR", "/somewhere/else")
+    assert cli_env()["TMPDIR"] == "/somewhere/else"                 # a TMPDIR that is set is left alone
+
+
+def test_a_failure_without_a_compiler_error_says_so(tmp_path, monkeypatch):
+    """arduino-cli exits non-zero but prints no compiler error: the check says that and shows its output (no colour codes,
+    no platform table), instead of "1 error(s)" made from the table. Such a failure is not cached against the sketch."""
+    fake = tmp_path / "arduino-cli"
+    fake.write_text("#!/bin/sh\n" + _NO_DIAG)
+    fake.chmod(0o755)
+    monkeypatch.setenv("EITRI_ARDUINO_CLI", str(fake))
+    folder = stage_sketch(project(), tmp_path)
+    cache = tmp_path / "compile-cache.json"
+    res = compile_sketch(folder, "arduino:avr:uno", "arduino:avr", tmp_path / "b", cache_file=cache)
+    assert res.available and not res.ok and res.errors == []
+    assert res.message == "arduino-cli failed without a compiler error (exit 1); output: Error during build: exit status 1"
+    c = one(analyze(project(), None, res), "compiles (arduino-cli)")
+    assert c.severity == "fail" and c.measured == res.message and "error(s)" not in c.measured
+    assert "Used platform" not in c.measured and "\x1b" not in c.measured
+    assert not cache.exists()
+
+
 @needs_cli
 def test_real_compile_passes_and_is_cached(tmp_path):
     fw = project()

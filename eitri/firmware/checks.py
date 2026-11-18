@@ -264,8 +264,10 @@ def run_checks(fw: Firmware, compiled: CompileResult | None = None) -> tuple[lis
             if own:
                 checks.append(_check("compile", "compiler warnings in the sources", "warn", "; ".join(f"{w['file']}:{w['line']}: {w['msg']}" for w in own[:5]), "no warnings", sorted({w["file"] for w in own})))
         else:
-            errs = compiled.errors or [{"file": "", "line": 0, "msg": compiled.message}]
-            checks.append(_check("compile", "compiles (arduino-cli)", "fail", f"{len(errs)} error(s): " + "; ".join((f"{e['file']}:{e['line']}: " if e.get("file") else "") + e["msg"] for e in errs[:5]),
+            errs = compiled.errors
+            measured = (f"{len(errs)} error(s): " + "; ".join((f"{e['file']}:{e['line']}: " if e.get("file") else "") + e["msg"] for e in errs[:5])
+                        if errs else compiled.message)      # no compiler error: arduino-cli's own failure, said as such
+            checks.append(_check("compile", "compiles (arduino-cli)", "fail", measured,
                                  "no compile errors", sorted({e["file"] for e in errs if e.get("file")})))
     return checks, infos, comp
 
