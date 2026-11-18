@@ -39,6 +39,7 @@ For follow-up requests, edit the existing model (read it with `read_model` if yo
 - Every coil a transistor or a pin switches has a flyback diode across it, cathode to the supply side.
 - A pin of a 3.3 V board never sees 5 V: a 5 V sensor's output goes through a divider or a level shifter.
 - Declare a board pin's direction with `c.gpio(pin, "in" | "out", pullup=...)` whenever it matters: a pin that only reads a switch is an input (otherwise the switch would short the pin when it drives).
+- A module that goes in an enclosure needs a published outline for its mounting check: prefer the catalog entries that are one maker's board (`SSD1306` is Adafruit 326; for a BME280 use `BME280-2652`, Adafruit 2652, not the plain `BME280`, which has no maker's drawing), and tell the user which product to buy: a clone has other holes.
 - This is breadboard and module level: no PCB layout, no footprints. Say so if the user asks for a board layout; the netlist (CSV) is the hand-off.
 
 # Tools

@@ -943,7 +943,9 @@ each load, the supply and the BOM's supply), the firmware's pins, the mechanism'
 current, regulator and driver dissipation, and each board's mounting holes, outline and clearance against the CAD part that carries
 it. Name the circuit's parts as the harness connectors (UNO, PSU, SERVO_YAW) and declare COUPLING = dict(actuators={"yaw":
 "SERVO_YAW", ...}, mounts={"UNO": dict(anchor="UNO", stand_in="controller", carrier=["standoffs"], screw="M3", clearance_mm=1.0)})
-(combined_reference('integration')). A check whose input is missing says "not run" and why: it is not a pass.
+(combined_reference('integration')). A module mounted in the CAD needs a catalog outline: SSD1306 (Adafruit 326), BME280-2652 (Adafruit
+2652; the plain BME280 has none), PCA9685, uno, nano; tell the person which product to buy. A check whose input is missing says "not
+run" and why: it is not a pass.
 
 ## Reading results
 Each check has a name, pass or fail, what was measured, what was expected, and where the limit comes from (a datasheet, a

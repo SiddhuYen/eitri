@@ -37,6 +37,8 @@ version to sign in to: everything runs here.
    missing domain they name. "Not run" is not a pass: give the missing input. "n/a" (not applicable) means what the check
    is about is not in the project (no mechanism file and no servo, motor or solenoid in the circuit; no harness file): it
    blocks nothing. Never remove a file or a part to make a check n/a.
+   A board or module mounted in the case needs a catalog outline (SSD1306 = Adafruit 326; for a BME280 use `BME280-2652`,
+   Adafruit 2652, not the plain `BME280`): tell the person the exact product to buy.
 7. **Fix and rebuild.** Change the design, not the checks: a bigger servo, a thicker wire, a lower gear ratio, a
    regulator with headroom, a longer link. Never delete, loosen or rename a check to make it pass, and never lower a
    requirement the user gave. If you think a check measures the wrong thing, keep it, add the right one, and say so.
