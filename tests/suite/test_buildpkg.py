@@ -185,3 +185,32 @@ def test_make_plan_leaves_a_stand_in_out_even_when_forced_in():
     assert by["case"].included and not by["pcb"].included and by["pcb"].bought
     assert by["pcb"].bought_reason == "stand-in for the circuit's NANO (bought, not printed)"
     assert plan.summary.startswith("1 printable part(s)")
+
+
+def test_the_package_carries_the_sketch_it_compiled_and_no_torque_wording_without_actuators(tmp_path):
+    """The firmware folder is the sketch exactly as the package's build staged and compiled it; a design that moves nothing gets no
+    torque or servo wording on its first page."""
+    import hashlib
+    folder = tmp_path / "box"
+    shutil.copytree(SENSOR_BOX, folder, ignore=shutil.ignore_patterns("__pycache__"))
+    m = build_package(Project(folder, name="model"), force=True)       # force: without arduino-cli the compile check fails
+    pkg = folder / "build_package"
+    fw = m["firmware"]
+    assert fw["sketch"] == "climate" and fw["main"] == "climate.ino" and fw["fqbn"] == "arduino:avr:nano"
+    assert set(fw["files"]) == {"climate.ino", "eitri_pins.h"}
+    for name, sha in fw["files"].items():
+        assert hashlib.sha256((pkg / "firmware" / "climate" / name).read_bytes()).hexdigest() == sha
+    assert "digitalWrite(SDA, LOW);" in (pkg / "firmware" / "climate" / "climate.ino").read_text(encoding="utf-8")
+    assert "firmware/climate/climate.ino" in m["files"]
+    readme = (pkg / "README.md").read_text(encoding="utf-8")
+    assert "- `firmware/climate/climate.ino`" in readme and "**Firmware:** `firmware/climate/` is the sketch exactly as" in readme
+    assert "compile check: " in readme and "eitri never uploads" in readme
+    assert "flash the firmware (firmware/climate/climate.ino)" in (pkg / "assembly_order.md").read_text(encoding="utf-8")
+    assert m["actuated"] is False and "torque" not in readme and "servo" not in readme.lower()
+
+
+def test_a_design_with_actuators_keeps_the_torque_wording(package):
+    _pr, m, out = package
+    readme = (out / "README.md").read_text(encoding="utf-8")
+    assert m["actuated"] is True
+    assert "the torque margins in the checks rest on them" in readme and "servo continuous torque" in readme

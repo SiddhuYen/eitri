@@ -119,6 +119,14 @@ annotated tags (`git show v0.4.0`).
   PART COULD BE WRITTEN FOR PRINTING" and names each part and why (found on the smoke test's box: corner bosses tangent to the walls
   leave edges shared by more than two faces, so the base had no STL).
 
+- **The build package had no firmware source** (only `eitri_pins.h` and the pinout), so the person, or the agent after the
+  checked export, had to copy the sketch in by hand. The package now carries `firmware/<sketch>/`: the sketch folder exactly as
+  the package's own build staged and compiled it (the .ino, its other sources, `eitri_pins.h`). `manifest.json` gives each file's
+  sha256, the board's FQBN and the compile check's result under `"firmware"`, and the README and assembly order point at it.
+- **The package README spoke of torque margins and servo torque for a design with nothing that moves.** That wording now appears
+  only when the project has a mechanism file, or a servo, motor or solenoid in its circuit or firmware (`manifest.json`
+  `"actuated"`). The other estimates are listed only for the domains the project has.
+
 ### Tests
 
 - The test suite keeps the plugin's data folder (`XDG_DATA_HOME`) per test too: on a machine with the plugin installed,

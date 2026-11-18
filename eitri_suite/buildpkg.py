@@ -11,6 +11,8 @@ and writes, under <project>/build_package/ by default:
     harness/               cut list, diagram (SVG + PNG), WireViz YAML, the harness BOM
     wiring_steps.md        cut, strip, crimp, splice, insert, label, continuity and power-on steps, from the harness data
     assembly_order.md      parts in kinematic order with their servos, fasteners, cable routes and mating connectors
+    firmware/<sketch>/     the sketch folder exactly as this package's build compiled it (its .ino, sources, eitri_pins.h), to open in the
+                           Arduino IDE and flash; manifest.json "firmware" gives each file's sha256 and the compile check's result
 """
 from __future__ import annotations
 
@@ -202,6 +204,48 @@ def print_manifest(plan, files: dict) -> tuple[dict, str]:
 
 # ---------------------------------------------------------------------------- the package
 
+def _sketch(src_root: Path, dst_root: Path, data: dict) -> dict | None:
+    """Copy the sketch folder this build staged and compiled (eitri.firmware.build.stage_sketch: out/sketch/<name>/) into the package,
+    byte for byte. Returns {sketch, main, fqbn, compile, files: {name: sha256}, written: [package paths]}."""
+    import hashlib
+    folders = [d for d in sorted(src_root.iterdir()) if d.is_dir()] if src_root.is_dir() else []
+    if len(folders) != 1:
+        return None
+    folder = folders[0]
+    dst = dst_root / folder.name
+    shutil.rmtree(dst, ignore_errors=True)
+    dst.mkdir(parents=True)
+    hashes, written = {}, []
+    for f in sorted(p for p in folder.rglob("*") if p.is_file()):
+        rel = f.relative_to(folder)
+        (dst / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(f, dst / rel)
+        hashes[str(rel)] = hashlib.sha256(f.read_bytes()).hexdigest()
+        written.append(str(Path("firmware") / folder.name / rel))
+    rep = data.get("report") or {}
+    comp = next((c for c in rep.get("checks") or [] if str(c.get("name", "")).startswith("compiles")), None)
+    main = f"{folder.name}.ino" if (folder / f"{folder.name}.ino").is_file() else next((k for k in hashes if k.endswith(".ino")), None)
+    return {"sketch": folder.name, "main": main, "fqbn": rep.get("fqbn") or (data.get("firmware") or {}).get("fqbn"),
+            "compile": (_status(comp) if comp else "not run") + (f": {str(comp.get('measured', ''))[:160]}" if comp else ""),
+            "files": hashes, "written": written}
+
+
+def _actuated(others: dict, har_data: dict | None) -> bool:
+    """Does the design move: a mechanism file, or a servo, motor or solenoid in the circuit or the firmware."""
+    if "mechanism" in others:
+        return True
+    from eitri.model import load_model
+    from .electronics import ACTUATOR_KINDS
+    try:
+        if "electronics" in others and any(p.kind in ACTUATOR_KINDS for p in load_model(others["electronics"][0]).build().parts.values()):
+            return True
+        if "firmware" in others and any(p.role == "servo" for p in load_model(others["firmware"][0]).build().pins):
+            return True
+    except Exception:                                       # noqa: BLE001 - unknown: keep the cautious wording
+        return True
+    return False
+
+
 def stand_ins(others: dict, cad: Path) -> dict[str, str]:
     """{CAD body: the board it stands in for} from the electronics file's COUPLING mounts (stand_in=), when that file's mounts are on
     this CAD file: those bodies are the bought boards' places in the model, not parts to print."""
@@ -317,8 +361,13 @@ def build_package(project, out_dir: str | Path | None = None, force: bool = Fals
                     dst.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(src, dst)
                     files.append(str(dst.relative_to(out)))
+        firmware = None
+        if "firmware" in others:                                  # the sketch exactly as this build compiled it (out/sketch/<name>/)
+            firmware = _sketch(scratch / "firmware" / "sketch", out / "firmware", others["firmware"][2])
+            files += firmware.pop("written")
         put("assembly_order.md", assembly_order(parts, lm.module, mech_obj, links, getattr(lm.module, "INTEGRATION", None), plan, bom,
-                                                others["firmware"][0].name if "firmware" in others else None))
+                                                (f"firmware/{firmware['sketch']}/{firmware['main']}" if firmware and firmware.get("main")
+                                                 else others["firmware"][0].name) if "firmware" in others else None))
         if cad_res.image and Path(cad_res.image).is_file():
             (out / "images").mkdir(exist_ok=True)
             shutil.copy2(cad_res.image, out / "images" / "overview.png")
@@ -327,6 +376,7 @@ def build_package(project, out_dir: str | Path | None = None, force: bool = Fals
         manifest = {"project": project.name, "generated": time.strftime("%Y-%m-%d %H:%M:%S"), "passing": not failing, "forced": bool(failing and force),
                     "checks": checks, "models": {"cad": art.cad.name, "harness": art.harness.name if art.harness else None, **{k: v[0].name for k, v in others.items()}},
                     "bom_totals": bom["totals"], "unverified": bom["unverified"], "print": {"summary": plan.summary, "problems": written["problems"]},
+                    "firmware": firmware, "actuated": _actuated(others, har_data),
                     "seconds": round(time.time() - t0, 1)}
         readme = _readme(manifest, checks, bom, plan, sorted(set(files)))
         put("README.md", readme)
@@ -355,7 +405,14 @@ def _readme(manifest: dict, checks: dict, bom: dict, plan, files: list[str]) -> 
             lines.append(f"  - warn [{k}] {w}")
     lines += ["", f"Print: {plan.summary}.", f"Parts cost (estimate, not a quote): ${bom['totals']['priced_total_usd']:,.2f} for {bom['totals']['priced_lines']} of {bom['totals']['lines']} lines; harness wire and terminals are unpriced.", ""]
     if bom["unverified"]["parts"]:
-        lines += ["**Check before you order:** the catalog figures for " + ", ".join(bom["unverified"]["parts"]) + " have not been compared with datasheets, and the torque margins in the checks rest on them. "
-                  "Estimates are marked ESTIMATE in the check text (servo continuous torque, wire insulation, print infill).", ""]
+        moving = manifest.get("actuated", True)                 # torque and servo wording only for a design that moves
+        est = (["servo continuous torque"] if moving else []) + (["wire insulation"] if manifest["models"].get("harness") else []) + ["print infill"]
+        lines += ["**Check before you order:** the catalog figures for " + ", ".join(bom["unverified"]["parts"]) + " have not been compared with datasheets"
+                  + (", and the torque margins in the checks rest on them" if moving else "") + ". "
+                  f"Estimates are marked ESTIMATE in the check text ({', '.join(est)}).", ""]
+    fwp = manifest.get("firmware")
+    if fwp:
+        lines += [f"**Firmware:** `firmware/{fwp['sketch']}/` is the sketch exactly as this package's build compiled it for {fwp['fqbn'] or 'its board'} "
+                  f"(compile check: {fwp['compile']}). Open `{fwp['main']}` in the Arduino IDE and upload it; eitri never uploads.", ""]
     lines += ["## Contents", ""] + [f"- `{f}`" for f in files]
     return "\n".join(lines) + "\n"
