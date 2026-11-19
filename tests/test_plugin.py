@@ -109,7 +109,7 @@ def test_skills():
     # the local combined workspace holds the circuit too (elec.py, checked against the other files)
     assert "circuit" in skills["combined"].split("---")[1] and "elec.py" in skills["design"]
     readme = (ROOT / "README.md").read_text(encoding="utf-8").split("- **Combined workspace (the default):**")[1].split("- **Six local")[0]
-    assert "eitri mcp --combined" in readme and "open source" in readme
+    assert "eitri mcp --combined" in readme and "source-available (FSL)" in readme
     for text in (skills["combined"], skills["design"]):                   # the default is local: no token step, no remote URL
         assert "eitri.io/mcp" not in text and "this computer" in text
     router = skills["design"]

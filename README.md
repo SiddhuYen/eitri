@@ -90,7 +90,7 @@ The plugin brings two MCP servers, both on your computer, and a set of skills:
   structure, mechanism, wiring, firmware, air and its circuit, built together with the cross-domain checks (servo
   torque against the arm with masses from the CAD bodies, supply current against the servos the firmware moves at once,
   wire gauge against that current, the board's holes against the CAD, the base against tipping over...). A project is a
-  folder in `~/eitri-projects`; the viewer shows a tab per model file. The cross-domain code is open source in this
+  folder in `~/eitri-projects`; the viewer shows a tab per model file. The cross-domain code is source-available (FSL) in this
   repository (`eitri_suite/`, same license).
 - **Six local single domains:** `eitri` (`eitri mcp`): CAD, wire harnesses, mechanisms, pneumatics, firmware and
   electronics, with the same checks as the app. The viewer opens in your browser at the first build and follows every rebuild.
@@ -850,7 +850,7 @@ falls short, and what eitri does instead:
 
 | | text-to-cad | eitri |
 |---|---|---|
-| Shape | A skill pack + 68k-line Python runtime (`cadgen`) for other agents (Claude Code, Codex, Cursor...) | A standalone CAD agent with its own REPL and viewer, and one plugin for other agents (Claude Code, Codex, Cursor) with the same checks, including a local, open-source combined workspace that checks a whole machine's CAD, mechanism, wiring, firmware and circuit against each other; also usable as a library |
+| Shape | A skill pack + 68k-line Python runtime (`cadgen`) for other agents (Claude Code, Codex, Cursor...) | A standalone CAD agent with its own REPL and viewer, and one plugin for other agents (Claude Code, Codex, Cursor) with the same checks, including a local, source-available (FSL) combined workspace that checks a whole machine's CAD, mechanism, wiring, firmware and circuit against each other; also usable as a library |
 | Install | uv + per-host plugin marketplaces, pinned Python 3.13, telemetry on by default, update nags | One line (`curl -fsSL https://eitri.io/install \| sh`, add `-s -- --plugin` to register the plugin in every agent app found, then run `claude`); the app sends nothing, the plugin two anonymous counts (off with `eitri telemetry off`); no update checks unless you ask |
 | Model contract | `@step/@stl/@glb` decorators, parameterless models, a content-addressed store with a build daemon, freshness gates, sidecar JSON, link-vs-component rules | `PARAMS` + `build(p)` + `verify()`; builds are fast enough that nothing needs caching |
 | Verification | Up to the agent: write ad-hoc scripts in `tmp/`, remember to snapshot | Automatic on every build: validity, holes, thinnest wall, interferences, plus the model's own checks; failures are flagged to the agent |
