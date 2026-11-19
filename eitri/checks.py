@@ -8,6 +8,9 @@ Status (pass | warn | fail | not_run | not_applicable) is derived from those. no
 nothing was graded; it blocks an export and a change package. not_applicable: what the check is about provably does not exist in
 the project (a cross-domain actuator check in a project with no mechanism file and no servo, motor or solenoid in its circuit);
 it is ok, says why, and blocks nothing. A checker marks a check not applicable only on such proof, never for a missing input.
+assumed: the check ran and passed, but on a figure the model file declares as measured by a person instead of one from a source
+(a board's outline and holes measured with calipers): it does not block the free combined export, but blocks a change package
+until a person waives it, like not_run. Only an explicit declaration in the model file makes a check assumed.
 """
 from __future__ import annotations
 
@@ -36,12 +39,16 @@ class Check(CheckResult):
         not_applicable: a passing check whose subject the project lacks (see not_applicable())."""
         if self.severity == "pass" and (self.not_applicable or str(self.measured).startswith("not applicable: ")):
             return "not_applicable"
-        if self.severity != "warn":
-            return self.severity
-        return "not_run" if self.not_run or str(self.measured).startswith("not run: ") else "warn"
+        if self.severity == "fail":
+            return "fail"
+        if self.severity == "warn" and (self.not_run or str(self.measured).startswith("not run: ")):
+            return "not_run"
+        if self.assumed:
+            return "assumed"
+        return self.severity
 
     def line(self, numbers: dict | None = None) -> str:
-        mark = "N/A" if self.status == "not_applicable" else {"pass": "PASS", "warn": "WARN", "fail": "FAIL"}[self.severity]
+        mark = {"not_applicable": "N/A", "assumed": "ASSUMED"}.get(self.status) or {"pass": "PASS", "warn": "WARN", "fail": "FAIL"}[self.severity]
         exp = f" (expected {self.expected})" if self.expected else ""
         return f"[{mark}] {self.name}: {self.measured}{exp}{source_tag(self, numbers)}"
 
@@ -52,8 +59,10 @@ def check(category: str, name: str, severity: str, measured: str, expected: str 
                  refs=list(dict.fromkeys(refs)), not_run=list(not_run), source=list(source), kind=kind)
 
 
-STATUSES = ("pass", "warn", "fail", "not_run", "not_applicable")
-BLOCKING = ("fail", "not_run")                            # the statuses that stop an export or a change package
+STATUSES = ("pass", "warn", "fail", "not_run", "not_applicable", "assumed")
+BLOCKING = ("fail", "not_run")                            # the statuses that stop the combined export (and a change package)
+PACKAGE_BLOCKING = ("fail", "not_run", "assumed")         # a change package also stops on an assumed figure (a person may waive it)
+MEASURED_BY_USER = "board size measured by the user, not from a datasheet"
 
 
 def status_of(c) -> str:
@@ -67,6 +76,8 @@ def status_of(c) -> str:
             c.get("not_applicable") or str(c.get("measured", "")).startswith("not applicable: ")):
         return "not_applicable"
     off = bool(c.get("not_run")) or str(c.get("measured", "")).startswith("not run: ")
+    if c.get("assumed") and c.get("ok", True) and c.get("severity", "pass") != "fail" and not (off and c.get("severity") == "warn"):
+        return "assumed"
     if "severity" in c:                                   # a domain Check: only a warning can be "not run" (see Check.status)
         return "not_run" if c["severity"] == "warn" and off else c["severity"]
     if not c.get("ok", True):                             # a verify() / CAD CheckResult
@@ -80,7 +91,30 @@ def stamp_status(d: dict, checks: Iterable) -> dict:
         cd["status"] = c.status
     d["checks_not_run"] = checks_not_run(checks)
     d["checks_not_applicable"] = checks_not_applicable(checks)
+    d["checks_assumed"] = checks_assumed(checks)
     return d
+
+
+def assumed(c: CheckResult, why: str) -> CheckResult:
+    """Mark a check that ran on a figure a person declared in the model file instead of a sourced one (why: what was declared, and by
+    whom). It keeps its verdict (a fail still fails), prints [ASSUMED], is listed under checks_assumed, passes the combined export and
+    blocks a change package until a person waives it. Only a checker reading an explicit declaration calls this."""
+    c.assumed = str(why)[:300] or "a figure declared in the model file"
+    return c
+
+
+def checks_assumed(checks: Iterable[CheckResult]) -> list[dict]:
+    """The checks that rest on a declared, unsourced figure: [{name, category, why}] (report JSON key "checks_assumed")."""
+    return [{"name": c.name, "category": getattr(c, "category", "") or "verify", "why": c.assumed}
+            for c in checks if c.status == "assumed"]
+
+
+def assumed_line(checks: Iterable[CheckResult]) -> str | None:
+    """One summary line naming every check that rests on a declared figure (None when there are none)."""
+    a = [c for c in checks if c.status == "assumed"]
+    if not a:
+        return None
+    return "Assumed (passes on a figure declared in the model file): " + "; ".join(f"{c.name} ({c.assumed})" for c in a)
 
 
 def not_applicable(c: CheckResult, why: str) -> CheckResult:
@@ -109,7 +143,9 @@ def tally(checks: Iterable[CheckResult]) -> str:
     sev = [getattr(c, "severity", "pass" if c.ok else "fail") for c in checks]
     n_fail, n_warn = sev.count("fail"), sev.count("warn")
     n_na = sum(1 for c in checks if c.status == "not_applicable")
-    return f"{len(checks) - n_fail - n_warn - n_na} pass, {n_warn} warn, {n_fail} FAIL" + (f", {n_na} n/a" if n_na else "")
+    n_as = sum(1 for c in checks if c.status == "assumed")
+    return (f"{len(checks) - n_fail - n_warn - n_na} pass, {n_warn} warn, {n_fail} FAIL" + (f", {n_na} n/a" if n_na else "")
+            + (f", {n_as} assumed (on a measured figure)" if n_as else ""))
 
 
 def not_applicable_line(checks: Iterable[CheckResult]) -> str | None:
@@ -150,7 +186,7 @@ def from_verify(r: CheckResult) -> Check:
     sev = "fail" if not r.ok else "warn" if r.status == "not_run" else "pass"      # a CheckResult that did not run is a warning
     return Check(name=r.name, ok=r.ok, measured=r.measured, expected=r.expected, severity=sev, category="verify",
                  source=list(r.source), kind=r.kind, rule=r.rule or "verify", not_run=list(r.not_run),
-                 not_applicable=getattr(r, "not_applicable", ""))
+                 not_applicable=getattr(r, "not_applicable", ""), assumed=getattr(r, "assumed", ""))
 
 
 def level(value: float, limit: float, warn_fraction: float = 0.8, above_is_bad: bool = True) -> str:

@@ -7,9 +7,10 @@ from pathlib import Path
 
 from .package import esc, image_data_uri
 
-STATUS = {"pass": "pass", "warn": "WARN", "fail": "FAIL", "not_run": "NOT RUN", "not_applicable": "n/a", None: "-"}
+STATUS = {"pass": "pass", "warn": "WARN", "fail": "FAIL", "not_run": "NOT RUN", "not_applicable": "n/a", "assumed": "ASSUMED (measured by the user)", None: "-"}
 CRIT = {"pass": "pass", "pass_with_warning": "pass (with a warning)", "waived": "NOT RUN, waived", "human_verify": "a person verifies",
-        "fail": "FAIL", "missing": "no such check", "not_run": "NOT RUN", "not_applicable": "NOT APPLICABLE"}
+        "fail": "FAIL", "missing": "no such check", "not_run": "NOT RUN", "not_applicable": "NOT APPLICABLE",
+        "assumed": "ASSUMED: board size measured by the user, not from a datasheet"}
 
 
 def _labels(pkg: dict) -> tuple[str | None, str]:
@@ -48,7 +49,8 @@ def _warnings(pkg: dict) -> list[str]:
 def _verdict(pkg: dict) -> str:
     c = pkg["checks"]["summary"]["to"]
     s = f"{c['total']} checks: {c['pass']} pass, {c['warn']} warn, 0 fail, {c['not_run']} not run" + (
-        f", {c['not_applicable']} not applicable" if c.get("not_applicable") else "")
+        f", {c['not_applicable']} not applicable" if c.get("not_applicable") else "") + (
+        f", {c['assumed']} assumed (board size measured by the user, not from a datasheet; waived by a person)" if c.get("assumed") else "")
     if c["not_run"]:
         s += f" (waived by a person: {', '.join(w['check'] for w in pkg['waivers'])})"
     return s
@@ -153,7 +155,7 @@ code,pre{font:12px ui-monospace,Menlo,monospace}pre{background:#f6f8fa;padding:8
 
 
 def _cls(status) -> str:
-    return {"pass": "pass", "warn": "warn", "fail": "fail", "not_run": "nr", "not_applicable": "na"}.get(status or "", "")
+    return {"pass": "pass", "warn": "warn", "fail": "fail", "not_run": "nr", "not_applicable": "na", "assumed": "nr"}.get(status or "", "")
 
 
 def report_html(pkg: dict, images: dict) -> str:

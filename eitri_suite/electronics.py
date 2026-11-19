@@ -50,6 +50,8 @@ from typing import Any
 
 from eitri.harness.checks import HCheck
 
+from eitri.checks import MEASURED_BY_USER, assumed
+
 from . import elec_sources as es
 
 CAT = "integration"
@@ -796,9 +798,19 @@ def mounting_checks(c, parts, anchors: list[dict], coupling: dict) -> tuple[list
         ol = es.outline_for(part.catalog)
         base = f"mounting: {part.name}"
         m = mounts.get(part.name)
+        first = len(out)
+        measured_why = None
+        if isinstance(m, dict) and "measured" in m:          # only an explicit declaration in the model file: the person's own figures
+            ol, problem = es.measured_outline(m["measured"], m, part.catalog or part.kind)
+            if problem:
+                out.append(_check(f"{base} fits its CAD mount", "fail", f"COUPLING mounts['{part.name}'] {problem}", "a complete measured=", [part.name]))
+                continue
+            measured_why = f"{MEASURED_BY_USER}: {ol['size'][0]:g} x {ol['size'][1]:g} x {ol['size'][2]:g} mm, {len(ol['holes'])} hole(s) " \
+                           f"Ø{ol['hole_d']:g} mm, by {ol['measured_by']}"
         if ol is None:
             out.append(not_run(f"{base} fits its CAD mount", f"eitri has no published outline and hole pattern for {part.catalog or part.kind}"
-                               + f" (the catalog parts with one: {', '.join(es.OUTLINES)}; a part with no maker's drawing cannot be graded)",
+                               + f" (the catalog parts with one: {', '.join(es.OUTLINES)}; a part with no maker's drawing cannot be graded; "
+                               f"or ask the person to measure their own board and declare COUPLING mounts['{part.name}'] {es.MEASURED_FORM})",
                                "a catalog outline", [part.name]))
             continue
         if m is None and part.name.upper() not in by_anchor:
@@ -899,7 +911,12 @@ def mounting_checks(c, parts, anchors: list[dict], coupling: dict) -> tuple[list
             sev = "fail" if gap + 1e-9 < need else "pass"
             out.append(_check(cname, sev, (f"{gap:.1f} mm to {who}" if near else "no other body") + f"; the mount asks for {need:g} mm (the model file)"
                               + (" (carriers excluded: " + ", ".join(carriers) + ")" if carriers else ""), f">= {need:g} mm", refs + ([who] if who else [])))
-        data[part.name] = {"anchor": a["name"], "outline": ol["size"], "screw": screw}
+        data[part.name] = {"anchor": a["name"], "outline": ol["size"], "screw": screw, "measured_by": ol.get("measured_by")}
+        if measured_why:                                       # every verdict above rests on the person's figures: say so in each
+            for c in out[first:]:
+                if not c.not_run:
+                    c.measured = f"{MEASURED_BY_USER} (ASSUMPTION; {ol['measured_by']}): " + c.measured
+                    assumed(c, measured_why)
     return out, data
 
 

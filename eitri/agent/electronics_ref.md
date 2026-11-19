@@ -174,6 +174,22 @@ def build(p):
     return c
 ```
 
+## Mounting a module in a case (combined projects)
+
+The mounting checks need the board's outline and hole pattern. The catalog has them for one maker's board each: `uno`, `nano`,
+`PCA9685` (Adafruit 815), `SSD1306` (Adafruit 326), `BME280-2652` (Adafruit 2652). Tell the person which product to buy: a clone
+has other holes. For a board with no catalog outline, never invent a size or copy one from a similar board: ask the person to
+measure their own board with calipers (the outline length and width, the hole spacing both ways, the hole diameter, the board
+thickness) and declare what they measured on the mount:
+
+```python
+COUPLING = dict(mounts={"ENV": dict(anchor="ENV", stand_in="env_pcb", carrier=["base"], screw="M2.5", clearance_mm=0.5,
+                measured=dict(size=(25.4, 18.0, 1.6), hole_spacing=(20.32, 12.7), hole_d=2.5, by="calipers, Sam, 2026-11-18"))})
+```
+
+Those checks then print `[ASSUMED]` and say "board size measured by the user, not from a datasheet". The combined export allows
+them; a change package refuses them until a person waives each one.
+
 ## Sources
 
 Every document a catalog figure comes from (each build writes the ones its parts use to `<name>.sources.md`):

@@ -5,7 +5,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from ..checks import Check, from_verify, checks_not_run, stamp_status, not_run_line, not_applicable_line, tally
+from ..checks import Check, from_verify, checks_not_run, stamp_status, not_run_line, not_applicable_line, assumed_line, tally
 from ..check_sources import attach, check_lines
 from ..model import Checker
 from .checks import PinInfo, run_checks
@@ -65,6 +65,9 @@ def summarize(rep: FirmwareReport) -> str:
     _na = not_applicable_line(rep.checks)
     if _na:
         lines.append(_na)
+    _as = assumed_line(rep.checks)
+    if _as:
+        lines.append(_as)
     if rep.pins:
         lines.append("Pinout:")
         for p in rep.pins:

@@ -9,7 +9,7 @@
                "change_order", "outputs_missing", "files"],
   "additionalProperties": true,
   "$defs": {
-    "status": {"enum": ["pass", "warn", "fail", "not_run", "not_applicable"]},
+    "status": {"enum": ["pass", "warn", "fail", "not_run", "not_applicable", "assumed"]},
     "str_or_null": {"type": ["string", "null"]},
     "check_state": {
       "type": ["object", "null"],
@@ -36,7 +36,7 @@
       "type": "object",
       "required": ["pass", "warn", "fail", "not_run", "total"],
       "properties": {"pass": {"type": "integer"}, "warn": {"type": "integer"}, "fail": {"type": "integer"},
-                     "not_run": {"type": "integer"}, "not_applicable": {"type": "integer"}, "total": {"type": "integer"}}
+                     "not_run": {"type": "integer"}, "not_applicable": {"type": "integer"}, "assumed": {"type": "integer"}, "total": {"type": "integer"}}
     }
   },
   "properties": {
@@ -180,7 +180,7 @@
     "not_checked": {
       "type": "array",
       "items": {"type": "object", "required": ["kind", "what", "why"],
-                "properties": {"kind": {"enum": ["plan", "human_verify", "waived", "removed_check", "not_applicable", "domain", "scope"]},
+                "properties": {"kind": {"enum": ["plan", "human_verify", "waived", "removed_check", "not_applicable", "assumed", "domain", "scope"]},
                                "what": {"type": "string"}, "why": {"type": "string"}}}
     },
     "change_order": {

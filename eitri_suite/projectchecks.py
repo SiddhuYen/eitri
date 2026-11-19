@@ -138,6 +138,9 @@ def _extras(kind: str, module, built, model_path: Path) -> tuple[list[HCheck], d
         return checks, data
     pair = crossdomain.load_pair(model_path, built, kind, module)
     checks, info = crossdomain.project_checks(model_path, built, kind, module, pair=pair)
+    if kind == "cad" and built is not None:                   # every printable part can be written for printing (else the export drops it)
+        from . import printcheck
+        checks += printcheck.run(module, built, Path(model_path))
     if info:
         data["integration"] = info
     coupled = None

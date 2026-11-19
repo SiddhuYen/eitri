@@ -241,6 +241,26 @@ def part_mesh(shape: bd.Shape, tolerance: float = 0.02, angular: float = 0.2, na
     return Mesh(tri[first], faces, name, color)
 
 
+def defect_places(vertices, edges, gap: float = 2.0) -> list[tuple]:
+    """The bad edges grouped into places (edges whose ends lie within `gap` mm of each other join one place): [(lo xyz, hi xyz)],
+    largest first, so a message can say where each defect is (four tangent bosses: four places, not one box round the part)."""
+    import numpy as np
+    ends = [(vertices[a], vertices[b]) for a, b in list(edges)[:1500]]       # enough to say where; an open mesh can have thousands
+    groups: list[list] = []
+    for e in ends:
+        hit = [g for g in groups if any(min(np.linalg.norm(p - q) for p in e for q in x) <= gap for x in g)]
+        if hit:
+            merged = [x for g in hit for x in g] + [e]
+            groups = [g for g in groups if all(g is not h for h in hit)] + [merged]
+        else:
+            groups.append([e])
+    out = []
+    for g in sorted(groups, key=len, reverse=True):
+        pts = np.array([p for e in g for p in e])
+        out.append((pts.min(axis=0), pts.max(axis=0)))
+    return out
+
+
 def mesh_problem(m: Mesh, expected_volume: float | None = None) -> str | None:
     """None when the mesh is a closed, consistently wound surface with the solid's volume; else why not
     (with where, so the model can be fixed)."""
@@ -253,9 +273,10 @@ def mesh_problem(m: Mesh, expected_volume: float | None = None) -> str | None:
     open_e, nonman = uniq[counts == 1], uniq[counts > 2]
     if len(open_e) or len(nonman):
         bad = np.concatenate([open_e, nonman])
-        pts = m.vertices[bad.ravel()]
-        lo, hi = pts.min(axis=0), pts.max(axis=0)
-        where = "near (" + ", ".join(f"{a:.1f}" if abs(a - b) < 0.05 else f"{a:.1f}..{b:.1f}" for a, b in zip(lo, hi)) + ")"
+        places = defect_places(m.vertices, bad)
+        where = (f"at {len(places)} place(s): " if len(places) > 1 else "") + "; ".join(
+            "near (" + ", ".join(f"{a:.1f}" if abs(a - b) < 0.05 else f"{a:.1f}..{b:.1f}" for a, b in zip(lo, hi)) + ")" for lo, hi in places[:6]) \
+            + (f"; and {len(places) - 6} more" if len(places) > 6 else "")
         kinds = []
         if len(open_e):
             kinds.append(f"{len(open_e)} open edge(s)")

@@ -946,8 +946,10 @@ current, regulator and driver dissipation, and each board's mounting holes, outl
 it. Name the circuit's parts as the harness connectors (UNO, PSU, SERVO_YAW) and declare COUPLING = dict(actuators={"yaw":
 "SERVO_YAW", ...}, mounts={"UNO": dict(anchor="UNO", stand_in="controller", carrier=["standoffs"], screw="M3", clearance_mm=1.0)})
 (combined_reference('integration')). A module mounted in the CAD needs a catalog outline: SSD1306 (Adafruit 326), BME280-2652 (Adafruit
-2652; the plain BME280 has none), PCA9685, uno, nano; tell the person which product to buy. A check whose input is missing says "not
-run" and why: it is not a pass.
+2652; the plain BME280 has none), PCA9685, uno, nano; tell the person which product to buy. For a board with none, never invent its size:
+ask the person to measure it with calipers (outline, hole spacing, hole diameter, thickness) and declare it as the mount's measured=
+(combined_reference('integration')); those checks are then ASSUMED (board size measured by the user, not from a datasheet). A check
+whose input is missing says "not run" and why: it is not a pass.
 
 ## Reading results
 Each check has a name, pass or fail, what was measured, what was expected, and where the limit comes from (a datasheet, a
@@ -1054,14 +1056,15 @@ def results_text(r: dict, detail: str = "failing") -> str:
         lines = [f"{f['file']} ({f['kind']}){' · BLANK' if f['blank'] else ''}{_rev_tag(f)} · "
                  f"{len(checks) - len(bad) - len(na)}/{len(checks) - len(na)} checks pass" + (f", {len(warn)} warnings" if warn else "")
                  + (f", {len(na)} not applicable" if na else "")]
-        shown = checks if detail == "all" else bad + warn + na
+        asm = [c for c in checks if c.get("status") == "assumed" and c not in warn]
+        shown = checks if detail == "all" else bad + warn + na + asm
         for c in shown:
             tag = ("FAIL" if not c["ok"] else "NOT RUN" if c.get("status") == "not_run" else "n/a" if c.get("status") == "not_applicable"
-                   else "warn" if c["severity"] == "warn" else "pass")
+                   else "ASSUMED" if c.get("status") == "assumed" else "warn" if c["severity"] == "warn" else "pass")
             lines.append(f"  {tag} {'[cross-domain] ' if c['cross_domain'] else ''}{c['name']}: measured {c['measured'] or '-'}"
                          + (f"; expected {c['expected']}" if c["expected"] else "") + (f"; source: {c['source']}" if c.get("source") else ""))
         if detail != "all" and len(checks) > len(shown):
-            names = [c["name"] for c in checks if c["ok"] and c["severity"] != "warn" and c.get("status") != "not_applicable"]
+            names = [c["name"] for c in checks if c["ok"] and c["severity"] != "warn" and c.get("status") not in ("not_applicable", "assumed")]
             lines.append("  pass: " + "; ".join(names)[:1500])
         for i in f.get("issues") or []:
             lines.append(f"  geometry issue: {i}")

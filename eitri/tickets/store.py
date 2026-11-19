@@ -542,7 +542,7 @@ def approve(project, tid: str | int, *, by: str | None = None, note: str = "", d
 
 def waive(project, tid: str | int, check: str, reason: str, *, by: str | None = None,
           confirm: Callable[[str, str], dict] = terminal_confirm, method: str = "cli-terminal") -> Ticket:
-    """A person waives one check that did not run, with a written reason (printed on the package's first page). A failed check
+    """A person waives one check that did not run (or passed only on a board size measured by the user), with a written reason (printed on the package's first page). A failed check
     can never be waived: package refuses on it regardless."""
     require_person("eitri ticket waive")
     t = load(project, tid)
@@ -557,7 +557,8 @@ def waive(project, tid: str | int, check: str, reason: str, *, by: str | None = 
     if last == "fail":
         raise TicketError(f"{check!r} FAILED in the last build: a failed check is never waived; fix the design")
     if last in ("pass", "warn"):
-        raise TicketError(f"{check!r} ran in the last build ({last}); only a check that did not run can be waived")
+        raise TicketError(f"{check!r} ran in the last build ({last}); only a check that did not run, or that passed on a measured "
+                          "figure (assumed), can be waived")
     if last == "missing":
         raise TicketError(f"the last build has no check named {check!r}; name it exactly as the report does")
     extra = confirm(f"Waive the check {check!r} on {t.id} ({t.data.get('title')}).\nReason: {reason}\n"

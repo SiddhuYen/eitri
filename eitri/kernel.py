@@ -239,7 +239,8 @@ def _report_from_dict(d: dict) -> Report:
         volume=d["volume"], pairs=[PairInfo(**x) for x in d.get("pairs", [])],
         checks=[CheckResult(**{k: v for k, v in c.items() if k in ("name", "ok", "measured", "expected")}, **source_kwargs(c),
                             not_run=list(c.get("not_run") or []), rule=str(c.get("rule") or ""),
-                            not_applicable=str(c.get("not_applicable") or "")) for c in d.get("checks", [])], issues=list(d.get("issues", [])),
+                            not_applicable=str(c.get("not_applicable") or ""),
+                            assumed=str(c.get("assumed") or "")) for c in d.get("checks", [])], issues=list(d.get("issues", [])),
         analysis_seconds=d.get("analysis_seconds", 0.0), far_pairs=d.get("far_pairs", 0), near_gap=d.get("near_gap", 0.0),
     )
 

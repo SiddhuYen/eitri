@@ -279,6 +279,9 @@ class CheckResult:
     rule: str = field(default="", kw_only=True)             # the rule-table id ("cad.reference-overlap"); "" for verify()
     # why the check does not apply: what it is about is provably absent from the project (eitri.checks.not_applicable); "" when it does
     not_applicable: str = field(default="", kw_only=True)
+    # what the check's verdict rests on that a person declared instead of a source (eitri.checks.assumed: a board size measured by
+    # the user, not from a datasheet); "" when every figure has a source
+    assumed: str = field(default="", kw_only=True)
 
     @property
     def status(self) -> str:
@@ -289,10 +292,12 @@ class CheckResult:
             return "fail"
         if self.not_applicable or str(self.measured).startswith("not applicable: "):
             return "not_applicable"
-        return "not_run" if self.not_run or str(self.measured).startswith("not run: ") else "pass"
+        if self.not_run or str(self.measured).startswith("not run: "):
+            return "not_run"
+        return "assumed" if self.assumed else "pass"
 
     def line(self, numbers: dict | None = None) -> str:
-        mark = {"pass": "PASS", "fail": "FAIL", "not_run": "WARN", "not_applicable": "N/A"}[self.status]
+        mark = {"pass": "PASS", "fail": "FAIL", "not_run": "WARN", "not_applicable": "N/A", "assumed": "ASSUMED"}[self.status]
         exp = f" (expected {self.expected})" if self.expected else ""
         return f"[{mark}] {self.name}: {self.measured}{exp}{source_tag(self, numbers)}"
 

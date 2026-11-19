@@ -166,4 +166,12 @@ with no CAD file or the blank one):
 - mounting: a board with a published outline (Uno, Nano, Adafruit PCA9685) sits at its anchor (the Assembly frame: the PCB's top
   face, x along the long side, USB at -x); every mounting hole needs a CAD hole in a carrier part that the mount's screw passes
   with it (standoffs tapped M3: a Ø2.5 bore); the outline must not overlap any body but its stand-in; and the nearest other body
-  must be at least `clearance_mm` away.
+  must be at least `clearance_mm` away. Outlines in the catalog: uno, nano, PCA9685 (Adafruit 815), SSD1306 (Adafruit 326),
+  BME280-2652 (Adafruit 2652). A module with none is "not run" and blocks the export. Never invent a board size: if the person's board has no catalog outline (the plain `BME280`, a clone, an unnamed module), ask them to measure it with calipers (the outline length and width, the hole spacing both ways, the hole diameter, the board thickness) and declare exactly what they measured on the mount:
+  `mounts={"BME280": dict(anchor="BME280", stand_in="bme280", carrier=["base"], screw="M2.5", clearance_mm=0.5,
+  measured=dict(size=(25.4, 18.0, 1.6), hole_spacing=(20.32, 12.7), hole_d=2.5, by="calipers, Sam, 2026-11-18"))}` (mm, from the
+  board's centre; `holes=[(x, y), ...]` for an irregular pattern). Those checks are then ASSUMED: "board size measured by the user,
+  not from a datasheet". The free combined export allows them; a change package refuses them until a person waives each one.
+- print: every printable part's mesh must be closed and 2-manifold, or the print export writes no STL for it, so it FAILS (bought
+  parts, HARDWARE and the boards' stand_in bodies are not checked). Two solids touching only along a line or at a point (a boss
+  tangent to a wall) fail it: overlap them by about 0.5 mm, or separate them.

@@ -3,6 +3,37 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
+## 0.9.3 (unreleased): a part that cannot be printed fails; a board the person measured is allowed, and says so
+
+Branch `export-strict-measured`. The version stays 0.9.2 in pyproject.toml until it is released (it folds into 0.9.2 if merged before
+that tag).
+
+> **A design that exported on 0.9.2 can now FAIL.** In a combined project, a printable part whose mesh is not closed and 2-manifold
+> (two solids touching only along a line or at a point, such as a boss tangent to a wall) is now a failing check of the CAD
+> file's build, so `combined_export` and a change package refuse it. On 0.9.2 the export succeeded and wrote no STL for that part.
+> Fix it in the model: overlap the bodies by about 0.5 mm, or separate them.
+
+### Added
+
+- **`print: <part> mesh can be written for printing`** (rule `suite.print-mesh`): every CAD build of a combined project meshes each
+  printable part with the print export's own tolerances and test (`eitri.printexport.mesh_problem`). A failure names the part,
+  each place the mesh is open or shared by more than two faces ("at 8 place(s): near (-35.0, -17.0, 2.0..26.0); ..."), and the fix.
+  Not checked: bought parts (fasteners, metal parts), HARDWARE catalog parts, reference parts, and the bodies an electronics file's
+  `COUPLING mounts` name as `stand_in=`. The print export's own message now lists each place too, instead of one box round the part.
+- **A board the person measured** (Siddharth's decision, 2026-11-18): a mount in the electronics file's `COUPLING` may declare
+  `measured=dict(size=(L, W, T), hole_spacing=(dx, dy) | holes=[(x, y), ...], hole_d=..., by="who, how, when")` (mm, from the
+  board's centre; `screw=` on the mount). The mounting checks then run on those figures (a hole pattern that does not match the
+  CAD still FAILS). An incomplete declaration FAILS and asks for the missing figure. Without one, an outline-less module (the plain
+  `BME280`) stays NOT RUN, as before.
+- **A new check status, `assumed`** (`eitri.checks.assumed`, printed `[ASSUMED]`, report key `checks_assumed`, counted as
+  "N assumed (on a measured figure)"): the check passed only on a figure the model file declares instead of a sourced one. Only an
+  explicit declaration creates it. It does not block `combined_export`. It blocks a change package (`eitri package`) until a
+  person waives each check (`eitri ticket waive`), the same as an unwaived NOT RUN. Every place it shows says "board size measured
+  by the user, not from a datasheet": the check text and source, the build package README's first page, the change package's
+  refusal, its `package.json` (`assumed`, counts, "not checked") and its report.
+- Agent text (combined skill, electronics prompt and reference, the combined reference): never invent a board size; ask the person
+  to measure their board with calipers (outline, hole spacing, hole diameter, thickness) and declare exactly that.
+
 ## 0.9.2: pneumatics start-state and air-return checks; the anonymous counts reach eitri.io from macOS
 
 > **A design that built clean on 0.9.1 can now FAIL.** If a pneumatic circuit declares a sequence (`c.step`), every sequenced

@@ -130,6 +130,46 @@ OUTLINES: dict[str, dict] = {
 PASS_THROUGH_RATING: dict[str, tuple[float | None, str]] = {"PCA9685": (None, "adafruit-815-vplus")}
 
 
+MEASURED_FORM = ("measured=dict(size=(L, W, T), hole_spacing=(dx, dy) or holes=[(x, y), ...], hole_d=..., by='who measured it, how, "
+                 "when') with screw= on the mount")
+
+
+def measured_outline(meas, mount: dict, part_label: str) -> tuple[dict | None, str | None]:
+    """A board outline the person measured on their own board, declared in the model file (COUPLING mounts[...] measured=): mm, the
+    board frame (origin at the PCB's centre, x along its length). (outline, None), or (None, what is wrong with the declaration).
+    Never a default: every figure is the person's, and `by` says who measured it and how."""
+    if not isinstance(meas, dict):
+        return None, f"measured= must be {MEASURED_FORM}"
+    missing = [k for k in ("size", "hole_d", "by") if meas.get(k) in (None, "", (), [])]
+    if not meas.get("holes") and not meas.get("hole_spacing"):
+        missing.append("hole_spacing (or holes)")
+    if not mount.get("screw"):
+        missing.append("screw= on the mount")
+    if missing:
+        return None, f"measured= is missing {', '.join(missing)} ({MEASURED_FORM}): ask the person to measure their board; never invent a figure"
+    try:
+        L, W, T = (float(v) for v in meas["size"])
+        d = float(meas["hole_d"])
+        if meas.get("holes"):
+            holes = [(float(x), float(y)) for x, y in meas["holes"]]
+        else:
+            dx, dy = (float(v) for v in meas["hole_spacing"])
+            xs = (-dx / 2, dx / 2) if dx > 0 else (0.0,)
+            ys = (-dy / 2, dy / 2) if dy > 0 else (0.0,)
+            holes = [(x, y) for x in xs for y in ys]
+    except (TypeError, ValueError):
+        return None, f"measured= figures must be numbers in mm ({MEASURED_FORM})"
+    by = str(meas["by"]).strip()
+    if min(L, W, T, d) <= 0 or len(by) < 3:
+        return None, "measured= sizes and hole_d must be positive and by= must say who measured it"
+    outside = [h for h in holes if abs(h[0]) + d / 2 > L / 2 + 1e-9 or abs(h[1]) + d / 2 > W / 2 + 1e-9]
+    if outside or len(holes) < 1:
+        return None, f"measured= holes {outside} do not fit inside the {L:g} x {W:g} mm outline (holes are from the board's centre)"
+    src = f"board size measured by the user, not from a datasheet ({by}; the model file's COUPLING mounts)"
+    return dict(title=f"{part_label} as measured by the user", size=(L, W, T), holes=holes, hole_d=d, screw=mount.get("screw"),
+                src=src, thickness_src=src, hole_src=src, measured_by=by), None
+
+
 def outline_for(catalog: str) -> dict | None:
     k = str(catalog or "")
     return OUTLINES.get(k) or OUTLINES.get(k.lower()) or OUTLINES.get(k.upper())

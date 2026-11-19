@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from .checks import counts, normalise
+from ..checks import MEASURED_BY_USER
 from .store import (Ticket, TicketError, content_sha256, file_sha256, load, now_iso, tickets_dir, verify_approval,
                     verify_waiver)
 
@@ -342,13 +343,17 @@ def _make(project, t, file, kind, cad, src_a, src_b, rev_a, rev_b, staging, labe
         if r["status"] == "fail":
             reasons.append(f"FAIL {r['name']}: {r['measured']}" + (f" (expected {r['expected']})" if r["expected"] else "")
                            + ". A failed check is fixed in the design; it is never waived.")
+        elif r["status"] == "assumed" and r["name"] not in waived:
+            reasons.append(f"ASSUMED {r['name']}: it passes only on a {MEASURED_BY_USER} ({r['assumed'] or r['measured'][:160]}). A "
+                           f"change package needs sourced figures: name a catalog part with a published drawing, or a person waives it "
+                           f"with `eitri ticket waive {t.id} \"{r['name']}\" --reason \"...\"`")
         elif r["status"] == "not_run" and r["name"] not in waived:
             reasons.append(f"NOT RUN {r['name']}" + (f" ({', '.join(r['inputs_unset'])} not set)" if r["inputs_unset"] else "")
                            + f": set the input so it runs, or a person waives it with `eitri ticket waive {t.id} "
                            f"\"{r['name']}\" --reason \"...\"`")
     for w in stale:
         reasons_note = f"waiver for {w['check']!r} is no longer valid (the ticket changed after it was given, or it does not verify)"
-        if any(r["name"] == w["check"] and r["status"] == "not_run" for r in rows_b):
+        if any(r["name"] == w["check"] and r["status"] in ("not_run", "assumed") for r in rows_b):
             reasons.append(reasons_note + "; a person waives it again")
     criteria = []
     for a in t.data.get("acceptance") or []:
@@ -368,9 +373,10 @@ def _make(project, t, file, kind, cad, src_a, src_b, rev_a, rev_b, staging, labe
                                + "; ".join(f"{h['name']}: {h['measured']}" for h in hits[:3]) + "): the criterion is not met; "
                                "the ticket's criteria change only with a new approval")
                 row["status"] = "not_applicable"
-            elif all(h["status"] in ("not_run", "not_applicable") for h in hits):
-                row["status"] = "waived" if all(h["name"] in waived for h in hits if h["status"] == "not_run") else "not_run"
-            elif any(h["status"] in ("warn", "not_run") for h in hits):
+            elif all(h["status"] in ("not_run", "not_applicable", "assumed") for h in hits):
+                row["status"] = ("waived" if all(h["name"] in waived for h in hits if h["status"] in ("not_run", "assumed"))
+                                 else "assumed" if any(h["status"] == "assumed" for h in hits) else "not_run")
+            elif any(h["status"] in ("warn", "not_run", "assumed") for h in hits):
                 row["status"] = "pass_with_warning"
             else:
                 row["status"] = "pass"
@@ -435,6 +441,10 @@ def _make(project, t, file, kind, cad, src_a, src_b, rev_a, rev_b, staging, labe
     for w in waivers:
         if any(r["name"] == w["check"] and r["status"] == "not_run" for r in rows_b):
             not_checked.append({"kind": "waived", "what": w["check"], "why": f"did not run; waived by {w.get('by')}: {w['reason']}"})
+        hit = next((r for r in rows_b if r["name"] == w["check"] and r["status"] == "assumed"), None)
+        if hit:
+            not_checked.append({"kind": "assumed", "what": w["check"],
+                                "why": f"{MEASURED_BY_USER} ({hit['assumed']}); waived by {w.get('by')}: {w['reason']}"})
     for r in rows_b:
         if r["status"] == "not_applicable":
             was = next((x["status"] for x in rows_a or [] if x["name"] == r["name"]), None)
@@ -471,6 +481,8 @@ def _make(project, t, file, kind, cad, src_a, src_b, rev_a, rev_b, staging, labe
         "acceptance": criteria,
         "checks": {"summary": {"from": counts(rows_a) if rows_a is not None else None, "to": counts(rows_b)}, "rows": checks},
         "removed_checks": [c["name"] for c in removed],
+        "assumed": [{"check": r["name"], "what": MEASURED_BY_USER, "declared": r["assumed"], "measured": r["measured"]}
+                    for r in rows_b if r["status"] == "assumed"],
         "unplanned_changes": unplanned,
         "parameters": params,
         "bom": boms,

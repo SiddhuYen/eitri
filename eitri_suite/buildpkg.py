@@ -57,8 +57,10 @@ def _verdict(checks: list[dict]) -> dict:
     off = [c for c in checks if _status(c) == "not_run"]
     warn = [c for c in checks if _status(c) == "warn"]
     na = [c for c in checks if _status(c) == "not_applicable"]
+    asm = [c for c in checks if _status(c) == "assumed"]
     return {"checks": len(checks), "pass": len(checks) - len(fail) - len(warn) - len(off) - len(na), "warn": len(warn) + len(off),
-            "fail": len(fail), "not_run": len(off), "not_applicable": len(na),
+            "fail": len(fail), "not_run": len(off), "not_applicable": len(na), "assumed": len(asm),
+            "assumed_checks": [f"{c['name']}: {c['measured']}" for c in asm],
             "not_applicable_checks": [f"{c['name']}: {c['measured']}" for c in na],
             "failing": [f"{c['name']}: {c['measured']}" for c in fail],
             "not_run_checks": [f"{c['name']}: {c['measured']}" for c in off],
@@ -390,6 +392,11 @@ def _readme(manifest: dict, checks: dict, bom: dict, plan, files: list[str]) -> 
     lines = [f"# Build package: {manifest['project']}", ""]
     if manifest["forced"]:
         lines += ["> **THIS DESIGN FAILS ITS CHECKS.** The package was written with force=True. Do not build from it until the failures below are fixed.", ""]
+    measured = [f"[{k}] {a}" for k, v in checks.items() for a in v.get("assumed_checks") or []]
+    if measured:
+        lines += ["> **BOARD SIZE MEASURED BY THE USER, NOT FROM A DATASHEET.** These checks pass only on the outline and holes the "
+                  "person measured on their own board (declared in the model file), not on a maker's drawing: " + "; ".join(measured)
+                  + ". Check the board you have against those figures before you print.", ""]
     unprinted = (manifest.get("print") or {}).get("problems") or {}
     if unprinted:
         lines += ["> **NOT EVERY PART COULD BE WRITTEN FOR PRINTING.** No print file for: "
@@ -397,7 +404,8 @@ def _readme(manifest: dict, checks: dict, bom: dict, plan, files: list[str]) -> 
                   + ". Fix the model and write the package again before printing.", ""]
     for k, v in checks.items():
         lines.append(f"- **{k}**: {v['pass']} pass, {v['warn']} warn, {v['fail']} fail of {v['checks']} checks"
-                     + (f" ({v['not_applicable']} not applicable to this design)" if v.get("not_applicable") else ""))
+                     + (f" ({v['not_applicable']} not applicable to this design)" if v.get("not_applicable") else "")
+                     + (f" ({v['assumed']} on a board size measured by the user, not from a datasheet)" if v.get("assumed") else ""))
     for k, v in checks.items():
         for f in v["failing"]:
             lines.append(f"  - FAIL [{k}] {f}")

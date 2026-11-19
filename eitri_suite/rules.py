@@ -52,6 +52,10 @@ RULES: list[Rule] = [
     _r("elec-actuators", "integration", r"actuators: ", CONNECTIVITY),
     _r("elec-dissipation", "integration", r"dissipation: ", rule("Tj = Ta + P x theta_JA against Tj max (the electronics domain's formula)")),
     _r("elec-mounting", "integration", r"mounting: ", ISO_68),
+    # printcheck.py
+    _r("print-mesh", "print", r"print: .* mesh can be written", rule("a part to print is a closed 2-manifold mesh: every edge shared by "
+       "exactly two triangles, consistently wound, enclosing its solid's volume (the print export's own test before it writes an STL or "
+       "3MF, eitri.printexport.mesh_problem)")),
     # stability.py, power.py
     _r("stability", "integration", r"stability: the base does not tip over", IEC_62368, DENSITY),
     _r("power-together", "integration", r"power: the supply covers the actuators that move together", SEQUENCE),

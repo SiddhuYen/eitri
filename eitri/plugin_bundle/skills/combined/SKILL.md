@@ -38,7 +38,13 @@ version to sign in to: everything runs here.
    is about is not in the project (no mechanism file and no servo, motor or solenoid in the circuit; no harness file): it
    blocks nothing. Never remove a file or a part to make a check n/a.
    A board or module mounted in the case needs a catalog outline (SSD1306 = Adafruit 326; for a BME280 use `BME280-2652`,
-   Adafruit 2652, not the plain `BME280`): tell the person the exact product to buy.
+   Adafruit 2652, not the plain `BME280`): tell the person the exact product to buy. If their board has no catalog
+   outline, never invent its size: ask them to measure it with calipers (outline length and width, hole spacing both ways,
+   hole diameter, board thickness) and declare exactly that as `measured=dict(..., by="who, how, when")` on its mount
+   (combined_reference('integration')). Those checks then say ASSUMED, "board size measured by the user, not from a
+   datasheet": the export allows it, a paid change package does not until a person waives it.
+   A "print: ... mesh can be written for printing" FAIL means two solids touch only along a line or at a point (a boss
+   tangent to a wall): overlap them by about 0.5 mm, or separate them.
 7. **Fix and rebuild.** Change the design, not the checks: a bigger servo, a thicker wire, a lower gear ratio, a
    regulator with headroom, a longer link. Never delete, loosen or rename a check to make it pass, and never lower a
    requirement the user gave. If you think a check measures the wrong thing, keep it, add the right one, and say so.

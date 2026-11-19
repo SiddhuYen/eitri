@@ -4,7 +4,9 @@
 
 Non-CAD domains report Checks (eitri.checks: severity, category, not_run). A check switched off by an unset input is `not_run`
 (its text starts "not run:"); one whose subject the project provably lacks is `not_applicable` (its text starts "not applicable:";
-it blocks nothing, but an acceptance criterion mapped only to such checks is not met). CAD reports verify() results (ok or not) and geometry findings: an invalid solid, a negative
+it blocks nothing, but an acceptance criterion mapped only to such checks is not met); one that passed on a figure the model file
+declares as measured by a person is `assumed` (a board size measured by the user, not from a datasheet): it blocks the package
+until a person waives it, like not_run. CAD reports verify() results (ok or not) and geometry findings: an invalid solid, a negative
 volume or an interference between parts is a fail; the other findings (a thin wall, a knife edge, a free edge, disjoint solids)
 are warnings a person reads. A check's source is its structured source (eitri.check_sources: every check in every domain carries one from its rule table,
 with the document's URL and revision): the row's "source" is their text joined, "sources" the records, "rule" the rule id. A build
@@ -64,7 +66,7 @@ def normalise(result: dict) -> list[dict]:
         rows.append({"name": str(c.get("name", "check")), "status": status, "category": cat,
                      "measured": str(c.get("measured", "")), "expected": str(c.get("expected", "")),
                      "source": source_text(srcs) if srcs else _source(text, cat, kind), "sources": srcs,
-                     "rule": str(c.get("rule") or ""), "inputs_unset": unset})
+                     "rule": str(c.get("rule") or ""), "inputs_unset": unset, "assumed": str(c.get("assumed") or "")})
     if kind == "cad":
         for p in rep.get("parts") or []:
             name = p.get("name", "part")
@@ -92,7 +94,7 @@ def _issue_key(text: str) -> str:
 
 
 def counts(rows: list[dict]) -> dict:
-    out = {"pass": 0, "warn": 0, "fail": 0, "not_run": 0, "not_applicable": 0}
+    out = {"pass": 0, "warn": 0, "fail": 0, "not_run": 0, "not_applicable": 0, "assumed": 0}
     for r in rows:
         out[r["status"]] = out.get(r["status"], 0) + 1
     out["total"] = len(rows)
