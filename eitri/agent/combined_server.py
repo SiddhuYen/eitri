@@ -207,6 +207,65 @@ def make_server(session: CombinedSession | None = None) -> MCPServer:
             raise ToolError(text)
         return text
 
+    # tickets on a combined project: open, show, plan, package. There is deliberately NO tool that approves, waives or closes
+    # one: those are a person's, in their own terminal (`eitri ticket approve|waive|close -C <folder>`)
+    def tools_for(project_id: str):
+        from ..project import Project
+        from .tools import Tools
+        return Tools(Project(ws.folder(project_id)))
+
+    def answer(res) -> str:
+        if res.is_error:
+            raise ToolError(res.text)
+        return res.text
+
+    @server.tool(title="Open a ticket",
+                 description="Open a ticket on a combined project: a customer's change request, in their words (request, verbatim), "
+                             "with acceptance criteria. It covers every model file of the project: the package rebuilds them all together "
+                             "with the cross-domain checks. acceptance: a list of {\"text\", \"check\": \"<check name or glob>\"} (a check "
+                             "name as combined_ticket_show lists it, \"wiring.py: <check>\", or the bare name to match it in any file) or "
+                             "{\"text\", \"human_verify\": true}; \"text => check\" / \"text => human\" strings work too. base: "
+                             "\"latest\" (every file's last good build) or \"new\". The project may not be written or built until you "
+                             "write the plan (combined_ticket_plan) and a PERSON approves it in their own terminal. You cannot approve it.")
+    @_err
+    def combined_ticket_new(project_id: str, title: str, request: str, acceptance: list[Any] | str | None = None,
+                            constraints: list[str] | str | None = None, base: str = "latest", customer: str = "") -> str:
+        return answer(tools_for(project_id).ticket_new(title, request, acceptance, constraints, "", base, customer))
+
+    @server.tool(title="Show a ticket",
+                 description="A combined project's ticket (default: the active one): request, criteria, plan, status, approval, "
+                             "waivers, package, and the names of the checks the base builds run (to map criteria to).")
+    @_err
+    def combined_ticket_show(project_id: str, ticket: str = "") -> str:
+        t = tools_for(project_id)
+        return answer(t.ticket_show(ticket)) + "\n\n" + answer(t.ticket_list())
+
+    @server.tool(title="Write a ticket's plan",
+                 description="Write the plan for a combined project's ticket before any change: summary, the files it will change "
+                             "(new files too), parameters [{\"file\", \"name\", \"from\", \"to\", \"why\"}], checks_affected, "
+                             "not_checked (what eitri will NOT verify), open_questions. Then STOP: a person approves it with `eitri ticket "
+                             "approve <id> -C <project folder>` in their own terminal (the answer gives the exact command). Rewriting the plan after approval voids it.")
+    @_err
+    def combined_ticket_plan(project_id: str, ticket: str, summary: str, files: list[str] | None = None, parameters: list[Any] | None = None,
+                             checks_affected: list[str] | None = None, not_checked: list[str] | None = None,
+                             open_questions: list[str] | None = None, acceptance: list[Any] | None = None) -> str:
+        return answer(tools_for(project_id).ticket_plan(ticket, summary, files, parameters, checks_affected, not_checked,
+                                                       open_questions, acceptance))
+
+    @server.tool(title="Make the change package",
+                 description="The change package of a combined project's approved ticket: every model file rebuilt fresh together at the "
+                             "base and at the result, every check of every file and between the files before and after with its source, "
+                             "parameter and BOM diffs per file, the source diff, the regenerated outputs and eitri's build package, the "
+                             "revision table, Not checked and a draft change order, as a folder + zip. Refused, listing every reason, when "
+                             "any check of any file fails or did not run (a person may waive a not-run check; a failed one is fixed in the "
+                             "design), a file on disk has no good build, or the approval does not cover the ticket as it is.")
+    @_err
+    def combined_package(project_id: str, ticket: str = "") -> str:
+        why = ws.busy(ws.folder(project_id))
+        if why:
+            raise ToolError(f"Not packaged: {why}.")
+        return answer(tools_for(project_id).package(ticket))
+
     return server
 
 

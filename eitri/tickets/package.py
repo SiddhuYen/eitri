@@ -15,6 +15,9 @@ a zip a person reviews and signs off.
 
 Refusal rule: no package when the approval is not valid, a fresh build fails, any check of the result FAILS (never waivable),
 any check is NOT RUN without a person's waiver, or an acceptance criterion names a check the build does not run.
+
+A ticket on a combined project (several model files checked against each other) is packaged by eitri.tickets.combined: every
+file rebuilt together, the same rule over every check of every file.
 """
 from __future__ import annotations
 
@@ -62,7 +65,8 @@ NOT_COVERED = {
                     "Thermal conditions inside an enclosure; component tolerances and ageing."],
 }
 ALWAYS_NOT_COVERED = ["Cross-domain interaction with other model files (servo torque against the CAD arm, current against the "
-                      "wiring...): those checks run in a combined project (eitri's combined workspace), not in this package.",
+                      "wiring...): those checks run in a combined project (eitri's combined workspace), and a ticket on a combined "
+                      "project packages every file with them; this package covers one file.",
                       "Physical build and test: every result here is computed; nothing was built or measured."]
 
 
@@ -283,6 +287,9 @@ def make_package(project, tid: str | int, *, keep_build: bool = False) -> dict:
     if not ok:
         raise PackageRefused([why + (f"; a person approves it with `eitri ticket approve {t.id}`" if t.status != "draft" else
                                      "; the agent writes the plan, then a person approves it")])
+    if t.combined:
+        from .combined import make_package as combined_package
+        return combined_package(project, t, keep_build=keep_build)
     folder = Path(project.folder)
     file = t.target_file
     path = folder / file
@@ -499,6 +506,13 @@ def _make(project, t, file, kind, cad, src_a, src_b, rev_a, rev_b, staging, labe
         "outputs_missing": missing,
         "files": [],
     }
+    return _finish(project, t, out, pkg, images, table, file,
+                   {"from_build": rev_a.number if rev_a else None, "to_build": rev_b.number}, rows_b)
+
+
+def _finish(project, t: Ticket, out: Path, pkg: dict, images: dict, table: list, revkey: str, builds: dict, rows_b: list) -> dict:
+    """Write the package's tables, report, package.json and zip, record the new revision letter (revisions.json: per model file,
+    or under "project" for a combined project) and mark the ticket packaged."""
     _write_tables(out, pkg)
     (out / "ticket.yaml").write_text(t.path.read_text(encoding="utf-8"), encoding="utf-8")
     from .report import report_html, report_md
@@ -510,11 +524,14 @@ def _make(project, t, file, kind, cad, src_a, src_b, rev_a, rev_b, staging, labe
     zip_path = Path(shutil.make_archive(str(out), "zip", root_dir=out.parent, base_dir=out.name))
 
     revs = read_revisions(project)
-    revs.setdefault("files", {})[file] = table
+    if pkg["design"].get("combined"):
+        revs[revkey] = table
+    else:
+        revs.setdefault("files", {})[revkey] = table
     _revisions_path(project).write_text(json.dumps(revs, indent=1), encoding="utf-8")
+    frm, to = pkg["revisions"]["from"], pkg["revisions"]["to"]
     t.data["package"] = {"folder": str(out.relative_to(Path(project.folder))), "zip": str(zip_path.relative_to(Path(project.folder))),
-                         "at": pkg["generated"], "from_letter": (frm or {}).get("letter"), "to_letter": to["letter"],
-                         "from_build": rev_a.number if rev_a else None, "to_build": rev_b.number}
+                         "at": pkg["generated"], "from_letter": (frm or {}).get("letter"), "to_letter": to["letter"], **builds}
     t.data["status"] = "packaged"
     t.save()
     t.event("packaged", **t.data["package"], checks=counts(rows_b))
@@ -565,15 +582,22 @@ def _write_tables(out: Path, pkg: dict) -> None:
     fr, to = pkg["revisions"]["from"], pkg["revisions"]["to"]
     a = f"rev_{(fr or {}).get('letter') or 'base'}"
     b = f"rev_{to['letter']}"
+    combined = bool(pkg["design"].get("combined"))
+    extra = ["file", "cross_domain"] if combined else []         # a combined package: the model file each check belongs to
     w("checks.csv", ["check", "category", "change", f"{a}_status", f"{a}_measured", f"{b}_status", f"{b}_measured", f"{b}_expected", "source",
-                    "rule", "source_basis", "source_urls"],
+                    "rule", "source_basis", "source_urls"] + extra,
       [[r["name"], r["category"], r["change"], (r["from"] or {}).get("status", ""), (r["from"] or {}).get("measured", ""),
         (r["to"] or {}).get("status", ""), (r["to"] or {}).get("measured", ""), (r["to"] or {}).get("expected", ""), r["source"],
         r.get("rule", ""), " ".join(dict.fromkeys(x["basis"] for x in r.get("sources") or [])),
         " ".join(dict.fromkeys(x["url"] for x in r.get("sources") or [] if x.get("url")))]
+       + ([r.get("file", ""), "yes" if r.get("cross_domain") else "no"] if combined else [])
        for r in pkg["checks"]["rows"]])
     if pkg["parameters"] is not None:
-        w("parameters.csv", ["parameter", a, b, "change"], [[p["name"], p["from"], p["to"], p["change"]] for p in pkg["parameters"]])
+        if combined:
+            w("parameters.csv", ["file", "parameter", a, b, "change"],
+              [[p["file"], p["name"], p["from"], p["to"], p["change"]] for p in pkg["parameters"]])
+        else:
+            w("parameters.csv", ["parameter", a, b, "change"], [[p["name"], p["from"], p["to"], p["change"]] for p in pkg["parameters"]])
     if pkg["bom"] is not None:
         w("bom_diff.csv", ["table", "item", "change", "fields", a, b],
           [[r["table"], r["key"], r["change"], ";".join(r["fields"]), json.dumps(r["from"], ensure_ascii=False) if r["from"] else "",

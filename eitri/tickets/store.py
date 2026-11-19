@@ -95,8 +95,22 @@ class Ticket:
         return self.folder / "ticket.yaml"
 
     @property
+    def combined(self) -> bool:
+        """A ticket on a combined project: it covers every model file, and its package checks them together."""
+        return bool((self.data.get("target") or {}).get("combined"))
+
+    @property
     def target_file(self) -> str:
-        return (self.data.get("target") or {}).get("file") or ""
+        """The one model file a single-file ticket changes ("" for a combined ticket: see target_files)."""
+        return "" if self.combined else (self.data.get("target") or {}).get("file") or ""
+
+    @property
+    def target_files(self) -> dict[str, int | None]:
+        """{model file: its base revision (None: a file new under this ticket)}; one entry for a single-file ticket."""
+        tgt = self.data.get("target") or {}
+        if self.combined:
+            return {str(f["file"]): f.get("revision") for f in tgt.get("files") or []}
+        return {tgt["file"]: tgt.get("revision")} if tgt.get("file") else {}
 
     @property
     def base_revision(self) -> int | None:
@@ -271,6 +285,13 @@ def new_ticket(project, title: str, request: str, *, constraints: Iterable[str] 
     if cur is not None:
         raise TicketError(f"{cur.id} ({cur.data.get('title')}) is still {cur.status} on this project; a person finishes it with "
                           f"`eitri ticket close {cur.id}` before another ticket starts")
+    from . import combined as C
+    if C.is_combined(project):
+        if file:
+            raise TicketError("this is a combined project: a ticket on it covers every model file together (their cross-domain "
+                              "checks read each other), so it takes no file; leave --file out")
+        target = C.target(project, base)
+        return _create(project, title, request, target, constraints, acceptance, customer, created_by)
     file = Path(file).name if file else project.model_path.name
     if not file.endswith(".py"):
         file += ".py"
@@ -287,12 +308,16 @@ def new_ticket(project, title: str, request: str, *, constraints: Iterable[str] 
         if not hist[n].ok:
             raise TicketError(f"revision {n} of {file} failed to build; the base must be a good build")
         rev = n
+    return _create(project, title, request, {"file": file, "revision": rev}, constraints, acceptance, customer, created_by)
+
+
+def _create(project, title, request, target: dict, constraints, acceptance, customer: str, created_by: str) -> Ticket:
     tid = _next_id(project)
     data = {
         "schema": SCHEMA, "id": tid, "title": str(title).strip(), "status": "draft",
         "created": now_iso(), "created_by": created_by, "customer": customer or "",
         "request": str(request).strip(),
-        "target": {"file": file, "revision": rev},
+        "target": target,
         "constraints": _strings(constraints),
         "acceptance": _criteria(acceptance),
         "plan": None, "approval": None, "waivers": [], "package": None,
@@ -328,7 +353,14 @@ def set_plan(project, tid: str | int, plan: dict, *, acceptance: Iterable[Any] |
         if not isinstance(p, dict) or not p.get("name"):
             raise TicketError("each planned parameter is {name, from, to, why} (or \"name: from -> to\")")
         params.append({k: p.get(k) for k in ("file", "name", "from", "to", "why") if p.get(k) not in (None, "")})
-    files = _strings(plan.get("files")) or ([t.target_file] if t.target_file else [])
+    files = _strings(plan.get("files")) or list(t.target_files)
+    if t.combined:
+        from .combined import design_files
+        known = set(design_files(project)) | set(t.target_files)
+        new = [f for f in files if f not in known]
+        bad = [f for f in new if not re.fullmatch(r"[a-z][a-z0-9_]{0,30}\.py", f)]
+        if bad:
+            raise TicketError(f"plan files {bad}: a combined project's model files are top-level lowercase names ending in .py")
     t.data["plan"] = {
         "summary": summary, "files": files, "parameters": params,
         "checks_affected": _strings(plan.get("checks_affected")),
@@ -337,6 +369,8 @@ def set_plan(project, tid: str | int, plan: dict, *, acceptance: Iterable[Any] |
         "written": now_iso(), "written_by": by,
         "model_sha256": file_sha256(Path(project.folder) / t.target_file) if t.target_file else None,
     }
+    if t.combined:
+        t.data["plan"]["models_sha256"] = models_sha256(project)
     if acceptance is not None:
         t.data["acceptance"] = _criteria(acceptance)
     if constraints is not None:
@@ -416,6 +450,19 @@ def verify_approval(t: Ticket) -> tuple[bool, str]:
 
 
 # ---------------------------------------------------------------------------------------------------------------- gate
+def person_command(project, t: Ticket, cmd: str = "approve") -> str:
+    """The command a person runs: `eitri ticket approve T-0001`, with `-C <folder>` for a combined project (its agent works
+    through the combined tools, so the person's terminal is rarely in the project folder)."""
+    if not t.combined:
+        return f"eitri ticket {cmd} {t.id}"
+    folder = Path(project.folder)
+    try:
+        folder = Path("~") / folder.resolve().relative_to(Path.home().resolve())
+    except ValueError:
+        pass
+    return f"eitri ticket {cmd} {t.id} -C {folder}"
+
+
 def gate(project, action: str = "change the model") -> None:
     """Raise ChangeRefused when the project's active ticket does not allow the model to change (Project calls this before
     it writes, restores or builds a model file)."""
@@ -430,11 +477,11 @@ def gate(project, action: str = "change the model") -> None:
     if t.status == "awaiting_approval":
         raise ChangeRefused(
             f"Refused to {action}: ticket {t.id} is awaiting approval. The person approves it by running "
-            f"`eitri ticket approve {t.id}` in their own terminal; no tool you have can approve it. Do not tell them it is "
+            f"`{person_command(project, t)}` in their own terminal; no tool you have can approve it. Do not tell them it is "
             f"approved, and do not start the change, until ticket_show says approved.")
     ok, why = verify_approval(t)
     if not ok:
-        raise ChangeRefused(f"Refused to {action}: {why}. The person approves it again with `eitri ticket approve {t.id}`.")
+        raise ChangeRefused(f"Refused to {action}: {why}. The person approves it again with `{person_command(project, t)}`.")
 
 
 # ---------------------------------------------------------------------------------------------------------------- person-only
@@ -523,10 +570,11 @@ def approve(project, tid: str | int, *, by: str | None = None, note: str = "", d
                           + (" (the agent writes its plan first)" if t.status == "draft" else ""))
     plan = t.data.get("plan") or {}
     changed = False
-    if t.target_file and plan.get("model_sha256") != file_sha256(Path(project.folder) / t.target_file):
+    moved = changed_since_plan(project, t)
+    if moved:
         changed = True
         if not despite_changes:
-            raise TicketError(f"{t.target_file} changed on disk after the plan was written and before approval: look at the "
+            raise TicketError(f"{', '.join(moved)} changed on disk after the plan was written and before approval: look at the "
                               "change (git diff, or compare it with the base revision), then approve with --despite-changes "
                               "(recorded on the package's first page) or ask for a new plan")
     extra = confirm(describe(project, t), f"approve {t.id}")
@@ -553,6 +601,9 @@ def waive(project, tid: str | int, check: str, reason: str, *, by: str | None = 
         raise TicketError("name the check to waive, exactly as the report names it")
     if len(reason) < 15:
         raise TicketError("give a written reason (a sentence: why it is acceptable that this check does not run)")
+    if t.combined:
+        from .combined import resolve_check
+        check = resolve_check(project, check)
     last = _last_check_state(project, t, check)
     if last == "fail":
         raise TicketError(f"{check!r} FAILED in the last build: a failed check is never waived; fix the design")
@@ -572,6 +623,23 @@ def waive(project, tid: str | int, check: str, reason: str, *, by: str | None = 
     return t
 
 
+def models_sha256(project) -> dict[str, str | None]:
+    """{model file: sha256} of every model file of a combined project as it is on disk (blank ones included)."""
+    from .combined import all_model_files
+    return {f: file_sha256(Path(project.folder) / f) for f in all_model_files(project)}
+
+
+def changed_since_plan(project, t: Ticket) -> list[str]:
+    """The model files that changed on disk (or appeared, or went) since the plan was written."""
+    plan = t.data.get("plan") or {}
+    if t.combined:
+        before, now = plan.get("models_sha256") or {}, models_sha256(project)
+        return sorted(f for f in set(before) | set(now) if before.get(f) != now.get(f))
+    if t.target_file and plan.get("model_sha256") != file_sha256(Path(project.folder) / t.target_file):
+        return [t.target_file]
+    return []
+
+
 def verify_waiver(t: Ticket, w: dict) -> bool:
     if w.get("content_sha256") != content_sha256(t.data):
         return False
@@ -582,6 +650,12 @@ def _last_check_state(project, t: Ticket, name: str) -> str | None:
     """pass | warn | fail | not_run for a check in the target file's last good build, "missing" when that build has no such
     check, None when there is no build to look at."""
     from .checks import normalise
+    if t.combined:
+        from .combined import last_rows
+        rows = last_rows(project)
+        if not rows:
+            return None
+        return next((r["status"] for r in rows if r["name"] == name), "missing")
     last = project.last_ok_revision(model=t.target_file) if t.target_file else None
     data = project.build_result(last) if last else None
     if not data:
@@ -616,8 +690,14 @@ def describe(project, t: Ticket) -> str:
     """The ticket as a person reads it before approving (and as ticket_show returns it)."""
     d = t.data
     tgt = d.get("target") or {}
+    if t.combined:
+        parts = [f"{f} from revision {r}" if r is not None else f"{f} (new)" for f, r in t.target_files.items()]
+        target_line = ("Target: the combined project, every model file checked together: " + (", ".join(parts) or "no model file yet")
+                       + ". The package rebuilds them all, with the cross-domain checks.")
+    else:
+        target_line = f"Target: {tgt.get('file')} " + (f"from revision {tgt['revision']}" if tgt.get("revision") else "(a new design)")
     lines = [f"{t.id}: {d.get('title')}  [{t.status.replace('_', ' ').upper()}]",
-             f"Target: {tgt.get('file')} " + (f"from revision {tgt['revision']}" if tgt.get("revision") else "(a new design)"),
+             target_line,
              "", "Request (customer's words):"] + ["  " + l for l in str(d.get("request", "")).splitlines()]
     if d.get("customer"):
         lines.insert(2, f"Customer: {d['customer']}")
@@ -635,7 +715,7 @@ def describe(project, t: Ticket) -> str:
         if plan.get("files"):
             lines.append("  Files: " + ", ".join(plan["files"]))
         for p in plan.get("parameters") or []:
-            lines.append(f"  Parameter {p.get('name')}: {p.get('from', '?')} -> {p.get('to', '?')}" + (f"  ({p['why']})" if p.get("why") else ""))
+            lines.append(f"  Parameter {(p['file'] + ' ') if p.get('file') else ''}{p.get('name')}: {p.get('from', '?')} -> {p.get('to', '?')}" + (f"  ({p['why']})" if p.get("why") else ""))
         if plan.get("checks_affected"):
             lines.append("  Checks expected to change: " + "; ".join(plan["checks_affected"]))
         if plan.get("not_checked"):
@@ -657,9 +737,10 @@ def describe(project, t: Ticket) -> str:
     if pk:
         lines.append(f"Package: {pk.get('folder')} (Rev {pk.get('from_letter') or '-'} -> Rev {pk.get('to_letter')}, {pk.get('at')})")
     nxt = {"draft": "Next: the agent writes the plan (ticket_plan).",
-           "awaiting_approval": f"Next: a person reads this and runs `eitri ticket approve {t.id}` in their own terminal.",
-           "approved": f"Next: the agent makes the change and builds; then `eitri package {t.id}` (or the package tool).",
-           "packaged": f"Next: a person reviews the package; `eitri ticket close {t.id}` when done."}.get(t.status)
+           "awaiting_approval": f"Next: a person reads this and runs `{person_command(project, t)}` in their own terminal.",
+           "approved": f"Next: the agent makes the change and builds; then `eitri package {t.id}"
+                       + (f" -C {person_command(project, t).split(' -C ', 1)[1]}" if t.combined else "") + "` (or the package tool).",
+           "packaged": f"Next: a person reviews the package; `{person_command(project, t, 'close')}` when done."}.get(t.status)
     if nxt:
         lines += ["", nxt]
     return "\n".join(lines)

@@ -26,7 +26,8 @@
       "required": ["letter", "build"],
       "properties": {
         "letter": {"type": ["string", "null"], "description": "revision letter (ASME Y14.35 letters: no I, O, Q, S, X, Z); null: an unreleased base build"},
-        "build": {"type": "integer", "description": "the project's build (revision) number: revisions/NNN"},
+        "build": {"type": "integer", "description": "the project's build (revision) number: revisions/NNN (a combined project: the highest of its files' builds)"},
+        "builds": {"type": "object", "additionalProperties": {"type": "integer"}, "description": "a combined project only: {model file: its build}"},
         "released": {"type": "boolean", "description": "from only: the base was a lettered revision before this package"},
         "source_sha256": {"type": "string"},
         "date": {"type": "string", "format": "date-time"}
@@ -61,8 +62,17 @@
       "required": ["project", "file", "kind", "label", "new_design"],
       "properties": {
         "project": {"type": "string"},
-        "file": {"type": "string"},
-        "kind": {"enum": ["cad", "harness", "mechanism", "pneumatics", "firmware", "electronics"]},
+        "file": {"type": "string", "description": "the model file; a combined project: its model files, comma-separated"},
+        "kind": {"enum": ["cad", "harness", "mechanism", "pneumatics", "firmware", "electronics", "combined"],
+                 "description": "combined (added after 0.9.1): a combined project, every model file rebuilt and checked together"},
+        "combined": {"type": "boolean", "description": "added after 0.9.1: true for a combined project's package"},
+        "files": {"type": "array", "description": "a combined project only: each model file, its change and its checks",
+                  "items": {"type": "object", "required": ["file", "kind", "change", "from_build", "to_build", "checks", "cross_domain_checks"],
+                            "properties": {"file": {"type": "string"}, "kind": {"type": "string"},
+                                           "change": {"enum": ["changed", "same", "added", "removed", "new"]},
+                                           "from_build": {"type": ["integer", "null"]}, "to_build": {"type": ["integer", "null"]},
+                                           "checks": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/counts"}]},
+                                           "cross_domain_checks": {"type": "integer"}}}},
         "label": {"type": "string"},
         "new_design": {"type": "boolean", "description": "true: no base revision; parameters, bom and source.diff are absent (null)"}
       }
@@ -83,7 +93,8 @@
         "required": ["letter", "build", "date", "ticket", "description"],
         "properties": {"letter": {"type": "string"}, "build": {"type": "integer"}, "date": {"type": "string"},
                        "ticket": {"$ref": "#/$defs/str_or_null"}, "description": {"type": "string"},
-                       "source_sha256": {"type": ["string", "null"]}}
+                       "source_sha256": {"type": ["string", "null"]},
+                       "builds": {"type": "object", "additionalProperties": {"type": "integer"}}}
       }
     },
     "approval": {
@@ -154,6 +165,9 @@
                                                    "basis": {"enum": ["document", "requirement", "model", "rule", "tool", "assumption"]}}}},
               "rule": {"type": "string", "description": "the rule-table id the check matched (\"harness.wire-ampacity\"); \"\" when none (a CAD geometry finding)"},
               "change": {"enum": ["same", "value", "status", "added", "removed", "new"]},
+              "file": {"type": "string", "description": "a combined project only: the model file the check ran in (the name is \"<file>: <check>\")"},
+              "check": {"type": "string", "description": "a combined project only: the check's own name, without the file"},
+              "cross_domain": {"type": "boolean", "description": "a combined project only: a check between files (eitri_suite's)"},
               "from": {"$ref": "#/$defs/check_state"},
               "to": {"$ref": "#/$defs/check_state"}
             }
@@ -166,7 +180,8 @@
     "parameters": {
       "type": ["array", "null"],
       "items": {"type": "object", "required": ["name", "from", "to", "change"],
-                "properties": {"name": {"type": "string"}, "from": {}, "to": {}, "change": {"enum": ["same", "changed", "added", "removed"]}}}
+                "properties": {"name": {"type": "string"}, "file": {"type": "string", "description": "a combined project only"},
+                               "from": {}, "to": {}, "change": {"enum": ["same", "changed", "added", "removed"]}}}
     },
     "bom": {
       "type": ["array", "null"],
