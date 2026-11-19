@@ -13,8 +13,9 @@ and the check, "wiring.py: overcurrent protection", so the same check name in tw
 
 The refusal rule is the single-file one (eitri.tickets.package.judge, the same function), over every file: no package when the
 approval is not valid, a file on disk has no good build, a fresh build of any file fails, any check of any file FAILS (never
-waivable), any check is NOT RUN or ASSUMED without a person's waiver, or an acceptance criterion names a check no file runs or only
-checks that do not apply (n/a). An n/a check blocks nothing by itself.
+waivable), any check is NOT RUN or ASSUMED without a person's waiver, a check the base ran is REMOVED or SWITCHED OFF without a
+person's waiver of that kind (a file the ticket removes takes its checks with it: each is REMOVED), or an acceptance criterion
+names a check no file runs or only checks that do not apply (n/a). An n/a check blocks nothing by itself.
 
 Revision letters: one letter for the whole project (the machine), in tickets/revisions.json under "project"; each lettered
 revision records the build of every file.
@@ -109,6 +110,21 @@ def last_rows(project) -> list[dict]:
         if data:
             rows += _rows(f, data)
     return rows
+
+
+def base_rows(project, t: Ticket) -> list[dict] | None:
+    """Every file's checks in the ticket's base builds (the stored results), qualified; None for a new design (no base)."""
+    rows: list[dict] = []
+    based = False
+    for f, n in t.target_files.items():
+        if n is None:
+            continue
+        based = True
+        rev = next((h for h in project.revisions_of(f) if h.number == n and h.ok), None)
+        data = project.build_result(rev) if rev else None
+        if data:
+            rows += _rows(f, data)
+    return rows if based else None
 
 
 def resolve_check(project, name: str) -> str:
@@ -277,7 +293,7 @@ def _make(project, t, sources_a, sources_b, rev_a, rev_b, staging, PackageRefuse
     rows_b = [r for f in order_b for r in _rows(f, builds_b[f][1])]
     rows_a = [r for f in order_a for r in _rows(f, builds_a[f][1])] if builds_a else None
 
-    more, waivers, criteria = P.judge(t, rows_b, match, where="no file's build runs", they="they do")
+    more, waivers, criteria, lost, renamed = P.judge(t, rows_b, match, where="no file's build runs", they="they do", rows_a=rows_a)
     reasons += more
     if reasons:
         _refuse(t, reasons, rows_a, rows_b)
@@ -366,7 +382,6 @@ def _make(project, t, sources_a, sources_b, rev_a, rev_b, staging, PackageRefuse
     for c in checks:
         r = ref[c["name"]]
         c.update({"file": r["file"], "check": r["check"], "cross_domain": r["cross_domain"]})
-    removed = [c for c in checks if c["change"] == "removed"]
     plan = t.data.get("plan") or {}
     planned = {(x.get("file") or None, str(x.get("name"))) for x in plan.get("parameters") or []}
     unplanned = [f"{x['file']}: {x['name']}" for x in params or [] if x["change"] != "same"
@@ -383,11 +398,7 @@ def _make(project, t, sources_a, sources_b, rev_a, rev_b, staging, PackageRefuse
     for a in criteria:
         if a["human_verify"]:
             not_checked.append({"kind": "human_verify", "what": f"{a['id']}: {a['text']}", "why": "not machine-checkable: a person verifies it"})
-    not_checked += P.status_not_checked(waivers, rows_a, rows_b, fl)
-    for c in removed:
-        not_checked.append({"kind": "removed_check", "what": c["name"],
-                            "why": f"ran on Rev {fl} ({c['from']['status']}) and does not run on Rev {to['letter']} (renamed with the "
-                                   "part it is about, dropped, or its file was removed: a person checks which)"})
+    not_checked += P.status_not_checked(waivers, rows_a, rows_b, fl, lost, to["letter"])
     for kind in dict.fromkeys(kinds_b.values()):
         for n in P.NOT_COVERED.get(kind, []):
             if n.startswith("Fit with parts outside this model file"):
@@ -424,11 +435,13 @@ def _make(project, t, sources_a, sources_b, rev_a, rev_b, staging, PackageRefuse
         "approval": {k: ap.get(k) for k in ("by", "at", "method", "tty", "note", "despite_changes", "content_sha256", "signer")}
                     | {"verified": True},
         "plan": {k: plan.get(k) for k in ("summary", "files", "parameters", "checks_affected", "not_checked", "open_questions", "written", "written_by")},
-        "waivers": [{k: w.get(k) for k in ("check", "reason", "by", "at", "method")} for w in waivers],
+        "waivers": P.waiver_records(waivers),
         "acceptance": criteria,
         "checks": {"summary": {"from": counts(rows_a) if rows_a is not None else None, "to": counts(rows_b),
                                "cross_domain": {"to": len(cross)}}, "rows": checks},
-        "removed_checks": [c["name"] for c in removed],
+        "removed_checks": [x["check"] for x in lost if x["kind"] == "removed"],
+        "switched_off_checks": [x["check"] for x in lost if x["kind"] == "switched_off"],
+        "renamed_checks": renamed,
         "assumed": P.assumed_rows(rows_b),
         "unplanned_changes": unplanned,
         "parameters": params,

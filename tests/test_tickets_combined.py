@@ -171,6 +171,36 @@ def test_combined_package_refuses_not_run_then_takes_a_waiver_per_file(ws):
     assert T.load(p, t.id).status == "packaged"
 
 
+def test_combined_package_refuses_a_removed_check_until_a_removed_waiver(ws):
+    """0.9.2's rule on a combined project: a verify() line the change deletes from one file is REMOVED; `--lost`
+    (lost_since_base) finds it from the stored builds, the waiver records kind "removed", and the package lists it."""
+    pid = ws.new_project("Tilt plate", "a plate and the tilt it carries")["project_id"]
+    ws.put_files(pid, {"model.py": BOX, "mech.py": MECH_NO_TRAVEL})
+    p = Project(Path(_build(ws, pid)["folder"]))
+    t = T.new_ticket(p, "Drop the width check", "The plate width is fixed by the customer; drop its check.")
+    T.set_plan(p, t.id, {"summary": "remove the width verify() line", "files": ["model.py"]})
+    T.approve(p, t.id, confirm=_person)
+    ws.put_files(pid, {"model.py": BOX.replace('    c.true("plate is wide enough", p.w >= 30)\n', '    pass\n')})
+    _build(ws, pid)
+    with pytest.raises(T.PackageRefused) as exc:
+        T.make_package(p, t.id)
+    assert [r for r in exc.value.reasons if r.startswith("REMOVED model.py: plate is wide enough")], exc.value.reasons
+    lost = T.store.lost_since_base(p, T.load(p, t.id))
+    assert [(x["kind"], x["check"]) for x in lost] == [("removed", "model.py: plate is wide enough")]
+    T.waive(p, t.id, [x["check"] for x in lost], "The customer fixes the width on their drawing; no check needed.",
+            by="Pat Person", confirm=_person)
+    assert T.load(p, t.id).data["waivers"][0]["kind"] == "removed"
+    from eitri.tickets.combined import last_rows
+    not_run = [r["name"] for r in last_rows(p) if r["status"] == "not_run"]          # the tilt servo's travel is unset
+    assert not_run
+    T.waive(p, t.id, not_run, "The SG90's travel is 180 deg per TowerPro; the joint uses 90 deg.", confirm=_person)
+    pkg = T.make_package(p, t.id)
+    _validate(Path(pkg["folder"], "package.json"))
+    assert pkg["removed_checks"] == ["model.py: plate is wide enough"] and pkg["switched_off_checks"] == []
+    assert [w["kind"] for w in pkg["waivers"]] == ["removed"] + ["not_run"] * len(not_run)
+    assert [x for x in pkg["not_checked"] if x["kind"] == "removed_check" and x["what"] == "model.py: plate is wide enough"]
+
+
 # ---------------------------------------------------------------------------------------------------- end to end: the uno arm
 def test_uno_arm_payload_change_end_to_end(ws, tmp_path, monkeypatch):
     """The reference arm (five files, 160+ checks, 60+ of them between the files). A change that overloads the shoulder fails
@@ -295,7 +325,7 @@ def _row(name, status, file="elec.py", measured="m"):
             "inputs_unset": [], "assumed": "calipers" if status == "assumed" else "", "category": "", "cross_domain": False}
 
 
-def test_one_refusal_rule_for_single_file_and_combined():
+def test_one_refusal_rule_for_single_file_and_combined(monkeypatch):
     """The combined package calls the single-file package's judge(), so a status added to one rule is in the other: n/a alone
     blocks nothing, but a criterion that maps only to n/a checks is not met; ASSUMED and NOT RUN need a waiver; FAIL never."""
     from eitri.tickets import combined as C
@@ -303,14 +333,25 @@ def test_one_refusal_rule_for_single_file_and_combined():
     t = SimpleTicket(acceptance=[{"id": "AC1", "text": "the arm moves", "check": "actuator*"}])
     rows = [_row("actuator: joints have actuators", "not_applicable", measured="not applicable: no mechanism file"),
             _row("rail budget", "pass"), _row("mounting: hole pattern", "assumed"), _row("i2c pull-ups", "not_run")]
-    reasons, _waivers, criteria = P.judge(t, rows, C.match, where="no file's build runs", they="they do")
+    reasons, _waivers, criteria, _lost, _renamed = P.judge(t, rows, C.match, where="no file's build runs", they="they do")
     assert [r.split(" ", 1)[0] for r in reasons] == ["ASSUMED", "NOT", "AC1"], reasons
     assert criteria[0]["status"] == "not_applicable" and "does not apply" in reasons[-1]
-    reasons, _w, criteria = P.judge(SimpleTicket(acceptance=[{"id": "AC1", "text": "budget", "check": "rail budget"}]),
+    reasons, _w, criteria, _l, _r = P.judge(SimpleTicket(acceptance=[{"id": "AC1", "text": "budget", "check": "rail budget"}]),
                                     [rows[0], rows[1]], C.match)
     assert reasons == [] and criteria[0]["status"] == "pass"                            # n/a alone blocks nothing
-    reasons, _w, _c = P.judge(t, [_row("x", "fail")] + rows[:2], C.match)
+    reasons, _w, _c, _l, _r = P.judge(t, [_row("x", "fail")] + rows[:2], C.match)
     assert reasons[0].startswith("FAIL elec.py: x") and "never waived" in reasons[0]
+    # 0.9.2's lost checks (a check the base ran, removed or switched off by the change) are the same rule for every file
+    base = [_row("rail budget", "pass"), _row("servo torque", "pass", file="mech.py"), _row("joint travel", "pass", file="mech.py")]
+    after = [_row("rail budget", "pass"), {**_row("joint travel", "not_run", file="mech.py"), "inputs_unset": ["travel_deg"]}]
+    reasons, _w, _c, lost, _r = P.judge(SimpleTicket(), after, C.match, rows_a=base)
+    assert sorted((x["kind"], x["check"]) for x in lost) == [("removed", "mech.py: servo torque"), ("switched_off", "mech.py: joint travel")]
+    assert [r.split(" mech.py")[0] for r in reasons] == ["REMOVED", "SWITCHED OFF"], reasons
+    waivers = [{"check": "mech.py: servo torque", "kind": "removed"}, {"check": "mech.py: joint travel", "kind": "not_run"}]
+    monkeypatch.setattr(P, "verify_waiver", lambda t, w: True)                       # stand-in signatures
+    reasons, applied, _c, _l, _r = P.judge(SimpleTicket(waivers=waivers), after, C.match, rows_a=base)
+    assert [r.split(" mech.py")[0] for r in reasons] == ["SWITCHED OFF"], reasons      # a "did not run" waiver does not cover a switch-off
+    assert {w["check"] for w in applied} == {"mech.py: servo torque", "mech.py: joint travel"}
     import inspect
     assert "P.judge(" in inspect.getsource(C._make) and "P.status_not_checked(" in inspect.getsource(C._make)
 

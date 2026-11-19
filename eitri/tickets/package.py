@@ -14,8 +14,11 @@ a zip a person reviews and signs off.
       ticket.yaml          the ticket as approved
 
 Refusal rule: no package when the approval is not valid, a fresh build fails, any check of the result FAILS (never waivable),
-any check is NOT RUN or ASSUMED (passed only on a figure the person measured) without a person's waiver, or an acceptance
-criterion names a check the build does not run or only checks that do not apply (n/a). The rule is `judge()`.
+any check is NOT RUN or ASSUMED (passed only on a figure the person measured) without a person's waiver, a check the base
+revision ran is gone from the result (REMOVED) or the change switched it off (SWITCHED OFF: not run, or passing on a
+declaration with an input unset) without a person's waiver of that kind, or an acceptance criterion names a check the build
+does not run or only checks that do not apply (n/a). A check renamed with what it is about (the same rule about the same ids,
+or "torque joint tilt (SG90)" -> "(MG996R)") is paired with its new name and compared as one check. The rule is `judge()`.
 
 A ticket on a combined project (several model files checked against each other) is packaged by eitri.tickets.combined: every
 file rebuilt together, the same rule (`judge()`, the same function) over every check of every file.
@@ -34,7 +37,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from .checks import counts, normalise
+from .checks import counts, lost_checks, normalise
 from ..checks import MEASURED_BY_USER
 from .store import (Ticket, TicketError, content_sha256, file_sha256, load, now_iso, tickets_dir, verify_approval,
                     verify_waiver)
@@ -343,7 +346,7 @@ def _make(project, t, file, kind, cad, src_a, src_b, rev_a, rev_b, staging, labe
         _refuse(t, reasons)
     rows_b = normalise(data_b)
     rows_a = normalise(data_a) if data_a else None
-    more, waivers, criteria = judge(t, rows_b)
+    more, waivers, criteria, lost, renamed = judge(t, rows_b, rows_a=rows_a)
     reasons += more
     if reasons:
         _refuse(t, reasons, rows_a, rows_b)
@@ -392,7 +395,6 @@ def _make(project, t, file, kind, cad, src_a, src_b, rev_a, rev_b, staging, labe
     params = params_diff(data_a.get("params") if data_a else None, data_b.get("params") or {}) if data_a else None
     boms = bom_diff(bom_tables(_kind(src_a), data_a), bom_tables(kind, data_b)) if data_a else None
     checks = check_table(rows_a, rows_b)
-    removed = [c for c in checks if c["change"] == "removed"]
     planned = {str(x.get("name")) for x in (t.data.get("plan") or {}).get("parameters") or []}
     unplanned = [x["name"] for x in params or [] if x["change"] != "same" and x["name"] not in planned]
 
@@ -402,11 +404,7 @@ def _make(project, t, file, kind, cad, src_a, src_b, rev_a, rev_b, staging, labe
     for a in criteria:
         if a["human_verify"]:
             not_checked.append({"kind": "human_verify", "what": f"{a['id']}: {a['text']}", "why": "not machine-checkable: a person verifies it"})
-    not_checked += status_not_checked(waivers, rows_a, rows_b, fl)
-    for c in removed:
-        not_checked.append({"kind": "removed_check", "what": c["name"],
-                            "why": f"ran on Rev {fl} ({c['from']['status']}) and does not run on Rev {to['letter']} (renamed with the "
-                                   "part it is about, or dropped: a person checks which)"})
+    not_checked += status_not_checked(waivers, rows_a, rows_b, fl, lost, to["letter"])
     for n in NOT_COVERED.get(kind, []):
         not_checked.append({"kind": "domain", "what": n, "why": f"outside what eitri's {label(kind) if kind != 'cad' else 'CAD'} checks cover"})
     for n in ALWAYS_NOT_COVERED:
@@ -429,10 +427,12 @@ def _make(project, t, file, kind, cad, src_a, src_b, rev_a, rev_b, staging, labe
         "approval": {k: ap.get(k) for k in ("by", "at", "method", "tty", "note", "despite_changes", "content_sha256", "signer")}
                     | {"verified": True},
         "plan": {k: plan.get(k) for k in ("summary", "files", "parameters", "checks_affected", "not_checked", "open_questions", "written", "written_by")},
-        "waivers": [{k: w.get(k) for k in ("check", "reason", "by", "at", "method")} for w in waivers],
+        "waivers": waiver_records(waivers),
         "acceptance": criteria,
         "checks": {"summary": {"from": counts(rows_a) if rows_a is not None else None, "to": counts(rows_b)}, "rows": checks},
-        "removed_checks": [c["name"] for c in removed],
+        "removed_checks": [x["check"] for x in lost if x["kind"] == "removed"],
+        "switched_off_checks": [x["check"] for x in lost if x["kind"] == "switched_off"],
+        "renamed_checks": renamed,
         "assumed": assumed_rows(rows_b),
         "unplanned_changes": unplanned,
         "parameters": params,
@@ -454,34 +454,53 @@ def _make(project, t, file, kind, cad, src_a, src_b, rev_a, rev_b, staging, labe
                    {"from_build": rev_a.number if rev_a else None, "to_build": rev_b.number}, rows_b)
 
 
-def judge(t: Ticket, rows_b: list[dict], match=None, where: str = "this build does not run",
-          they: str = "it does") -> tuple[list[str], list[dict], list[dict]]:
-    """The refusal rule over the result's check rows, shared by the single-file and the combined package: every FAIL refuses
-    (never waivable); every ASSUMED or NOT RUN check refuses unless a person waived it with a valid waiver; an acceptance
-    criterion refuses when it names a check the build does not run, or only checks that do not apply. Returns (reasons, the
-    valid waivers, the acceptance rows). `match` maps a criterion's check pattern to rows (a combined project also matches bare
+def judge(t: Ticket, rows_b: list[dict], match=None, where: str = "this build does not run", they: str = "it does", *,
+          rows_a: list[dict] | None = None) -> tuple[list[str], list[dict], list[dict], list[dict], list[dict]]:
+    """The refusal rule over the result's check rows (and the base's, `rows_a`), shared by the single-file and the combined
+    package: every FAIL refuses (never waivable); every ASSUMED or NOT RUN check refuses unless a person waived it with a valid
+    waiver; a check the base ran that the result REMOVED or SWITCHED OFF refuses unless a person waived it with a waiver of that
+    kind (eitri.tickets.checks.lost_checks: renames are paired first); an acceptance criterion refuses when it names a check the
+    build does not run, or only checks that do not apply. Returns (reasons, the waivers that apply to this result, the acceptance
+    rows, the lost checks, the renames). `match` maps a criterion's check pattern to rows (a combined project also matches bare
     names in any file)."""
     match = match or _match
     reasons: list[str] = []
-    waivers, stale = [], []
+    valid, stale = [], []
     for w in t.data.get("waivers") or []:
-        (waivers if verify_waiver(t, w) else stale).append(w)
-    waived = {w["check"]: w for w in waivers}
+        (valid if verify_waiver(t, w) else stale).append(w)
+    waived = {w["check"]: w for w in valid}
+    kind_of = {n: (w.get("kind") or "not_run") for n, w in waived.items()}
+    lost, renamed = lost_checks(rows_a, rows_b)
+    off = {x["check"] for x in lost if x["kind"] == "switched_off"}
+    for x in lost:
+        if kind_of.get(x["check"]) == x["kind"]:
+            continue
+        was = f"ran on the base revision ({x['from']['status']}: {x['from']['measured'][:160]})"
+        how = f"`eitri ticket waive {t.id} \"{x['check']}\" --reason \"...\"` (or `--lost` for every one)"
+        if x["kind"] == "removed":
+            reasons.append(f"REMOVED {x['check']}: {was} and the result has no such check, not even under a new name. Put it "
+                           f"back, or a person confirms it was renamed or is no longer needed: {how}")
+        else:
+            now = (f"not run ({', '.join(x['inputs'])} not set)" if x["inputs"] else "not run") if x["to"]["status"] == "not_run" else \
+                  f"{x['to']['status']} on a declaration, {', '.join(x['inputs'])} unset: {x['to']['measured'][:160]}"
+            reasons.append(f"SWITCHED OFF {x['check']}" + (f" (was {x['renamed_from']!r})" if x["renamed_from"] else "")
+                           + f": {was}; on the result it is {now}. Give the input its datasheet figure again, or a person "
+                           f"accepts that this check no longer grades the design: {how}")
     for r in rows_b:
         if r["status"] == "fail":
             reasons.append(f"FAIL {r['name']}: {r['measured']}" + (f" (expected {r['expected']})" if r["expected"] else "")
                            + ". A failed check is fixed in the design; it is never waived.")
-        elif r["status"] == "assumed" and r["name"] not in waived:
+        elif r["status"] == "assumed" and kind_of.get(r["name"]) != "assumed":
             reasons.append(f"ASSUMED {r['name']}: it passes only on a {MEASURED_BY_USER} ({r['assumed'] or r['measured'][:160]}). A "
                            f"change package needs sourced figures: name a catalog part with a published drawing, or a person waives it "
                            f"with `eitri ticket waive {t.id} \"{r['name']}\" --reason \"...\"`")
-        elif r["status"] == "not_run" and r["name"] not in waived:
+        elif r["status"] == "not_run" and r["name"] not in off and kind_of.get(r["name"]) not in ("not_run", "switched_off"):
             reasons.append(f"NOT RUN {r['name']}" + (f" ({', '.join(r['inputs_unset'])} not set)" if r["inputs_unset"] else "")
                            + f": set the input so it runs, or a person waives it with `eitri ticket waive {t.id} "
                            f"\"{r['name']}\" --reason \"...\"`")
     for w in stale:
         reasons_note = f"waiver for {w['check']!r} is no longer valid (the ticket changed after it was given, or it does not verify)"
-        if any(r["name"] == w["check"] and r["status"] in ("not_run", "assumed") for r in rows_b):
+        if any(r["name"] == w["check"] and r["status"] in ("not_run", "assumed") for r in rows_b) or any(x["check"] == w["check"] for x in lost):
             reasons.append(reasons_note + "; a person waives it again")
     criteria = []
     for a in t.data.get("acceptance") or []:
@@ -509,14 +528,36 @@ def judge(t: Ticket, rows_b: list[dict], match=None, where: str = "this build do
             else:
                 row["status"] = "pass"
         criteria.append(row)
-    return reasons, waivers, criteria
+    lost_names = {x["check"] for x in lost}
+    open_b = {r["name"] for r in rows_b if r["status"] in ("not_run", "assumed")}
+    applied = [w for w in valid if w["check"] in lost_names or w["check"] in open_b]   # a waiver for a check that is back is left out
+    return reasons, applied, criteria, lost, renamed
 
 
-def status_not_checked(waivers: list[dict], rows_a: list[dict] | None, rows_b: list[dict], fl: str | None) -> list[dict]:
-    """The "not checked" entries the result's statuses make: each waived NOT RUN or ASSUMED check, and each n/a check (with its
-    status on the base `fl` when it applied there)."""
+def waiver_records(waivers: list[dict]) -> list[dict]:
+    """package.json's waivers: the ones that apply to the result, each with its kind."""
+    return [{k: w.get(k) for k in ("check", "reason", "by", "at", "method")} | {"kind": w.get("kind") or "not_run"} for w in waivers]
+
+
+def status_not_checked(waivers: list[dict], rows_a: list[dict] | None, rows_b: list[dict], fl: str | None,
+                       lost: list[dict] | None = None, to_letter: str | None = None) -> list[dict]:
+    """The "not checked" entries the result's statuses make: each waived REMOVED, SWITCHED OFF, NOT RUN or ASSUMED check, and
+    each n/a check (with its status on the base `fl` when it applied there)."""
     not_checked: list[dict] = []
+    lost_by = {x["check"]: x for x in lost or []}
     for w in waivers:
+        x = lost_by.get(w["check"])
+        if x is not None and x["kind"] == "removed":
+            not_checked.append({"kind": "removed_check", "what": w["check"],
+                                "why": f"ran on Rev {fl} ({x['from']['status']}) and is gone from Rev {to_letter}; waived by "
+                                       f"{w.get('by')}: {w['reason']}"})
+            continue
+        if x is not None:
+            not_checked.append({"kind": "switched_off", "what": w["check"],
+                                "why": f"ran on Rev {fl} ({x['from']['status']}); this change switched it off"
+                                       + (f" ({', '.join(x['inputs'])} unset)" if x["inputs"] else "")
+                                       + f"; waived by {w.get('by')}: {w['reason']}"})
+            continue
         if any(r["name"] == w["check"] and r["status"] == "not_run" for r in rows_b):
             not_checked.append({"kind": "waived", "what": w["check"], "why": f"did not run; waived by {w.get('by')}: {w['reason']}"})
         hit = next((r for r in rows_b if r["name"] == w["check"] and r["status"] == "assumed"), None)

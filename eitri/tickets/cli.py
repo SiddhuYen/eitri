@@ -53,10 +53,13 @@ def add_parsers(sub) -> None:
     a.add_argument("--despite-changes", action="store_true", help="approve although the model file changed since the plan "
                    "was written (recorded on the package's first page)")
 
-    w = ts.add_parser("waive", help="waive one check that did NOT RUN, with a written reason (never a failed check)")
+    w = ts.add_parser("waive", help="waive checks that did NOT RUN, were SWITCHED OFF or were REMOVED since the base revision, "
+                      "with a written reason (never a failed check)")
     proj(w)
     w.add_argument("id")
-    w.add_argument("check", help="the check's name exactly as the report gives it")
+    w.add_argument("check", nargs="*", help="each check's name exactly as the report (or `eitri package`'s refusal) gives it")
+    w.add_argument("--lost", action="store_true", help="every check the base revision ran that the last build removed or "
+                   "switched off (each is listed before you confirm)")
     w.add_argument("--reason", required=True)
     w.add_argument("--by", default=None)
 
@@ -124,8 +127,17 @@ def ticket_main(args) -> int:
             print(f"approved {t.id} as {t.data['approval']['by']} at {t.data['approval']['at']}")
             return 0
         if cmd == "waive":
-            t = S.waive(project, args.id, args.check, args.reason, by=args.by)
-            print(f"waived {args.check!r} on {t.id}; the reason is printed on the package's first page")
+            names = list(args.check)
+            if args.lost:
+                names += [x["check"] for x in S.lost_since_base(project, S.load(project, args.id))]
+                if not names:
+                    print(f"eitri ticket waive: the last build lost no check of {args.id}'s base revision", file=sys.stderr)
+                    return 1
+            t = S.waive(project, args.id, names, args.reason, by=args.by)
+            kinds = {w["check"]: w.get("kind", "not_run") for w in t.data.get("waivers") or []}
+            for n in dict.fromkeys(names):
+                print(f"waived {n!r} ({kinds.get(n, 'not_run').replace('_', ' ')}) on {t.id}")
+            print("the reason is printed on the package's first page")
             return 0
         if cmd == "close":
             t = S.close(project, args.id, by=args.by, cancel=args.cancel, note=args.note)

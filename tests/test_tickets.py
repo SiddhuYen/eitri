@@ -327,6 +327,136 @@ def test_package_refuses_failed_and_not_run_checks_and_takes_a_waiver(tmp_path):
     assert T.load(p, "T-0001").status == "packaged"
 
 
+def _approved_edit(tmp_path, base_code, name="tilt"):
+    """A project built at base_code (revision 1 = the ticket's base), a ticket with an approved plan, and its Tools."""
+    p = _project(tmp_path, base_code, name)
+    assert p.build("as delivered").ok
+    T.new_ticket(p, "Stronger tilt", "make the tilt stronger", acceptance=["camera mass => camera mass*"])
+    T.set_plan(p, "T-0001", PLAN)
+    T.approve(p, "T-0001", by="Pat Person", confirm=_person)
+    return p, Tools(p)
+
+
+SERVO = 'actuator=Actuator("SG90", stall_kgcm=1.8, speed_deg_s=500, travel_deg=180, mass_g=9))'
+
+
+def test_package_refuses_a_check_the_edit_switched_off_haiku_travel_deg_none(tmp_path):
+    """The edit-model bench's one evasion (2026-11-06): Haiku geared the servos and set travel_deg=None, which switches off the
+    joint-travel check. It ran (pass) on the base; on the result it is "not run". That is refused as SWITCHED OFF, and a plain
+    "did not run" reading of it is not enough: the person's waiver records that the change switched it off."""
+    p, tools = _approved_edit(tmp_path, mech())
+    res = tools.edit_model(SERVO, SERVO.replace("travel_deg=180", "travel_deg=None, gear_ratio=12"))
+    assert not res.is_error, res.text
+    with pytest.raises(T.PackageRefused) as exc:
+        T.make_package(p, "T-0001")
+    text = " ".join(exc.value.reasons)
+    assert "SWITCHED OFF joint limits tilt" in text and "travel_deg not set" in text and "ran on the base revision (pass" in text
+    assert not [r for r in exc.value.reasons if r.startswith("NOT RUN joint limits tilt")]       # one reason, the stronger one
+    assert T.store.lost_since_base(p, T.load(p, "T-0001"))[0]["kind"] == "switched_off"
+    T.waive(p, "T-0001", "joint limits tilt", "Continuous drive through 12:1; an encoder on the joint gives the position.",
+            by="Pat Person", confirm=_person)
+    assert T.load(p, "T-0001").data["waivers"][0]["kind"] == "switched_off"
+    pkg = T.make_package(p, "T-0001")
+    _validate(Path(pkg["folder"]) / "package.json")
+    assert pkg["switched_off_checks"] == ["joint limits tilt"] and pkg["waivers"][0]["kind"] == "switched_off"
+    page1 = Path(pkg["folder"], "report.md").read_text(encoding="utf-8").split("## Acceptance criteria")[0]
+    assert "SWITCHED OFF by this change" in page1 and "encoder on the joint" in page1
+    assert any(n["kind"] == "switched_off" and n["what"] == "joint limits tilt" for n in pkg["not_checked"])
+
+
+def test_package_refuses_a_check_switched_off_by_a_declaration_that_passes(tmp_path):
+    """travel_deg=None with continuous=True makes "joint limits tilt" PASS on a declaration (no travel to grade). Before 0.9.2
+    that packaged cleanly; now the base's graded pass -> the result's ungraded pass is refused as switched off."""
+    p, tools = _approved_edit(tmp_path, mech())
+    res = tools.edit_model(SERVO, SERVO.replace("travel_deg=180", "travel_deg=None, continuous=True"))
+    assert not res.is_error and "0 FAIL" in res.text, res.text
+    row = next(r for r in T.checks.normalise(p.build_result()) if r["name"] == "joint limits tilt")
+    assert row["status"] == "pass" and row["inputs_unset"]                                # passes, but grades nothing
+    with pytest.raises(T.PackageRefused) as exc:
+        T.make_package(p, "T-0001")
+    assert any(r.startswith("SWITCHED OFF joint limits tilt") and "pass on a declaration" in r for r in exc.value.reasons), exc.value.reasons
+
+
+def test_package_refuses_a_removed_check_until_a_person_waives_that_removal(tmp_path, monkeypatch, capsys):
+    """A verify() line deleted (the camera-mass limit) and a check lost with the actuator: REMOVED, refused. Only a waiver of
+    the removal (CLI `waive --lost`, which lists each one to the person) lets the package through, and page 1 says so."""
+    from eitri.cli import main
+    p, tools = _approved_edit(tmp_path, mech())
+    res = tools.edit_model('    c.at_most("camera mass (g)", p.camera_g, 300)\n', '    pass\n')
+    assert not res.is_error, res.text
+    with pytest.raises(T.PackageRefused) as exc:
+        T.make_package(p, "T-0001")
+    removed = [r for r in exc.value.reasons if r.startswith("REMOVED ")]
+    assert [r.split(":")[0] for r in removed] == ["REMOVED camera mass (g)"] and "--lost" in removed[0]
+    # the acceptance criterion pointed at it too: still refused for that, separately
+    assert any("AC-1" in r and "does not run" in r for r in exc.value.reasons)
+    with pytest.raises(T.TicketError, match="no check named"):
+        T.waive(p, "T-0001", "camera mass", "a long enough reason here", confirm=_person)
+    tty = _FakeTTY()
+    monkeypatch.setattr(T.store, "_open_tty", lambda: tty)
+    assert main(["ticket", "waive", "T-0001", "--lost", "-C", str(p.folder), "--by", "Pat Person",
+                 "--reason", "The customer's new camera mount carries any camera up to its rated 500 g."]) == 0
+    assert "camera mass (g): RAN on the base revision and is GONE" in tty.seen               # the person saw what they accept
+    assert "waived 'camera mass (g)' (removed)" in capsys.readouterr().out
+    with pytest.raises(T.PackageRefused) as exc:                     # the criterion still names a check that is gone
+        T.make_package(p, "T-0001")
+    assert not [r for r in exc.value.reasons if r.startswith("REMOVED ")]
+
+
+def test_removed_check_waiver_does_not_cover_a_later_switch_off_and_vice_versa(tmp_path):
+    """A waiver is for one kind of loss: a removal waived, then the check comes back switched off, is refused again."""
+    p, tools = _approved_edit(tmp_path, mech())
+    assert not tools.edit_model(SERVO, 'actuator=None)').is_error                              # torque/speed graded on nothing
+    with pytest.raises(T.PackageRefused) as exc:
+        T.make_package(p, "T-0001")
+    text = " ".join(exc.value.reasons)
+    # "torque joint tilt (SG90)" -> "torque joint tilt": paired as a rename (same rule, same joint), and switched off
+    assert "SWITCHED OFF torque joint tilt (was 'torque joint tilt (SG90)')" in text and "actuator not set" in text
+    assert "REMOVED speed joint tilt" in text                                                 # no actuator: no speed row at all
+    T.waive(p, "T-0001", "speed joint tilt", "The tilt is moved by hand in this variant; no speed requirement.", confirm=_person)
+    with pytest.raises(T.PackageRefused) as exc:
+        T.make_package(p, "T-0001")
+    assert not any(r.startswith("REMOVED speed joint tilt") for r in exc.value.reasons)
+    assert any(r.startswith("SWITCHED OFF torque joint tilt") for r in exc.value.reasons)
+    # the actuator back but without its travel: torque and speed are graded again (the removal waiver no longer matters), and
+    # the joint-travel check is the one switched off now; the removal waiver does not cover it
+    assert not tools.edit_model('actuator=None)', SERVO.replace("travel_deg=180", "travel_deg=None")).is_error
+    with pytest.raises(T.PackageRefused) as exc:
+        T.make_package(p, "T-0001")
+    text = " ".join(exc.value.reasons)
+    assert "SWITCHED OFF joint limits tilt" in text and "SWITCHED OFF torque" not in text and "REMOVED" not in text
+    with pytest.raises(T.TicketError, match="ran in the last build"):
+        T.waive(p, "T-0001", "speed joint tilt", "The tilt is moved by hand in this variant; no speed requirement.", confirm=_person)
+
+
+def test_lost_checks_pairs_renames_and_ignores_geometry_findings():
+    from eitri.tickets.checks import lost_checks
+
+    def row(name, status="pass", rule="", refs=(), cat="x", unset=()):
+        return {"name": name, "status": status, "rule": rule, "refs": list(refs), "category": cat, "measured": "m", "expected": "",
+                "inputs_unset": list(unset)}
+    before = [row("ampacity W1", rule="harness.wire-ampacity", refs=["W1"]),
+              row("ampacity W2", rule="harness.wire-ampacity", refs=["W2"]),
+              row("torque joint a (SG90)", rule="mechanism.joint-load", refs=["a"]),
+              row("geometry: plate: thin wall #", "warn", cat="geometry"),
+              row("geometry valid: plate", cat="geometry"),
+              row("limit", rule="verify")]
+    after = [row("ampacity W1", rule="harness.wire-ampacity", refs=["W1"], status="not_run", unset=["rating"]),
+             row("ampacity W7", rule="harness.wire-ampacity", refs=["W7"]),                 # a wire id changed: not paired
+             row("torque joint a (MG996R)", rule="mechanism.joint-load", refs=["a"]),
+             row("geometry valid: plate", cat="geometry"),
+             row("limit 2", rule="verify")]                                                 # verify() lines are never paired
+    lost, renamed = lost_checks(before, after)
+    assert {(x["kind"], x["check"]) for x in lost} == {("switched_off", "ampacity W1"), ("removed", "ampacity W2"), ("removed", "limit")}
+    assert [(r["from"], r["to"]) for r in renamed] == [("torque joint a (SG90)", "torque joint a (MG996R)")]
+    assert lost_checks(None, after) == ([], [])                                             # a new design loses nothing
+    # two candidates for one removed check: ambiguous, so not paired (a person decides)
+    lost, renamed = lost_checks([row("t (A)", rule="r", refs=["j"])], [row("t (B)", rule="r", refs=["j"]), row("t (C)", rule="r", refs=["j"])])
+    assert renamed == [] and lost[0]["kind"] == "removed"
+    # it already did not run on the base: not switched off by this change
+    assert lost_checks([row("x", "not_run", unset=["a"])], [row("x", "not_run", unset=["a"])]) == ([], [])
+
+
 def test_new_design_package_has_no_diff_sections(tmp_path):
     p = _project(tmp_path, mech())
     T.new_ticket(p, "New tilt arm", "Design a tilt arm for a 100 g camera", base="new",
@@ -432,7 +562,9 @@ def test_end_to_end_pan_tilt_servo_change(tmp_path):
     assert bom[("joints", "tilt")] == "changed"
     rows = {r["name"]: r for r in pkg["checks"]["rows"]}
     assert rows["torque joint tilt (SG90)"]["change"] == "removed" and rows["torque joint tilt (MG996R)"]["change"] == "added"
-    assert "torque joint tilt (SG90)" in pkg["removed_checks"]
+    # the check is named after its actuator: the same rule about the same joint is paired as a rename, not refused as removed
+    assert pkg["removed_checks"] == [] and pkg["switched_off_checks"] == []
+    assert {(r["from"], r["to"]) for r in pkg["renamed_checks"]} == {("torque joint tilt (SG90)", "torque joint tilt (MG996R)")}
     assert all(r["source"] for r in pkg["checks"]["rows"])
     _sources_are_structured(pkg)
     tilt = rows["torque joint tilt (MG996R)"]
@@ -440,7 +572,7 @@ def test_end_to_end_pan_tilt_servo_change(tmp_path):
     assert "rule" in (pkg_dir / "checks.csv").read_text(encoding="utf-8").splitlines()[0]
     assert pkg["checks"]["summary"]["to"]["fail"] == 0 and pkg["checks"]["summary"]["to"]["not_run"] == 0
     kinds = {n["kind"] for n in pkg["not_checked"]}
-    assert {"plan", "human_verify", "removed_check", "domain", "scope"} <= kinds
+    assert {"plan", "human_verify", "domain", "scope"} <= kinds and "removed_check" not in kinds
     co = pkg["change_order"]
     assert co["from_revision"] == "A" and co["to_revision"] == "B" and co["disposition"] == "" and co["effectivity"] == ""
     assert "pan_tilt.py" in co["affected_items"] and "mass: MG996R (tilt)" in co["affected_items"]
