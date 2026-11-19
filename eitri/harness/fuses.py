@@ -102,26 +102,40 @@ MFR_IHOLD_BY_C = {
 
 # The short cite each check line carries -> the full source (quoted). The reference doc lists them all.
 FUSE_SOURCES: dict[str, str] = {}
+FUSE_URLS: dict[str, tuple] = {}      # short cite -> the document(s) it is read from: a URL, or (URL, revision) (eitri.harness.rules)
+
+ATOF_URL = "https://store.comet.bg/download-file.php?id=27669"
+MINI_URL = "https://store.comet.bg/download-file.php?id=27670"
+LF_487_URL = "https://static.chipdip.ru/lib/881/DOC046881352.pdf"
+LF_477_URL = "https://static.chipdip.ru/lib/840/DOC012840973.pdf"
+MFR_URL = "https://www.bourns.com/docs/Product-Datasheets/mfr.pdf"
+LF_CATALOG_URL = "https://docs.rs-online.com/c6d2/0900766b81388d9c.pdf"
+BLUE_SEA_URL = ("https://web.archive.org/web/20181222193245/https://www.bluesea.com/support/articles/Circuit_Protection/98/"
+                "DC_Circuit_Protection")       # the live page answers 403; this snapshot prints both quotes below (checked 2026-11-17)
+UNO_PINOUT_URL = "https://docs.arduino.cc/resources/pinouts/A000066-full-pinout.pdf"
 
 
-def cite(short: str, full: str) -> str:
+def cite(short: str, full: str, *urls) -> str:
     FUSE_SOURCES[short] = full
+    FUSE_URLS[short] = tuple(urls)
     return short
 
 
-CITE_ATOF = cite("Littelfuse ATOF 287 datasheet rev. 12/06/2022, p.1", SRC_ATOF)
-CITE_ATOF_TEMP = cite("Littelfuse ATOF 287 rev. 12/06/2022, p.3 temperature table", SRC_ATOF_TEMP)
-CITE_MINI = cite("Littelfuse MINI 297 datasheet rev. 05/26/2023, p.1", SRC_MINI)
-CITE_MINI_TEMP = cite("Littelfuse MINI 297 rev. 05/26/2023, p.3 temperature table", SRC_MINI_TEMP)
-CITE_LF_75 = cite("Littelfuse Fuse Selection Guide (2009 catalog p.9): 75 % at 25 C", SRC_LF_75)
-CITE_487 = cite("Littelfuse 487 datasheet rev. 08/22/19, p.2", SRC_487)
-CITE_477 = cite("Littelfuse 477 datasheet rev. 09/05/18, p.2", SRC_477)
-CITE_5X20_TEMP = cite("Littelfuse 487/477 rerating curve (graph-read)", SRC_5X20_TEMP)
+CITE_ATOF = cite("Littelfuse ATOF 287 datasheet rev. 12/06/2022, p.1", SRC_ATOF, ATOF_URL)
+CITE_ATOF_TEMP = cite("Littelfuse ATOF 287 rev. 12/06/2022, p.3 temperature table", SRC_ATOF_TEMP, ATOF_URL)
+CITE_MINI = cite("Littelfuse MINI 297 datasheet rev. 05/26/2023, p.1", SRC_MINI, MINI_URL)
+CITE_MINI_TEMP = cite("Littelfuse MINI 297 rev. 05/26/2023, p.3 temperature table", SRC_MINI_TEMP, MINI_URL)
+CITE_LF_75 = cite("Littelfuse Fuse Selection Guide (2009 catalog p.9): 75 % at 25 C", SRC_LF_75, LF_CATALOG_URL)
+CITE_487 = cite("Littelfuse 487 datasheet rev. 08/22/19, p.2", SRC_487, LF_487_URL)
+CITE_477 = cite("Littelfuse 477 datasheet rev. 09/05/18, p.2", SRC_477, LF_477_URL)
+CITE_5X20_TEMP = cite("Littelfuse 487/477 rerating curve (graph-read)", SRC_5X20_TEMP,
+                      (LF_487_URL, "Littelfuse 487 datasheet rev. 08/22/19, rerating curve"),
+                      (LF_477_URL, "Littelfuse 477 datasheet rev. 09/05/18, rerating curve"))
 # Part numbers: the tin-plated ordering codes as printed, 0287xxx.PXCN (ATOF, Rev 08/18/2022 ordering table) and 0297xxx.WXNV
 # (MINI, 05/26/2023), xxx the amp code (005 = 5 A). 7.5 A is coded "07.5" there with no full example printed: left blank.
-CITE_MFR = cite("Bourns MF-R datasheet Rev. AR 09/26, p.1 (23 C)", SRC_MFR)
-CITE_MFR_DERATE = cite("Bourns MF-R Rev. AR 09/26, p.4 thermal derating table", SRC_MFR_DERATE)
-CITE_MFR_VMAX = cite("Bourns MF-R Rev. AR 09/26, p.1 Vmax", SRC_MFR_VMAX)
+CITE_MFR = cite("Bourns MF-R datasheet Rev. AR 09/26, p.1 (23 C)", SRC_MFR, MFR_URL)
+CITE_MFR_DERATE = cite("Bourns MF-R Rev. AR 09/26, p.4 thermal derating table", SRC_MFR_DERATE, MFR_URL)
+CITE_MFR_VMAX = cite("Bourns MF-R Rev. AR 09/26, p.1 Vmax", SRC_MFR_VMAX, MFR_URL)
 
 # The overcurrent device sits at the source end: ABYC E-11 as published by Blue Sea Systems. The 40 in / 72 in exceptions
 # (a conductor in a sheath or enclosure all the way) are not modelled: the shortest figure is used for every conductor.
@@ -132,14 +146,14 @@ PLACEMENT_SOURCE_FULL = ("Blue Sea Systems, 'DC Circuit Protection' (bluesea.com
                     "(175mm) of the point of connection'; the 40 in / 72 in sheathed-conductor exceptions are not used")
 SIZING_SOURCE = ("Blue Sea Systems, 'DC Circuit Protection' (23 Dec 2005): 'choose an amperage rating that is equal to or less than "
                  "the current rating, ampacity of the wire'")
-PLACEMENT_SOURCE = cite("ABYC E-11 7 in (175 mm), per Blue Sea Systems 'DC Circuit Protection' 2005", PLACEMENT_SOURCE_FULL)
-SIZING_SOURCE = cite("Blue Sea Systems 'DC Circuit Protection' 2005: rating <= wire ampacity", SIZING_SOURCE)
+PLACEMENT_SOURCE = cite("ABYC E-11 7 in (175 mm), per Blue Sea Systems 'DC Circuit Protection' 2005", PLACEMENT_SOURCE_FULL, BLUE_SEA_URL)
+SIZING_SOURCE = cite("Blue Sea Systems 'DC Circuit Protection' 2005: rating <= wire ampacity", SIZING_SOURCE, BLUE_SEA_URL)
 # Until 0.8.0 every signal=True net was graded at this MCU-pin figure; since 0.8.1 the limit comes from the device declared at
 # the net's ends (eitri.harness.signals). Kept for the quote in the reference doc.
 SIGNAL_MAX_A = 0.020
 SIGNAL_SOURCE_FULL = ("Arduino UNO R3 full pinout (docs.arduino.cc/resources/pinouts/A000066-full-pinout.pdf): 'MAXIMUM current per "
                  "I/O pin is 20mA' (eitri.power.SRC_UNO_IO)")
-SIGNAL_SOURCE = cite("Arduino UNO R3 pinout: 20 mA per I/O pin", SIGNAL_SOURCE_FULL)
+SIGNAL_SOURCE = cite("Arduino UNO R3 pinout: 20 mA per I/O pin", SIGNAL_SOURCE_FULL, UNO_PINOUT_URL)
 
 
 # --------------------------------------------------------------------------- the resolved device

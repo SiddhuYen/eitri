@@ -82,7 +82,8 @@ RATING_SOURCES = {
     "JST-XH": "JST XH series page (jst-mfg.com, series 277): current rating 3 A AC/DC (AWG #22)",
     "JST-PH": "JST PH series page (jst-mfg.com, series 199): current rating 2 A AC/DC (AWG #24)",
     "DUPONT-2.54": "Amphenol FCI Mini-PV crimp contacts, the Berg (Du Pont) line generic 'Dupont' contacts copy: 3 A "
-                   "(48235-000LF, 22-26 AWG, as listed by Heilind / RS). Unbranded copies publish no rating of their own",
+                   "(Amphenol PV catalogue BWBPVWTB0323EA4 p.2: '3.0A with 32AWG wire; larger wires allow more'; 48235-000LF "
+                   "takes 22-26 AWG). Unbranded copies publish no rating of their own",
     "MOLEX-MICROFIT-3.0": "Molex PS-43045 Rev P (2017/10/27) s4.2: by the wire crimped in and the number of powered circuits, "
                           "wire-to-wire, 30 C rise: see MICROFIT_AMPS_BY_AWG_CIRCUITS",
     "XT30": "Amass XT30U-M product page (china-amass.net): current rating 20 A (16 AWG, temperature rise <= 85 K); no short-time "
