@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -146,6 +147,46 @@ def test_launcher_script(tmp_path):
     assert "needs eitri 0.9.0 or newer" in p.stderr and "eitri 0.8.1" in p.stderr and "not released yet" in p.stderr
     p = subprocess.run(["sh", str(script)], env=base, capture_output=True, text=True, encoding="utf-8")
     assert p.returncode == 1 and "eitri.io/install" in p.stderr
+
+
+def test_bundle_readme_and_pinned_uvx(tmp_path):
+    """What Anthropic's plugin directory asks of a bundle: a README.md that says what the plugin is, what it needs, what it
+    downloads and sends, its privacy link and license; and a launcher that starts an exact, released package (every uvx /
+    uv run or install pins `eitri-hardware==<this version>` on Python 3.12, which eitri supports)."""
+    from eitri import __version__
+    text = (BUNDLE / "README.md").read_text(encoding="utf-8")
+    flat = " ".join(text.split())
+    assert len(text.split()) >= 40 and __version__ in text
+    for must in ("eitri mcp", "eitri mcp --combined", "curl -fsSL https://eitri.io/install | sh -s -- --plugin",
+                 "https://eitri.io/api/ping", "eitri telemetry off", "https://eitri.io/privacy", "FSL-1.1-MIT", "source-available",
+                 "eitri setup firmware", f"eitri-hardware=={__version__}"):
+        assert must in flat, must
+    assert "open source" not in text.lower() and "open-source" not in text.lower() and "no telemetry" not in text.lower()
+    from eitri import telemetry                                               # the README lists exactly what a count holds
+    for field in ("random install id", "eitri version", "the OS", "the agent app", "project's domain"):
+        assert field in flat, field
+    words = set(flat.replace(",", " ").replace(")", " ").replace("(", " ").split())
+    assert set(telemetry.AGENTS) <= words and set(telemetry.KINDS) <= words and telemetry.URL in flat
+
+    calls = re.compile(r'\buvx\s+-|exec "\$u"|\buv\s+tool\s+(install|run)\b|\buv\s+run\b')
+    found = 0
+    for f in (BUNDLE / "bin").iterdir():
+        for line in f.read_text(encoding="utf-8").splitlines():
+            if line.lstrip().startswith("#") or "command -v" in line or not calls.search(line):
+                continue
+            found += 1
+            assert "--python 3.12" in line and f"eitri-hardware=={__version__}" in line, (f.name, line)
+            assert "eitri-hardware>=" not in line, line
+    assert found >= 2                                                         # the uvx exec and the install hint
+
+    # no eitri anywhere: the launcher hands uvx exactly that version on Python 3.12
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    (tools / "uvx").write_text('#!/bin/sh\necho "UVX $*"\n', encoding="utf-8")
+    (tools / "uvx").chmod(0o755)
+    p = subprocess.run(["sh", str(BUNDLE / "bin" / "eitri-mcp"), "--combined"], capture_output=True, text=True, encoding="utf-8",
+                       env={"PATH": f"{tools}:/usr/bin:/bin", "HOME": str(tmp_path)})
+    assert p.stdout.strip() == f"UVX --python 3.12 --from eitri-hardware=={__version__} eitri mcp --combined", p.stdout + p.stderr
 
 
 def _installer(tmp_path, version: str, combined: bool, plugin_rc: int = 0, plugin_out: str = "  ok   Claude Code: plugin eitri@eitri"):
