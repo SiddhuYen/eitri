@@ -2,12 +2,29 @@
 
 <!-- mcp-name: io.github.SiddhuYen/eitri -->
 
-**A local AI CAD agent.** Describe a part in plain language; eitri models it as a parametric
+**Use eitri inside Claude Code.** One line installs it and registers the plugin:
+
+```sh
+curl -fsSL https://eitri.io/install | sh -s -- --plugin
+```
+
+Then run `claude` and ask for a machine ("design a desk robot arm with three MG996R servos and an Arduino Uno"). No
+account and no API key: eitri runs on your computer, and your agent runs on your own Claude Code subscription. The
+default **combined workspace** designs a whole machine and checks its CAD, mechanism, wiring, firmware and circuit
+against each other on every build; every check names its source.
+
+- macOS and Linux; Windows is untested. Codex and Cursor get the same servers, but they are untested.
+- The plugin sends two anonymous counts (install, project created) and nothing else; `eitri telemetry off` stops them.
+- Source-available under [FSL-1.1-MIT](#license): each release becomes MIT two years after it ships.
+
+[More about the plugin](#in-your-own-agent-the-eitri-plugin)
+
+**Or the app: a local AI CAD agent** on your own Anthropic API key. Describe a part in plain language; eitri models it as a parametric
 [build123d](https://github.com/gumyr/build123d) (OpenCASCADE) model, builds it, **measures it against your
 request**, looks at it, fixes what fails, and hands you STEP / STL / 3MF / GLB files. Then keep going in a
 Fusion-style 3D editor in your browser, by hand or by chat: both edit the same model.
 
-[Install](#quickstart) · [Limitations](#limitations) · [License](#license)
+[Plugin](#in-your-own-agent-the-eitri-plugin) · [Install the app](#quickstart) · [Limitations](#limitations) · [License](#license)
 
 <!--
   STILL TO RECORD in the app shell (the hero, the V8 build, the checks card and the print dialog are re-shot;
@@ -64,7 +81,7 @@ for every step.
 
 ## In your own agent: the eitri plugin
 
-eitri also runs as **one plugin inside the agent you already use** (Claude Code first; Codex and Cursor too), on that
+eitri also runs as **one plugin inside the agent you already use** (Claude Code; Codex and Cursor get the same servers, untested), on that
 agent's own subscription. In this mode eitri never calls Claude: your agent writes the model files and calls
 eitri's tools, so it needs no API key, no account and no token, and everything runs on your computer.
 
@@ -84,7 +101,7 @@ The plugin brings two MCP servers, both on your computer, and a set of skills:
   structure, mechanism, wiring, firmware, air and its circuit, built together with the cross-domain checks (servo
   torque against the arm with masses from the CAD bodies, supply current against the servos the firmware moves at once,
   wire gauge against that current, the board's holes against the CAD, the base against tipping over...). A project is a
-  folder in `~/eitri-projects`; the viewer shows a tab per model file. The cross-domain code is open source in this
+  folder in `~/eitri-projects`; the viewer shows a tab per model file. The cross-domain code is source-available (FSL) in this
   repository (`eitri_suite/`, same license).
 - **Six local single domains:** `eitri` (`eitri mcp`): CAD, wire harnesses, mechanisms, pneumatics, firmware and
   electronics, with the same checks as the app. The viewer opens in your browser at the first build and follows every rebuild.
@@ -100,7 +117,7 @@ What it does compared with the app:
 
 | | eitri app (`eitri`) | eitri plugin |
 |---|---|---|
-| Who drives | eitri's own agent, on your Anthropic API key | Your agent (Claude Code, Codex, Cursor), on its subscription |
+| Who drives | eitri's own agent, on your Anthropic API key | Your agent (Claude Code; Codex and Cursor untested), on its subscription |
 | Domains | the six single domains | the combined workspace and the six single domains, all on this computer |
 | Editor | the full browser editor with chat, direct edits, demos and replays | the same viewer and editor (a tab per file in a combined project), following your agent's builds; you chat in your agent |
 | Reminders while checks fail | the agent loop's nudges | every tool result ends with what fails, what is unbuilt and what to do next |
@@ -385,7 +402,7 @@ breadboard and module level only: no PCB layout, no footprints, no KiCad export 
 Every build classifies each net (a rail at a voltage, a ground, a pin a board drives, a transistor's switched low side), solves the
 currents through the two-terminal parts between them, and grades the result. Series strings (a pin, a resistor and an LED to
 ground; a rail, a relay coil and a MOSFET's drain) are solved in closed form; branched networks (two LEDs sharing a resistor, a
-divider feeding two loads) by nodal analysis, written for eitri, with an ideal-diode iteration. The two agree on every series string. Every limit comes from a datasheet, standard or vendor page whose URL, words and fetch date
+divider feeding two loads) by nodal analysis, written for eitri, with an ideal-diode iteration. The two agree on every series string. Every sourced figure comes from a datasheet, standard or vendor page whose URL, words and fetch date
 are recorded in `eitri/electronics/sources.py`; each check names its source, and each build writes the ones it used to
 `<name>.sources.md`. Where sources disagree the conservative figure is used and both are quoted: the lower figure for a
 limit, the higher for a draw or load (an MG996R draws 2.5 A at stall, not 1.4 A); a figure no document gives is marked ASSUMPTION. The checks:
@@ -844,7 +861,7 @@ falls short, and what eitri does instead:
 
 | | text-to-cad | eitri |
 |---|---|---|
-| Shape | A skill pack + 68k-line Python runtime (`cadgen`) for other agents (Claude Code, Codex, Cursor...) | A standalone CAD agent with its own REPL and viewer, and one plugin for other agents (Claude Code, Codex, Cursor) with the same checks, including a local, open-source combined workspace that checks a whole machine's CAD, mechanism, wiring, firmware and circuit against each other; also usable as a library |
+| Shape | A skill pack + 68k-line Python runtime (`cadgen`) for other agents (Claude Code, Codex, Cursor...) | A standalone CAD agent with its own REPL and viewer, and one plugin for other agents (Claude Code; Codex and Cursor untested) with the same checks, including a local, source-available (FSL) combined workspace that checks a whole machine's CAD, mechanism, wiring, firmware and circuit against each other; also usable as a library |
 | Install | uv + per-host plugin marketplaces, pinned Python 3.13, telemetry on by default, update nags | One line (`curl -fsSL https://eitri.io/install \| sh`, add `-s -- --plugin` to register the plugin in every agent app found, then run `claude`); the app sends nothing, the plugin two anonymous counts (off with `eitri telemetry off`); no update checks unless you ask |
 | Model contract | `@step/@stl/@glb` decorators, parameterless models, a content-addressed store with a build daemon, freshness gates, sidecar JSON, link-vs-component rules | `PARAMS` + `build(p)` + `verify()`; builds are fast enough that nothing needs caching |
 | Verification | Up to the agent: write ad-hoc scripts in `tmp/`, remember to snapshot | Automatic on every build: validity, holes, thinnest wall, interferences, plus the model's own checks; failures are flagged to the agent |
