@@ -189,11 +189,13 @@ If eitri is not installed, `bin/eitri-mcp` runs `eitri-hardware==@VERSION@` once
 - Firmware only: the first time a design's firmware needs compiling, your agent runs `eitri setup firmware -y` (your agent
   asks you first), which downloads arduino-cli and the Arduino AVR core (about 65 MB) from Arduino or Homebrew;
   `--esp32` adds the ESP32 core from Espressif (about 1.2 GB).
-- Updates: only when you run `eitri update` (it asks pypi.org). Nothing else is downloaded.
+- Updates: only when you run `eitri update` (it asks pypi.org), or once a day if you turned on `eitri update --auto on`.
+  Nothing else is downloaded.
 
 ## What it sends
 
-Your designs, files, prompts and chats stay on your computer. The plugin sends two anonymous counts to
+eitri sends none of your designs, files or prompts anywhere (your agent talks to its own provider as it always does).
+The plugin sends two anonymous counts to
 https://eitri.io/api/ping: one `install` event when you run `eitri plugin install`, and one `project_created` event per
 new project. Each holds exactly: the event name, a random install id (a uuid made once and kept in eitri's config folder,
 tied to no account), the eitri version, the OS (darwin or linux), the agent app (claude-code, codex, cursor or unknown),
