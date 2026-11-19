@@ -593,7 +593,8 @@ class Tools:
         """Make the change package of an approved ticket (default: the active one): fresh rebuilds of the base revision and
         the result, the before/after check table with each check's source, parameter and BOM diffs, regenerated outputs,
         the revision table, the Not checked section and a draft change order, as a folder + zip. It refuses, listing every
-        reason, when any check fails or did not run (a person may waive a not-run check; a failed check is fixed in the
+        reason, when any check fails or did not run, when a check the base revision ran is gone from the result or the
+        change switched it off (a person may waive a not-run, removed or switched-off check; a failed check is fixed in the
         design), or when the approval does not cover the ticket as it is."""
         from .. import tickets as T
         try:
@@ -610,7 +611,9 @@ class Tools:
         return ToolResult(f"Change package written: {pkg['folder']} (and {pkg['zip']}).\n"
                           f"{pkg['design']['file']}: " + (f"Rev {fr} -> " if fr else "") + f"Rev {pkg['revisions']['to']['letter']}; "
                           f"{s['total']} checks: {s['pass']} pass, {s['warn']} warn, 0 fail, {s['not_run']} not run" + (" (waived by a person)" if s["not_run"] else "") + ".\n"
-                          f"Not checked: {len(pkg['not_checked'])} item(s), listed in report.md. Give the person report.html to review; "
+                          + (f"Waived by a person as removed or switched off by this change: {', '.join(pkg['removed_checks'] + pkg['switched_off_checks'])}.\n"
+                             if pkg["removed_checks"] or pkg["switched_off_checks"] else "")
+                          + f"Not checked: {len(pkg['not_checked'])} item(s), listed in report.md. Give the person report.html to review; "
                           "the change order's disposition, effectivity and sign-off are theirs to fill in.")
 
     # ------------------------------------------------------------- internals

@@ -53,7 +53,8 @@ eitri ticket show [ID] -C <project> [--json]
 eitri ticket list -C <project>
 eitri ticket plan ID plan.yaml -C <project>     # the agent normally does this with ticket_plan
 eitri ticket approve ID -C <project> [--by NAME] [--note "..."] [--despite-changes]
-eitri ticket waive ID "<check name>" --reason "..." -C <project>
+eitri ticket waive ID "<check name>" ["<check name>" ...] --reason "..." -C <project>
+eitri ticket waive ID --lost --reason "..." -C <project>   # every check the change removed or switched off, listed first
 eitri ticket close ID -C <project> [--cancel]
 eitri build <project>/<model.py> --record [--set name=value ...] [--config NAME] [--note "..."]   # apply the plan yourself
 eitri package [ID] -C <project> [--json]
@@ -116,7 +117,8 @@ A new design (`--base new`, or no earlier build) gives the same package without 
 The report's **first page** shows the result, who approved it, every waiver with its reason, and a "Read before
 signing" box. That box lists:
 - parameters changed that the plan did not list;
-- checks that ran on the base and no longer run;
+- checks that ran on the base and the change removed or switched off (each one waived by a person);
+- checks renamed with what they are about, which eitri compared as one check;
 - open questions the plan raised;
 - a base that is not a released revision;
 - outputs that could not be produced.
@@ -125,7 +127,7 @@ The **Not checked** section lists what eitri's checks do not cover:
 - the plan's own "not checked" items;
 - every criterion a person must verify;
 - every waived check;
-- every check that disappeared;
+- every check that disappeared or was switched off (with its waiver);
 - each domain's standing limits (for example, no FEA for CAD and no dynamic loads for mechanisms);
 - cross-domain checks, which run only in a combined project (the combined workspace, `eitri mcp --combined`).
 
@@ -145,11 +147,26 @@ base as Rev A.
 - a fresh build of the base or the result fails;
 - **any check of the result fails.** A failed check is fixed in the design. It is never waived and never loosened;
 - **any check did not run** (an input the check needs is unset) and no person has waived it;
+- **a check the base ran is gone from the result** (REMOVED): a `verify()` line deleted, a joint's actuator taken away, a
+  wire renamed in a way eitri cannot pair. A check renamed with what it is about is not removed: eitri pairs "torque
+  joint tilt (SG90)" with "torque joint tilt (MG996R)" (the same rule about the same joint, or the same name with a
+  different bracket) and compares them as one check. `verify()` lines and ambiguous matches are never paired;
+- **a check the base ran was switched off by the change** (SWITCHED OFF): it passed, warned or failed on the base with
+  every input set, and on the result an input is unset, so it is "not run" or passes on a declaration. Examples:
+  `Actuator(travel_deg=None)` (the edit-model bench's Haiku evasion), `travel_deg=None, continuous=True` (passes, grades
+  nothing), a rating set to `None`;
 - an acceptance criterion names a check the build does not run.
 
-A person waives one check that did not run with `eitri ticket waive ID "<check>" --reason "..."`. The reason is
-printed on the package's first page. eitri refuses to waive a failed check, a check that ran, or a check name the last
-build does not have.
+A person waives checks with `eitri ticket waive ID "<check>" --reason "..."`, or every check the change lost with
+`--lost`. eitri compares the last build with the ticket's base and records each waiver's kind: `not_run`,
+`switched_off` or `removed`. Before the person confirms, it shows every check and what happened to it. The package
+accepts a removal or a switch-off only with a waiver of that kind, so a "did not run" waiver given earlier does not cover
+a check that the change later switched off. Each waiver, its kind and its reason are printed on the package's first page.
+eitri refuses to waive a failed check, a check that ran, or a check name that neither the last build nor the base's lost
+checks have.
+
+These rules compare check names and the inputs each check reports as unset. They do not catch a `verify()` limit that got
+looser under the same name, or a check that still runs but against a weaker figure the model now declares.
 
 ## Example: the pan-tilt demo, a heavier camera
 

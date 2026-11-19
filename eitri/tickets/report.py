@@ -31,9 +31,14 @@ def _warnings(pkg: dict) -> list[str]:
     if fr and fr.get("letter") == "A" and not fr.get("released"):
         out.append("No revision was released before: this package records the base as Rev A.")
     if pkg["removed_checks"]:
-        out.append(f"{len(pkg['removed_checks'])} check(s) that ran on the base do not run on the result: "
-                   + "; ".join(pkg["removed_checks"][:8]) + (" ..." if len(pkg["removed_checks"]) > 8 else "")
-                   + ". A person confirms each was renamed, not dropped.")
+        out.append(f"{len(pkg['removed_checks'])} check(s) that ran on the base are GONE from the result (waived by a person, see "
+                   "WAIVERS): " + "; ".join(pkg["removed_checks"][:8]) + (" ..." if len(pkg["removed_checks"]) > 8 else ""))
+    if pkg.get("switched_off_checks"):
+        out.append(f"{len(pkg['switched_off_checks'])} check(s) that ran on the base were SWITCHED OFF by this change (waived by a "
+                   "person, see WAIVERS): " + "; ".join(pkg["switched_off_checks"][:8]) + (" ..." if len(pkg["switched_off_checks"]) > 8 else ""))
+    if pkg.get("renamed_checks"):
+        out.append("Renamed checks, compared as one: " + "; ".join(f"{r['from']} -> {r['to']}" for r in pkg["renamed_checks"][:8])
+                   + (" ..." if len(pkg["renamed_checks"]) > 8 else "") + ".")
     if pkg.get("unplanned_changes"):
         out.append("Changed although the approved plan did not list it: " + ", ".join(pkg["unplanned_changes"])
                    + ". A person confirms each was needed.")
@@ -49,9 +54,14 @@ def _verdict(pkg: dict) -> str:
     c = pkg["checks"]["summary"]["to"]
     s = f"{c['total']} checks: {c['pass']} pass, {c['warn']} warn, 0 fail, {c['not_run']} not run" + (
         f", {c['not_applicable']} not applicable" if c.get("not_applicable") else "")
-    if c["not_run"]:
+    if pkg["waivers"]:
         s += f" (waived by a person: {', '.join(w['check'] for w in pkg['waivers'])})"
     return s
+
+
+def _wkind(w: dict) -> str:
+    return {"switched_off": " (SWITCHED OFF by this change: it ran on the base)",
+            "removed": " (REMOVED by this change: it ran on the base)"}.get(w.get("kind") or "not_run", "")
 
 
 def _val(v) -> str:
@@ -68,8 +78,8 @@ def report_md(pkg: dict) -> str:
          f"**Plan approved by** {ap.get('by')} at {ap.get('at')} ({ap.get('method')}" + (f", {ap['tty']}" if ap.get("tty") else "") + ")."
          + (f" Note: {ap['note']}" if ap.get("note") else ""), ""]
     if pkg["waivers"]:
-        L += ["## WAIVERS (checks that did not run, accepted by a person)", ""]
-        L += [f"- **{w['check']}**: {w['reason']} ({w['by']}, {w['at']})" for w in pkg["waivers"]]
+        L += ["## WAIVERS (checks that do not grade this result, accepted by a person)", ""]
+        L += [f"- **{w['check']}**{_wkind(w)}: {w['reason']} ({w['by']}, {w['at']})" for w in pkg["waivers"]]
         L.append("")
     warn = _warnings(pkg)
     if warn:
@@ -168,8 +178,8 @@ def report_html(pkg: dict, images: dict) -> str:
          f"<div class='box'><b>Result:</b> {E(_verdict(pkg))}.<br><b>Plan approved by</b> {E(ap.get('by'))} at {E(ap.get('at'))} "
          f"({E(ap.get('method'))}{', ' + E(ap['tty']) if ap.get('tty') else ''})." + (f" Note: {E(ap['note'])}" if ap.get("note") else "") + "</div>"]
     if pkg["waivers"]:
-        H.append("<div class='box waiver'><b>WAIVERS</b> (checks that did not run, accepted by a person)<ul>"
-                 + "".join(f"<li><b>{E(w['check'])}</b>: {E(w['reason'])} ({E(w['by'])}, {E(w['at'])})</li>" for w in pkg["waivers"]) + "</ul></div>")
+        H.append("<div class='box waiver'><b>WAIVERS</b> (checks that do not grade this result, accepted by a person)<ul>"
+                 + "".join(f"<li><b>{E(w['check'])}</b>{E(_wkind(w))}: {E(w['reason'])} ({E(w['by'])}, {E(w['at'])})</li>" for w in pkg["waivers"]) + "</ul></div>")
     warn = _warnings(pkg)
     if warn:
         H.append("<div class='box warnbox'><b>Read before signing</b><ul>" + "".join(f"<li>{E(x)}</li>" for x in warn) + "</ul></div>")
