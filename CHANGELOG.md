@@ -3,10 +3,7 @@
 Release notes for earlier versions are on the GitHub releases page (https://github.com/SiddhuYen/eitri/releases) and in the
 annotated tags (`git show v0.4.0`).
 
-## 0.9.3 (unreleased): a part that cannot be printed fails; a board the person measured is allowed, and says so
-
-Branch `export-strict-measured`. The version stays 0.9.2 in pyproject.toml until it is released (it folds into 0.9.2 if merged before
-that tag).
+## 0.9.3: a part that cannot be printed fails; a board the person measured is allowed, and says so; combined change packages
 
 > **A design that exported on 0.9.2 can now FAIL.** In a combined project, a printable part whose mesh is not closed and 2-manifold
 > (two solids touching only along a line or at a point, such as a boss tangent to a wall) is now a failing check of the CAD
@@ -34,7 +31,7 @@ that tag).
 - Agent text (combined skill, electronics prompt and reference, the combined reference): never invent a board size; ask the person
   to measure their board with calipers (outline, hole spacing, hole diameter, thickness) and declare exactly that.
 
-### Added (tickets and change packages on combined projects; branch `combined-tickets`)
+### Added (tickets and change packages on combined projects)
 
 - **A ticket on a combined project covers every model file.** `eitri ticket new` (and the agent's `ticket_new`) on a combined
   project targets every model file at its last good build (`--base latest`) or none (`--base new`); `--file` and a revision
@@ -56,6 +53,44 @@ that tag).
 - **Ticket tools on the combined MCP server** (`eitri mcp --combined`): `combined_ticket_new`, `combined_ticket_show`,
   `combined_ticket_plan`, `combined_package`. As on the single-domain server, no tool approves, waives or closes. On a
   combined project the commands eitri tells the person to run carry `-C <project folder>`.
+
+### Changed (the change-package rule, one function for both packages)
+
+- **0.9.2's lost checks apply to combined packages too.** A check the base ran that the change removed or switched off now
+  refuses a combined package the same way as a single-file one (`judge()` takes the base's rows). A file the ticket removes
+  takes its checks with it: each is REMOVED until a person waives it. `eitri ticket waive --lost` and several check names work
+  on a combined project (qualified names, `wiring.py: <check>`).
+- **A waiver now has four kinds**: `not_run`, `assumed` (new: a check that passed only on a board size the person measured),
+  `switched_off` and `removed`. Each kind covers only its own case. `package.json`'s `waivers[].kind` and `not_checked[].kind`
+  gain `assumed`; a combined `package.json` gains `switched_off_checks` and `renamed_checks`, as the single-file one has since 0.9.2.
+
+### Fixed (sources)
+
+- **Every document a check cites now has a URL and a revision** (30 that had neither or one; each re-read 2026-11-17): JST XH/PH,
+  Amphenol Mini-PV, Molex Micro-Fit, Amass XT30/XT60/XT90, TE FASTON, NEC Chapter 9 Table 8, USB 2.0, the fuse datasheets'
+  temperature tables and Blue Sea's article, TowerPro MG996R/SG90, ROBOTIS, the ESP32 datasheet v5.3 and DevKitC guide, the
+  pneumatics default pressure ratings, ISO 6358 / ISO 1217 / ISO 68-1 (paywalled: catalogue page, marked not read). A new test
+  fails on any cited document without both.
+- **Every cited document's revision names its version, not the day eitri read it** (21 rule sources and 18 part records, re-read
+  2026-11-18): the Arduino pinouts by their "Last update" (the Uno sheet was reissued 12 Nov 2026), the Uno datasheet as rev 5
+  (12/11/2026: VIN now "7 - 12 V", 20 V an absolute maximum; eitri already graded on 7-12 V), the SMC catalogues, precaution sheets
+  and RB selection note by catalogue number, printing or PDF date, ROBOTIS and arduino-esp32 by the commit of their source, the
+  Adafruit 815 board file pinned to a commit. Pages that print no date (TowerPro, AMES) say so. A test fails on a revision that is
+  only the citation or a read date, and on a part record (electronics, pneumatics catalogue, suite outlines and parts) without a
+  URL and a version. No limit changed.
+- **The 3 % voltage-drop default is sourced**: NFPA 70 (2023) 210.19 Informational Note, plus ABYC E-11's 3 % for critical DC
+  circuits. It is a recommendation, and the check line says so; it is no longer listed as an ASSUMPTION.
+- Citation text corrected where the document says something else: TE 108-106496 gives current by wire size in s3.4, not s3.2;
+  SMC SY3000 single solenoid is 0.15-0.7 MPa (0.1-0.7 is the double solenoid; the 0.7 MPa maximum eitri grades on is
+  unchanged); Amphenol states its 3 A with 32 AWG wire; standard gravity is cited from NIST SP 811 (ISO 80000-3 not read).
+  No limit changed.
+
+### Not in 0.9.3
+
+- Pneumatic grippers and vacuum (`grippers-vacuum`) and the clamp fixture's coil and sensor PLC wiring (`pneu-plc-wiring`):
+  next release.
+- ANR: eitri converts free-air volumes with 1.01325 bar, while ISO 8778 defines ANR as 100 kPa (1 bar), so free-air figures read
+  about 1.3 % low. Unchanged in this release, pending a decision.
 
 ## 0.9.2: pneumatics start-state and air-return checks; a removed or switched-off check blocks a change package; the anonymous counts reach eitri.io from macOS
 

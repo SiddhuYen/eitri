@@ -8,15 +8,31 @@ from __future__ import annotations
 from .. import power
 from ..check_sources import Rule, doc, model_file, requirement, rule, tool
 
-# boards.py's sources (its docstring), as structured records. The Arduino pinout sheets are the ones eitri.power cites by URL; boards.py
-# gives no URL or revision for the Espressif documents.
+# boards.py's sources (its docstring), as structured records. The Arduino pinout sheets are the ones eitri.power cites by URL. The
+# ESP32 pin facts were checked on 2026-11-17 against the datasheet v5.3 (strapping pins Table 3-1 p.22; GPIO34-39 input-only, Table
+# 6-1 note 2 p.61; ADC / DAC Table 4-6 p.46; LEDC and I2C on any GPIO via the GPIO matrix, s4.8.8 / s4.8.4), the DevKitC V4 guide
+# (flash pins: "Avoid using these pins"), ESP-IDF's GPIO summary (ADC2 not with Wi-Fi) and the Arduino-ESP32 core (I2C 21/22).
 PINOUT_DOCS = {
     "uno": doc("Arduino Uno Rev3 pinout sheet (ATmega328P pins)", "https://docs.arduino.cc/resources/pinouts/A000066-full-pinout.pdf",
-               "Arduino UNO R3 full pinout A000066"),
+               "Arduino UNO R3 full pinout A000066, 'Last update: 12 Nov, 2026', p.1; re-read 2026-11-18"),
     "nano": doc("Arduino Nano pinout sheet (ATmega328P pins)", "https://docs.arduino.cc/resources/pinouts/A000005-full-pinout.pdf",
-                "Arduino Nano full pinout A000005"),
-    "esp32": doc("Espressif ESP32 datasheet and ESP32-DevKitC pin layout", "", ""),
+                "Arduino Nano full pinout A000005, 'Last update: 30/06/2021', p.1; re-read 2026-11-18"),
+    "esp32": doc("Espressif ESP32 Series Datasheet v5.3 (pin functions, strapping pins, input-only GPIO34-39)",
+                 "https://documentation.espressif.com/esp32_datasheet_en.pdf",
+                 "ESP32 Series Datasheet v5.3 (2026.07): Tables 2-1, 3-1, 4-6, 6-1; read 2026-11-17"),
 }
+ESP32_MORE = [
+    doc("Espressif ESP32-DevKitC V4 user guide, pin layout (GPIO6-11 wired to the flash: avoid)",
+        "https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32/esp32-devkitc/user_guide.html",
+        "ESP32-DevKitC V4 user guide (esp-dev-kits latest, no revision printed), Header Block notes [2], [3]; read 2026-11-17"),
+    doc("ESP-IDF GPIO summary for ESP32 (ADC2 pins cannot be used when Wi-Fi is used)",
+        "https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html",
+        "ESP-IDF Programming Guide v6.1.1, GPIO & RTC GPIO, GPIO Summary; read 2026-11-17"),
+    doc("Arduino-ESP32 core, variants/esp32/pins_arduino.h: SDA = 21, SCL = 22, TX = 1, RX = 3 (a software default, not hardware)",
+        "https://github.com/espressif/arduino-esp32/blob/da5c6ab9aef9e5478fd2bd941101525a9e507a2f/variants/esp32/pins_arduino.h",
+        "arduino-esp32 variants/esp32/pins_arduino.h at commit da5c6ab (2024-04-15, the file's last change on master), lines 6-10; "
+        "re-read 2026-11-18"),
+]
 ARDUINO_CLI = tool("arduino-cli compile for the board (its compiler's own errors and warnings)")
 MG996R_STALL = doc("MG996R stall current 2.5 A (6 V), distributor datasheet; TowerPro's page says 1400 mA: the higher draw is used",
                    "https://towerpro.com.tw/product/mg996r/", "TowerPro MG996R product page and Electronicos Caldas MG996R datasheet (2014-08-19)")
@@ -24,7 +40,9 @@ MG996R_STALL = doc("MG996R stall current 2.5 A (6 V), distributor datasheet; Tow
 
 def _board_doc(c, fw):
     b = fw.board
-    return [PINOUT_DOCS[b.key]] if b is not None and b.key in PINOUT_DOCS else []
+    if b is None or b.key not in PINOUT_DOCS:
+        return []
+    return [PINOUT_DOCS[b.key]] + (ESP32_MORE if b.key == "esp32" else [])
 
 
 def _pin_current(c, fw):
@@ -47,10 +65,10 @@ def _servo_supply(c, fw):
 F = "firmware."
 RULES = [
     Rule(F + "board", "board", r"target board$", (rule("the board is one eitri knows: uno, nano, esp32"),)),
-    Rule(F + "pin-exists", "pins", r"pin .+ \(", tuple(PINOUT_DOCS.values()), _board_doc),
+    Rule(F + "pin-exists", "pins", r"pin .+ \(", tuple(PINOUT_DOCS.values()) + tuple(ESP32_MORE), _board_doc),
     Rule(F + "pin-once", "pins", r"no pin assigned twice$", (rule("one role per physical pin; the Serial pins stay free while Serial runs"),)
          + tuple(PINOUT_DOCS.values()), lambda c, fw: [rule("one role per physical pin; the Serial pins stay free while Serial runs")] + _board_doc(c, fw)),
-    Rule(F + "pin-capability", "capability", r"pin .+ can be ", tuple(PINOUT_DOCS.values()), _board_doc),
+    Rule(F + "pin-capability", "capability", r"pin .+ can be ", tuple(PINOUT_DOCS.values()) + tuple(ESP32_MORE), _board_doc),
     Rule(F + "sources", "usage", r"sources$", (rule("the project has a main .ino sketch (arduino-cli needs one)"),)),
     Rule(F + "used-as-declared", "usage", r".+ used as declared$", (rule("the sketch uses each declared pin as its role says (eitri's source scan)"),)),
     Rule(F + "no-undeclared-pins", "usage", r"no undeclared pins$", (rule("the sketch uses no pin the pinout does not declare (eitri's source scan)"),)),

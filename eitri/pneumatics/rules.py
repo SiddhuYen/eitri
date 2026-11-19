@@ -11,27 +11,47 @@ from ..check_sources import Rule, assumption, doc, model_file, requirement, rule
 
 SMC_LOAD_RATIO = doc("SMC Best Pneumatics, Air Cylinders Model Selection, Step 1: load ratio 0.5 moving, 0.7 static, 1.0 guided",
                      "https://ca01.smcworld.com/catalog/BEST-technical-data-en/pdf/6-2-1-m21-43-tech_en.pdf",
-                     "SMC Best Pneumatics technical data, catalogue p.1570 (re-read 2026-11-07)")
-ISO_6358 = doc("ISO 6358: flow through C, b (choked and subsonic)", "", "ISO 6358")
+                     "SMC Best Pneumatics technical data 'Technical data for air cylinders' (6-2-1-m21-43-tech_en.pdf, no catalogue number "
+                     "printed; PDF dated 2026-10-15), Step 1 load factor, catalogue p.1570; re-read 2026-11-18")
+ISO_6358 = doc("ISO 6358: flow through C, b (choked and subsonic)", "https://www.iso.org/standard/56612.html",
+               "ISO 6358-1:2013 (+Amd 1:2020), -2:2019, -3:2014 (paywalled, not read: the formula as SMC and Festo print it in their "
+               "sizing guides); catalogue checked 2026-11-17")
 ISO_1219 = rule("an ISO 1219 circuit: every cylinder port fed through a valve and able to exhaust")
 FRICTION = assumption("friction allowance 10 % of theoretical force (ESTIMATE, the usual sizing allowance)")
 TUBE_ESTIMATE = assumption("tube C, b estimated (Darcy lambda 0.025, 30 bore diameters per fitting, b 0.5: ESTIMATEs; S = 5 C from SMC)")
 DROP_LIMIT = assumption("pressure-drop warning above 0.3 bar or 5 % of the pressure (an eitri threshold)")
-PRESSURE_DOCS = {
-    "regulator": doc("SMC AR20-AR60 regulators: 1.0 MPa max (AR_EU.pdf)", "", "fetched 2026-10-26"),
-    "frl": doc("Festo MS4-LFR filter regulators: lowest listed maximum 10 bar", "", "fetched 2026-10-26"),
-    "valve": doc("SMC SY3000 5-port solenoid valve: 0.1-0.7 MPa (internal pilot)", "", "fetched 2026-10-26"),
-    "flow_control": doc("SMC AS speed controllers: 1 MPa max", "", "fetched 2026-10-26"),
-    "cylinder": doc("Festo DSNU round cylinders (ISO 6432): 10 bar max", "", "fetched 2026-10-26"),
-    "silencer": doc("Festo U silencers: 0-10 bar", "", "fetched 2026-10-26"),
-    "node": doc("SMC KQ2 one-touch fittings (KQ2T): -100 kPa to 1 MPa", "", "fetched 2026-10-26"),
+PRESSURE_DOCS = {       # each figure re-read in the document on 2026-11-17
+    "regulator": doc("SMC AR20-AR60 regulators: maximum operating pressure 1.0 MPa (AR_EU.pdf)", "https://static.smc.eu/pdf/AR_EU.pdf",
+                     "SMC 'Regulator AR10 to 60' (AR_EU.pdf, printed pp.36-41, no catalogue number printed; PDF dated 2004-04-26), "
+                     "p.36 Standard specifications; read 2026-11-17"),
+    "frl": doc("Festo MS4-LFR filter regulators: lowest listed maximum 10 bar",
+               "https://ftp.festo.com/public/pneumatic/SOFTWARE_SERVICE/DataSheet/EN_US/8098262.pdf",
+               "Festo data sheet MS4-LFR-1/4-D6-E-P-VC-A8-B, part 8098262 (10/9/26), p.1 'Operating pressure 2 bar...10 bar' "
+               "(parts 8098258 / 8175799: 1-10 bar; D7 variants, 526489: 0.8-14 bar); read 2026-11-17"),
+    "valve": doc("SMC SY3000 5-port solenoid valve, internal pilot: maximum 0.7 MPa (0.15-0.7 single, 0.1-0.7 double solenoid)",
+                 "https://static.smc.eu/pdf/SY_EU.pdf", "SMC CAT.EUS11-83 (SY_EU.pdf), printed p.2 Body Ported Specifications, operating "
+                 "pressure range, internal pilot; read 2026-11-17"),
+    "flow_control": doc("SMC AS speed controllers: maximum operating pressure 1 MPa", "https://static.smc.eu/pdf/AS_EU.pdf",
+                        "SMC Speed Controller Series AS (AS_EU.pdf, no catalogue number printed; PDF dated 2021-05-11), p.1 Specifications; "
+                        "read 2026-11-17"),
+    "cylinder": doc("Festo DSNU round cylinders (ISO 6432): 10 bar max, bores 8-63",
+                    "https://ftp.festo.com/public/PNEUMATIC/SOFTWARE_SERVICE/Documentation/2016/US/DSNU_ENUS.PDF",
+                    "Festo catalogue 'Round cylinders DSNU/DSNUP/DSN/ESNU/ESN' 2016/03, p.13 Technical data; read 2026-11-17"),
+    "silencer": doc("Festo U silencers: 0-10 bar", "https://ftp.festo.com/public/PNEUMATIC/SOFTWARE_SERVICE/DataSheet/EN_US/2307.pdf",
+                    "Festo data sheet U-1/8, part 2307 (10/8/26), p.1 'Operating pressure 0 bar...10 bar' (U-M5, part 4645, 04/01/2014: "
+                    "'Working pressure 0 ... 10 bar'); read 2026-11-17"),
+    "node": doc("SMC KQ2 one-touch fittings (KQ2T): -100 kPa to 1 MPa", "https://static.smc.eu/pdf/KQ2_EU.pdf",
+                "SMC One-touch Fittings Series KQ2 (KQ2_EU.pdf, no catalogue number printed; PDF dated 2010-06-25), p.2 Specifications "
+                "'Max. operating pressure 1.0MPa', 'Operating vacuum pressure -100kPa'; read 2026-11-17"),
 }
 FLOW_DOCS = {
     "valve": doc("SMC SY3000 body ported, 2 position single, P->A/B: C 0.61-0.76, b 0.29-0.44; default the lowest, C 0.6 b 0.29",
                  "https://static.smc.eu/pdf/SY_EU.pdf", "SMC CAT.EUS11-83 (SY_EU.pdf) p.3 Flow characteristics, re-read 2026-11-12"),
-    "silencer": doc("SMC AN silencers: AN05-M5 C 1 dm3/(s.bar)", "https://content2.smcetech.com/pdf/AN.pdf", "SMC AN catalogue (re-read 2026-11-07)"),
+    "silencer": doc("SMC AN silencers: AN05-M5 C 1 dm3/(s.bar)", "https://content2.smcetech.com/pdf/AN.pdf", "SMC Silencer Series AN (AN.pdf, catalogue p.1195, no catalogue number printed; PDF dated 2024-05-23), sonic conductance "
+                    "table; re-read 2026-11-18"),
     "flow_control": doc("SMC AS speed controllers: M5 S 1.5 mm2, C = S/5 = 0.3", "https://static.smc.eu/pdf/AS_EU.pdf",
-                        "SMC AS_EU catalogue (re-read 2026-11-07)"),
+                        "SMC Speed Controller Series AS (AS_EU.pdf, no catalogue number printed; PDF dated 2021-05-11), Air Flow/Effective Area; "
+                        "read 2026-11-07"),
     "regulator": assumption("regulator C 1.5, b 0.35 (ESTIMATE for a 1/8\"-1/4\" unit, no datasheet)"),
     "frl": assumption("FRL C 1.5, b 0.35 (ESTIMATE for a 1/8\"-1/4\" unit, no datasheet)"),
 }
@@ -106,16 +126,16 @@ def _cat_doc(sid: str):
 
 
 SMC_RB = doc("SMC Absorber Series RB, Model Selection Note 1: collision speed v = 2 x the average speed; E = 1/2 m v^2",
-             "https://static.smc.eu/pdf/RB_EU.pdf", "SMC RB_EU.pdf p.5, fetched 2026-11-12")
+             "https://static.smc.eu/pdf/RB_EU.pdf", "SMC Shock Absorber RB series (RB_EU.pdf, back page 'Printing DZ 00'; PDF dated 2026-02-24), p.5 Note 1); re-read 2026-11-18")
 SMC_VALVE_PRECAUTIONS = doc("SMC 3/4/5-port solenoid valve precautions M-E03-3-02, p.1 items 3 and 7, p.2 (double solenoid)",
-                            "https://www.smcworld.com/upfiles/pl/M-E03-3-02.pdf", "SMC M-E03-3-02, fetched 2026-11-12")
+                            "https://www.smcworld.com/upfiles/pl/M-E03-3-02.pdf", "SMC M-E03-3-02 (no revision printed; PDF dated 2024-09-11), items re-read 2026-11-18")
 SMC_SY_SYMBOLS = doc("SMC SY series CAT.EUS11-83: the valves' ISO 1219 symbols (rest positions, centres)", "https://static.smc.eu/pdf/SY_EU.pdf",
                      "SMC CAT.EUS11-83 (SY_EU.pdf) p.1-3, fetched 2026-11-12")
 SMC_ACTUATOR_PRECAUTIONS = doc("SMC Actuators Precautions M-E03-3-03, p.1 items 8 (lurching when starting up after residual pressure is "
                                "exhausted), 9 (emergency stop), 11 (restarting), 12 (closed centre does not hold)",
-                               "https://www.smcworld.com/upfiles/pl/M-E03-3-03.pdf", "SMC M-E03-3-03, fetched 2026-11-12")
+                               "https://www.smcworld.com/upfiles/pl/M-E03-3-03.pdf", "SMC M-E03-3-03 (no revision printed; PDF dated 2024-09-11), items re-read 2026-11-18")
 SMC_SAFETY = doc("SMC Safety Instructions M-E03-3-01 p.1 item 3: before restart, take measures to prevent unexpected operation",
-                 "https://www.smcworld.com/upfiles/pl/M-E03-3-01.pdf", "SMC M-E03-3-01, fetched 2026-11-12")
+                 "https://www.smcworld.com/upfiles/pl/M-E03-3-01.pdf", "SMC M-E03-3-01 (no revision printed; PDF dated 2024-02-05), item re-read 2026-11-18")
 FESTO_VUVG = doc("Festo VUVG: data sheet 574371 (internal pilot air, pilot pressure 0.3-0.8 MPa, mechanical spring reset); catalogue "
                  "2010/08 p.12 (5/2 spring box 1-2, 4-5; 5/3 C / U / E normal positions)",
                  "https://ftp.festo.com/public/PNEUMATIC/SOFTWARE_SERVICE/DataSheet/EN_GB/574371.pdf", "Festo 574371 (10/8/26); VUVG catalogue 2010/08")
@@ -234,7 +254,9 @@ RULES = [
     Rule(P + "force", "force", r"force ", (requirement("load_N"), SMC_LOAD_RATIO, FRICTION, model_file("spring_N")), _force),
     Rule(P + "speed", "speed", r"speed ", (requirement("speed_mm_s"), ISO_6358, TUBE_ESTIMATE, B_ESTIMATE) + tuple(FLOW_DOCS.values()), _speed),
     Rule(P + "pressure-drop", "pressure drop", r"pressure drop ", (ISO_6358, DROP_LIMIT, TUBE_ESTIMATE), _drop),
-    Rule(P + "air", "air", r"air ", (doc("free-air consumption per stroke V = A x stroke x p_abs / P_ATM (ISO 1217 basis, ANR)", "", "ISO 1217"),
+    Rule(P + "air", "air", r"air ", (doc("free-air consumption per stroke V = A x stroke x p_abs / P_ATM (ISO 1217 basis, ANR)", "https://www.iso.org/standard/44769.html",
+                                         "ISO 1217:2009 (+Amd 1:2016), paywalled, not read; ANR per ISO 8778:2003 Table 1 is 100 kPa, "
+                                         "20 C, 65 % (eitri divides by 1.01325 bar: 1.3 % lower); catalogue checked 2026-11-17"),
                                      _cat_doc("smc-best-tech"))),
     Rule(P + "supply-capacity", "air", r"supply .+ capacity$", (model_file("supply flow_l_min"),)),
     Rule(P + "pressure-ratings", "pressure", r"pressure ratings downstream of ", tuple(PRESSURE_DOCS.values()) + (model_file("max_bar"),), _pressure),

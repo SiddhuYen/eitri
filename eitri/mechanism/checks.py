@@ -10,7 +10,7 @@
                    is not, whether it would be reachable with the limits ignored)
     reach          the tip's radius from the first joint over the sampled poses, against `reach_mm` if declared
 
-Statics are gravity only (no acceleration, friction or cable loads); g = 9.80665 m/s^2 (ISO 80000-3), 1 kgf.cm = 0.0980665 N.m.
+Statics are gravity only (no acceleration, friction or cable loads); g = 9.80665 m/s^2 (standard gravity, NIST SP 811 App. B.8), 1 kgf.cm = 0.0980665 N.m.
 The worst pose is the maximum over sampled poses (home, every joint alone at each limit, the {min, mid, max} grid, and random
 poses from a fixed seed): a sampled maximum, not a proof; for the usual arm the maximum is the extended horizontal pose, which
 the grid contains when the zero pose is declared extended. Nothing here raises on a bad design: a bad design is a failed check.
