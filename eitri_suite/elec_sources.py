@@ -14,37 +14,38 @@ FETCHED = "2026-11-12"
 
 SOURCES: dict[str, dict] = {
     "littelfuse-297-drop": dict(
-        title="Littelfuse MINI Blade Fuses, Rated 32V (297 series) datasheet, ratings table 'Typ. Voltage Drop (mV)' at rated current, "
+        title="Littelfuse MINI Blade Fuses, Rated 32V (297 series) datasheet rev. 05/26/2023, ratings table 'Typ. Voltage Drop (mV)' at rated current, "
               "0.5 mm2 test cable (the same datasheet the core's fuse checks read: store.comet.bg/download-file.php?id=27670)",
         url="https://store.comet.bg/download-file.php?id=27670",
         quote="0297005 (5 A): Typ. Voltage Drop 129 mV, Typ. Cold Resistance 17.75 mOhm (figures as reproduced by distributors' copies of the "
               "table; the drop at rated current is used, scaled to the current: the hot resistance, higher than the cold one)"),
     "arduino-uno-brd": dict(
-        title="Arduino UNO R3 (A000066) CAD files, UNO-TH_Rev3e.brd (Eagle board file)",
+        title="Arduino UNO R3 (A000066) CAD files, UNO-TH_Rev3e.brd (Eagle board file, board revision 3e)",
         url="https://docs.arduino.cc/static/6bb7a3ca51ebee82a252f60c0b418787/A000066-cad-files.zip",
         quote='board outline (layer 20) x 0-68.58 mm, y 0-53.34 mm; <hole x="13.97" y="2.54" drill="3.2"/>, x="15.24" y="50.8", '
               'x="66.04" y="35.56", x="66.04" y="7.62"; USB-B X2 at x="3.81" y="38.1"'),
     "arduino-uno-ds": dict(
-        title="Arduino UNO R3 datasheet (A000066), p.11, 5.4 Board Outline & Mounting Holes",
+        title="Arduino UNO R3 datasheet (A000066) rev 5, 12/11/2026, p.11, 5.4 Board Outline & Mounting Holes (re-read 2026-11-18)",
         url="https://docs.arduino.cc/resources/datasheets/A000066-datasheet.pdf",
         quote="4 x Ø126mil / 4 x Ø3.20mm"),
     "arduino-nano-ds": dict(
-        title="Arduino Nano datasheet (A000005), p.11, 6 Mechanical Information",
+        title="Arduino Nano datasheet (A000005) rev 5, 20/10/2026, p.11, 6 Mechanical Information (drawing dated 2020/11/19; re-read 2026-11-18)",
         url="https://docs.arduino.cc/resources/datasheets/A000005-datasheet.pdf",
         quote="PCB 43.2 x 18 mm; holes 40.64 x 15.24 mm apart, 4 x Ø1.8 (hole positions assume the pattern is centred on the PCB: "
               "the drawing does not print the edge offsets)"),
     "adafruit-815-brd": dict(
-        title="Adafruit 16-Channel 12-bit PWM/Servo Driver (815), board file Adafruit PCA9685.brd",
-        url="https://github.com/adafruit/Adafruit-16-Channel-PWM-Servo-Driver-PCB",
+        title="Adafruit 16-Channel 12-bit PWM/Servo Driver (815), board file Adafruit PCA9685.brd, repo @ 32578c8 (2026-06-10; files "
+              "converted to XML 2026-06-03; 'Adafruit PCA9685 rev C.brd' there has the same outline and holes; re-read 2026-11-18)",
+        url="https://github.com/adafruit/Adafruit-16-Channel-PWM-Servo-Driver-PCB/tree/32578c83a5ba2946249b80b1aa1fb18ae4e61e7d",
         quote="outline 62.23 x 25.4 mm (2.45 x 1.00 in); four MOUNTINGHOLE_2.5_PLATED drill=\"2.5\" at (3.175, 3.175), (3.175, 22.225), "
               "(59.055, 3.175), (59.055, 22.225) mm from the lower-left corner; learn guide: \"Holes are 2.5mm diameter\""),
     "adafruit-815-vplus": dict(
-        title="Adafruit 815 product page and learn guide (pinouts)",
+        title="Adafruit 815 product page (revision notes as of December 20, 2022; re-read 2026-11-18) and learn guide (pinouts)",
         url="https://www.adafruit.com/product/815",
         quote="\"Reverse polarity protection on the terminal block input.\" No current rating for V+ is published (the guide: \"Some "
               "High-torque servos will draw more than 1A each under load\")"),
     "iso-metric-thread": dict(
-        title="Metric tap drill chart (ISO 68-1 basic profile, ISO 2306 drills), AMES",
+        title="Metric tap drill chart (ISO 68-1 basic profile, ISO 2306 drills), AMES (web page, no page date; re-read 2026-11-18)",
         url="https://amesweb.info/Screws/metric-tap-drill-chart.aspx",
         quote="M2.5 x 0.45: major diameter 2.5, drill 2.05 mm; M3 x 0.5: major diameter 3, drill 2.50 mm (a metric screw's size "
               "number is its basic major diameter, ISO 68-1)"),

@@ -305,3 +305,36 @@ def _documents():
 def test_every_cited_document_has_a_url_and_a_revision():
     missing = [s.text for s in _documents() if not s.url or not s.rev]
     assert not missing, "documents with no URL or revision: " + "; ".join(missing)
+
+
+# A revision names the document's own version: a revision / version / edition / printing, a catalogue number, a date printed on or
+# in it (a PDF's own date counts), or a commit. When the document prints none, the revision says so ("no page date", "no revision
+# printed"). The day eitri read it is not a revision: a fetch date alone, or the citation repeated, fails.
+_READ_ON = re.compile(r"\b(re-read|read|fetched|checked)( on)? \d{4}-\d{2}-\d{2}", re.IGNORECASE)
+_REVISION = re.compile(r"\brev(ision)?\b|\bv\d|version|edition|printing|\bCAT\.|\b(19|20)\d\d\b|\d{1,2}/\d{1,2}/\d{2}|"
+                       r"@ [0-9a-f]{7}|commit [0-9a-f]{7}|\(\d{1,2}-\d{2}\)|\bno (page date|revision|date)", re.IGNORECASE)
+
+
+def test_every_revision_names_a_version_not_only_the_day_it_was_read():
+    weak = [f"{s.text} (rev: {s.rev})" for s in _documents() if not _REVISION.search(_READ_ON.sub("", s.rev))]
+    assert not weak, "revision is only the citation or a read date: " + "; ".join(weak)
+
+
+def _weak(text: str) -> bool:
+    return not _REVISION.search(_READ_ON.sub("", text or ""))
+
+
+def test_every_part_record_names_its_document_url_and_version():
+    """The per-part records a check quotes (electronics, pneumatics catalogue, the suite's board outlines and parts) meet the same
+    bar: a URL and a version, unless the record is an ASSUMPTION."""
+    from eitri.electronics.sources import SOURCES as elec
+    from eitri.pneumatics.catalog import SOURCES as pneu
+    from eitri_suite import catalog as suite_catalog
+    from eitri_suite.elec_sources import SOURCES as outlines
+    bad = [f"electronics {k}" for k, s in elec.items() if not s.assumption and (not s.url or _weak(s.doc))]
+    bad += [f"pneumatics {k}" for k, s in pneu.items() if not s.url or _weak(s.doc)]
+    bad += [f"suite outline {k}" for k, s in outlines.items()
+            if not s["title"].startswith("ASSUMPTION") and (not s["url"] or _weak(s["title"]))]
+    bad += [f"suite part {p.id}.{k}" for p in suite_catalog._PARTS for k, s in p.specs.items()
+            if s.verified and (not s.url or _weak(s.rev))]
+    assert not bad, "records with no URL or no version: " + "; ".join(bad)

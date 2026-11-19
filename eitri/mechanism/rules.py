@@ -18,7 +18,8 @@ STS3215 = doc("Feetech STS3215 product specification, edition A/0, s5: rated 4 k
               "https://www.feetechrc.com/Data/feetechrc/upload/file/20260622/6391772523943436695270694.pdf",
               "Feetech STS3215 product specification edition A/0, 2020-04-10 (re-read 2026-11-07)")
 ROBOTIS = doc("ROBOTIS e-Manual (XL-320 / AX-12A): a steady load of 1/5 of stall", "https://emanual.robotis.com/docs/en/dxl/x/xl320/",
-              "ROBOTIS e-Manual, XL-320 and AX-12A pages (no page date), specifications NOTE: 'Stable motions are possible with robots "
+              "ROBOTIS e-Manual, XL-320 and AX-12A pages (no page date; their source ROBOTIS-GIT/emanual docs/en/dxl/x/xl320.md @ 15d2023, "
+              "2021-05-07, line 45 and docs/en/dxl/ax/ax-12a.md @ 0fc2fe2, 2022-02-23, line 51, re-read 2026-11-18), specifications NOTE: 'Stable motions are possible with robots "
               "designed for loads with 1/5 or less of the stall torque'; read 2026-11-17")
 CATALOG_DOCS = {
     "STS3215": STS3215,

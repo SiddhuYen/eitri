@@ -11,7 +11,8 @@ from ..check_sources import Rule, assumption, doc, model_file, requirement, rule
 
 SMC_LOAD_RATIO = doc("SMC Best Pneumatics, Air Cylinders Model Selection, Step 1: load ratio 0.5 moving, 0.7 static, 1.0 guided",
                      "https://ca01.smcworld.com/catalog/BEST-technical-data-en/pdf/6-2-1-m21-43-tech_en.pdf",
-                     "SMC Best Pneumatics technical data, catalogue p.1570 (re-read 2026-11-07)")
+                     "SMC Best Pneumatics technical data 'Technical data for air cylinders' (6-2-1-m21-43-tech_en.pdf, no catalogue number "
+                     "printed; PDF dated 2026-10-15), Step 1 load factor, catalogue p.1570; re-read 2026-11-18")
 ISO_6358 = doc("ISO 6358: flow through C, b (choked and subsonic)", "https://www.iso.org/standard/56612.html",
                "ISO 6358-1:2013 (+Amd 1:2020), -2:2019, -3:2014 (paywalled, not read: the formula as SMC and Festo print it in their "
                "sizing guides); catalogue checked 2026-11-17")
@@ -46,9 +47,11 @@ PRESSURE_DOCS = {       # each figure re-read in the document on 2026-11-17
 FLOW_DOCS = {
     "valve": doc("SMC SY3000 body ported, 2 position single, P->A/B: C 0.61-0.76, b 0.29-0.44; default the lowest, C 0.6 b 0.29",
                  "https://static.smc.eu/pdf/SY_EU.pdf", "SMC CAT.EUS11-83 (SY_EU.pdf) p.3 Flow characteristics, re-read 2026-11-12"),
-    "silencer": doc("SMC AN silencers: AN05-M5 C 1 dm3/(s.bar)", "https://content2.smcetech.com/pdf/AN.pdf", "SMC AN catalogue (re-read 2026-11-07)"),
+    "silencer": doc("SMC AN silencers: AN05-M5 C 1 dm3/(s.bar)", "https://content2.smcetech.com/pdf/AN.pdf", "SMC Silencer Series AN (AN.pdf, catalogue p.1195, no catalogue number printed; PDF dated 2024-05-23), sonic conductance "
+                    "table; re-read 2026-11-18"),
     "flow_control": doc("SMC AS speed controllers: M5 S 1.5 mm2, C = S/5 = 0.3", "https://static.smc.eu/pdf/AS_EU.pdf",
-                        "SMC AS_EU catalogue (re-read 2026-11-07)"),
+                        "SMC Speed Controller Series AS (AS_EU.pdf, no catalogue number printed; PDF dated 2021-05-11), Air Flow/Effective Area; "
+                        "read 2026-11-07"),
     "regulator": assumption("regulator C 1.5, b 0.35 (ESTIMATE for a 1/8\"-1/4\" unit, no datasheet)"),
     "frl": assumption("FRL C 1.5, b 0.35 (ESTIMATE for a 1/8\"-1/4\" unit, no datasheet)"),
 }
@@ -123,16 +126,16 @@ def _cat_doc(sid: str):
 
 
 SMC_RB = doc("SMC Absorber Series RB, Model Selection Note 1: collision speed v = 2 x the average speed; E = 1/2 m v^2",
-             "https://static.smc.eu/pdf/RB_EU.pdf", "SMC RB_EU.pdf p.5, fetched 2026-11-12")
+             "https://static.smc.eu/pdf/RB_EU.pdf", "SMC Shock Absorber RB series (RB_EU.pdf, back page 'Printing DZ 00'; PDF dated 2026-02-24), p.5 Note 1); re-read 2026-11-18")
 SMC_VALVE_PRECAUTIONS = doc("SMC 3/4/5-port solenoid valve precautions M-E03-3-02, p.1 items 3 and 7, p.2 (double solenoid)",
-                            "https://www.smcworld.com/upfiles/pl/M-E03-3-02.pdf", "SMC M-E03-3-02, fetched 2026-11-12")
+                            "https://www.smcworld.com/upfiles/pl/M-E03-3-02.pdf", "SMC M-E03-3-02 (no revision printed; PDF dated 2024-09-11), items re-read 2026-11-18")
 SMC_SY_SYMBOLS = doc("SMC SY series CAT.EUS11-83: the valves' ISO 1219 symbols (rest positions, centres)", "https://static.smc.eu/pdf/SY_EU.pdf",
                      "SMC CAT.EUS11-83 (SY_EU.pdf) p.1-3, fetched 2026-11-12")
 SMC_ACTUATOR_PRECAUTIONS = doc("SMC Actuators Precautions M-E03-3-03, p.1 items 8 (lurching when starting up after residual pressure is "
                                "exhausted), 9 (emergency stop), 11 (restarting), 12 (closed centre does not hold)",
-                               "https://www.smcworld.com/upfiles/pl/M-E03-3-03.pdf", "SMC M-E03-3-03, fetched 2026-11-12")
+                               "https://www.smcworld.com/upfiles/pl/M-E03-3-03.pdf", "SMC M-E03-3-03 (no revision printed; PDF dated 2024-09-11), items re-read 2026-11-18")
 SMC_SAFETY = doc("SMC Safety Instructions M-E03-3-01 p.1 item 3: before restart, take measures to prevent unexpected operation",
-                 "https://www.smcworld.com/upfiles/pl/M-E03-3-01.pdf", "SMC M-E03-3-01, fetched 2026-11-12")
+                 "https://www.smcworld.com/upfiles/pl/M-E03-3-01.pdf", "SMC M-E03-3-01 (no revision printed; PDF dated 2024-02-05), item re-read 2026-11-18")
 FESTO_VUVG = doc("Festo VUVG: data sheet 574371 (internal pilot air, pilot pressure 0.3-0.8 MPa, mechanical spring reset); catalogue "
                  "2010/08 p.12 (5/2 spring box 1-2, 4-5; 5/3 C / U / E normal positions)",
                  "https://ftp.festo.com/public/PNEUMATIC/SOFTWARE_SERVICE/DataSheet/EN_GB/574371.pdf", "Festo 574371 (10/8/26); VUVG catalogue 2010/08")

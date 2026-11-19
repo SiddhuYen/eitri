@@ -92,6 +92,13 @@ annotated tags (`git show v0.4.0`).
   temperature tables and Blue Sea's article, TowerPro MG996R/SG90, ROBOTIS, the ESP32 datasheet v5.3 and DevKitC guide, the
   pneumatics default pressure ratings, ISO 6358 / ISO 1217 / ISO 68-1 (paywalled: catalogue page, marked not read). A new test
   fails on any cited document without both.
+- **Every cited document's revision names its version, not the day eitri read it** (21 rule sources and 18 part records, re-read
+  2026-11-18): the Arduino pinouts by their "Last update" (the Uno sheet was reissued 12 Nov 2026), the Uno datasheet as rev 5
+  (12/11/2026: VIN now "7 - 12 V", 20 V an absolute maximum; eitri already graded on 7-12 V), the SMC catalogues, precaution sheets
+  and RB selection note by catalogue number, printing or PDF date, ROBOTIS and arduino-esp32 by the commit of their source, the
+  Adafruit 815 board file pinned to a commit. Pages that print no date (TowerPro, AMES) say so. A test fails on a revision that is
+  only the citation or a read date, and on a part record (electronics, pneumatics catalogue, suite outlines and parts) without a
+  URL and a version. No limit changed.
 - **The 3 % voltage-drop default is sourced**: NFPA 70 (2023) 210.19 Informational Note, plus ABYC E-11's 3 % for critical DC
   circuits. It is a recommendation, and the check line says so; it is no longer listed as an ASSUMPTION.
 - Citation text corrected where the document says something else: TE 108-106496 gives current by wire size in s3.4, not s3.2;

@@ -35,19 +35,20 @@ _S = [
            'VCC+0.5V"; VIL max 0.3VCC and VIH min 0.6VCC (VCC = 2.4V - 5.5V); "IOL = 20mA, VCC = 5V TA=85C 0.9" (VOL max); "IOH = -20mA, VCC = 5V '
            'TA=85C 4.2" (VOH min); "RPU I/O Pin Pull-up Resistor 20 50 k" (Table 30-1, p.323); s14.2.1 Configuring the Pin (p.85, re-read '
            '2026-11-07): "The port pins are tri-stated when reset condition becomes active, even if no clocks are running."'),
-    Source("arduino-uno", "Arduino UNO R3 pinout, tech specs and datasheet rev 4", "Arduino UNO R3 full pinout A000066 (last update 6 Oct 2022), "
-           "docs.arduino.cc/hardware/uno-rev3 tech specs, and datasheet A000066 rev 4 (20/10/2026; re-read 2026-11-07)",
+    Source("arduino-uno", "Arduino UNO R3 pinout, tech specs and datasheet rev 5", "Arduino UNO R3 full pinout A000066 (last update 12 Nov 2026), "
+           "docs.arduino.cc/hardware/uno-rev3 tech specs, and datasheet A000066 rev 5 (12/11/2026, 'Input voltage range updated'; re-read 2026-11-18)",
            "https://docs.arduino.cc/resources/pinouts/A000066-full-pinout.pdf",
            '"MAXIMUM current per I/O pin is 20mA"; "MAXIMUM current per +3.3V pin is 50mA"; tech specs "Input voltage (nominal): 7-12V", "DC Current per '
-           'I/O Pin: 20 mA". Datasheet s2.2: "VINMax Maximum input voltage from VIN pad 6 - 20 V", "VUSBMax Maximum input voltage from USB '
-           'connector - 5.5 V"; s3.1 "U1 SPX1117M3-L-5 Regulator". The narrower nominal 7-12 V is used for VIN; 5.5 V is the most the 5 V '
-           'rail (USB or the 5V pin, which bypasses the regulator) may see.', fetched="2026-11-07"),
+           'I/O Pin: 20 mA". Datasheet rev 5 s2.2: "VIN DC Barrel Jack Voltage Range 7 - 12 V", "VUSB USB connector Voltage - 5.5 V", "NOTE: The VIN '
+           'input voltage can get up to 20V, but this is its absolute maximum rating, and we do not recommend to work up to that value." (rev 4 '
+           'had "VINMax ... 6 - 20 V"); s3.1 "U1 SPX1117M3-L-5 Regulator". The narrower nominal 7-12 V is used for VIN; 5.5 V is the most the 5 V '
+           'rail (USB or the 5V pin, which bypasses the regulator) may see.', fetched="2026-11-18"),
     Source("arduino-nano", "Arduino Nano pinout and tech specs", "Arduino Nano full pinout A000005 (last update 30/06/2021) and docs.arduino.cc/hardware/nano tech specs",
            "https://docs.arduino.cc/resources/pinouts/A000005-full-pinout.pdf",
            '"VIN 7-12 V input to the board."; "MAXIMUM current per I/O pin is 20mA"; "MAXIMUM current per +3.3V pin is 50mA"; tech specs "DC Current per I/O Pin: 20 mA". '
            'The datasheet A000005 rev 5 (20/10/2026, re-read 2026-11-07) says "7-15V unregulated external power supply (pin 30)": the pinout\'s '
            'lower 7-12 V is used.'),
-    Source("arduino-uno-sch", "Arduino UNO R3 schematic", "Arduino UNO R3 schematic A000066",
+    Source("arduino-uno-sch", "Arduino UNO R3 schematic", "Arduino UNO R3 reference design schematic A000066 (sheet marked Rev3, no date printed)",
            "https://docs.arduino.cc/resources/schematics/A000066-schematics.pdf",
            'page 1: "U2" "LP2985-33DBVR", pins "1 IN" and "3 ON/OFF" on the net "+5V", "OUT 5 +3V3": the 3.3 V regulator runs from the 5 V rail, so '
            "3V3-pin loads are also 5 V-rail loads (read from the rendered schematic; it gives no current rating, the pinout's 50 mA is used)"),
@@ -130,7 +131,7 @@ _S = [
            "https://www.molicel.com/wp-content/uploads/INR18650P26A_1.4_Product-Data-Sheet-of-INR-18650-P26A-80087.pdf",
            'Cell Voltage: "Nominal 3.6 V", "Charge 4.2 V", "Discharge 2.5 V"; Charge Characteristics: "CC-CV Charge to 4.2V". The 4.2 V charge '
            "voltage is the lithium-ion (and lithium-polymer) full-charge figure used per cell.", fetched="2026-11-07"),
-    Source("yuasa-np7-12", "Yuasa NP7-12 data sheet", "Yuasa NP7-12 Industrial VRLA Battery, technical data sheet (yuasaeurope.com, French edition)",
+    Source("yuasa-np7-12", "Yuasa NP7-12 data sheet", "Yuasa NP7-12 Industrial VRLA Battery, technical data sheet (yuasaeurope.com, French edition, 'Date de publication: 26/02/2019')",
            "https://res.cloudinary.com/sonepar-fr/raw/upload/s--wpLzFKbh--/v1/documents/894/NP7-12.pdf",
            '"Tension nominale 12" V; "Tension de charge en floating a 20C (V)/bloc 13.65 (+-1%)"; "Tension de charge en cyclique (ou Boost) a '
            '20C (V)/bloc 14.5 (+-3%)", 2.42 V per cell. A 12 V lead-acid battery on charge (a charger, a vehicle) reaches 14.5 V: the full-charge '

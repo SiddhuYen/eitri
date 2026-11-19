@@ -14,9 +14,9 @@ from ..check_sources import Rule, doc, model_file, requirement, rule, tool
 # (flash pins: "Avoid using these pins"), ESP-IDF's GPIO summary (ADC2 not with Wi-Fi) and the Arduino-ESP32 core (I2C 21/22).
 PINOUT_DOCS = {
     "uno": doc("Arduino Uno Rev3 pinout sheet (ATmega328P pins)", "https://docs.arduino.cc/resources/pinouts/A000066-full-pinout.pdf",
-               "Arduino UNO R3 full pinout A000066"),
+               "Arduino UNO R3 full pinout A000066, 'Last update: 12 Nov, 2026', p.1; re-read 2026-11-18"),
     "nano": doc("Arduino Nano pinout sheet (ATmega328P pins)", "https://docs.arduino.cc/resources/pinouts/A000005-full-pinout.pdf",
-                "Arduino Nano full pinout A000005"),
+                "Arduino Nano full pinout A000005, 'Last update: 30/06/2021', p.1; re-read 2026-11-18"),
     "esp32": doc("Espressif ESP32 Series Datasheet v5.3 (pin functions, strapping pins, input-only GPIO34-39)",
                  "https://documentation.espressif.com/esp32_datasheet_en.pdf",
                  "ESP32 Series Datasheet v5.3 (2026.07): Tables 2-1, 3-1, 4-6, 6-1; read 2026-11-17"),
@@ -29,8 +29,9 @@ ESP32_MORE = [
         "https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html",
         "ESP-IDF Programming Guide v6.1.1, GPIO & RTC GPIO, GPIO Summary; read 2026-11-17"),
     doc("Arduino-ESP32 core, variants/esp32/pins_arduino.h: SDA = 21, SCL = 22, TX = 1, RX = 3 (a software default, not hardware)",
-        "https://github.com/espressif/arduino-esp32/blob/master/variants/esp32/pins_arduino.h",
-        "arduino-esp32 master, variants/esp32/pins_arduino.h lines 6-10; read 2026-11-17"),
+        "https://github.com/espressif/arduino-esp32/blob/da5c6ab9aef9e5478fd2bd941101525a9e507a2f/variants/esp32/pins_arduino.h",
+        "arduino-esp32 variants/esp32/pins_arduino.h at commit da5c6ab (2024-04-15, the file's last change on master), lines 6-10; "
+        "re-read 2026-11-18"),
 ]
 ARDUINO_CLI = tool("arduino-cli compile for the board (its compiler's own errors and warnings)")
 MG996R_STALL = doc("MG996R stall current 2.5 A (6 V), distributor datasheet; TowerPro's page says 1400 mA: the higher draw is used",

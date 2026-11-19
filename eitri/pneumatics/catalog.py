@@ -57,17 +57,17 @@ _S = [
            '(50-100); connection G1/8, G1/4, G1/4, G3/8, G3/8, G1/2; theoretical force at 6 bar 483/415, 754/633, 1178/990, 1870/1682, '
            '3016/2721, 4712/4418 N; impact energy in the end positions 0.4, 0.7, 1.0, 1.3, 1.8, 2.5 J. (Figures from the data/components '
            'records of 2026-11-06/07, page references as given there; not re-opened in this thread.)', fetched="2026-11-07"),
-    Source("smc-mgp-z", "SMC Europe, Compact Guide Cylinder Series MGP-Z (MGP-Z_EU.pdf)", "https://static.smc.eu/pdf/MGP-Z_EU.pdf",
+    Source("smc-mgp-z", "SMC Europe, Compact Guide Cylinder Series MGP-Z, CAT.EUS20-219AA-UK, 1st printing QX (MGP-Z_EU.pdf)", "https://static.smc.eu/pdf/MGP-Z_EU.pdf",
            'printed p.3 How to Order: MGP{M slide bearing} <bore> - <stroke> Z, "Without auto switch (Built-in magnet)", port thread "-" '
            'M5 x 0.8 (dia 12, 16) / Rc; printed p.4 Specifications: max operating pressure 1.0 MPa, minimum 0.12 MPa (12) / 0.1 MPa '
            '(16-100), piston speed 50 to 500 mm/s (12-63) "Maximum speed with no load", cushion "Rubber bumper on both ends"; standard '
            'strokes 20, 25: 20, 30, 40, 50, 75, 100, 125, 150, 175, 200, 250, 300, 350, 400; 32-100: 25, 50, 75, 100, 125, 150, 175, 200, '
            '250, 300, 350, 400; Theoretical Output (rod size, OUT/IN at 0.5 MPa): 20 (rod 10) 157/118, 25 (rod 10) 245/206, 32 (rod 14) '
            '402/325 N. No allowable kinetic energy is printed (MGP is selected from load-speed graphs, pp.8-14: not modelled)'),
-    Source("smc-aw", "SMC Europe, Filter Regulator Series AW10 to 40 (AW_EU.pdf)", "https://static.smc.eu/pdf/AW_EU.pdf",
+    Source("smc-aw", "SMC Europe, Filter Regulator Series AW10 to 40 (AW_EU.pdf, no catalogue number printed; PDF dated 2004-04-26)", "https://static.smc.eu/pdf/AW_EU.pdf",
            'Standard specifications, AW20 column: max operating pressure 1.0 MPa, set pressure range 0.05-0.85 MPa, filtration 5 um. '
            '(data/components record smc/aw20, fetched 2026-11-07)', fetched="2026-11-07"),
-    Source("festo-ms4-lfr", "Festo data sheet MS4-LFR-1/4-D6-CRM-AS, part 529144",
+    Source("festo-ms4-lfr", "Festo data sheet MS4-LFR-1/4-D6-CRM-AS, part 529144 (dated 10/8/26)",
            "https://ftp.festo.com/public/PNEUMATIC/SOFTWARE_SERVICE/DataSheet/EN_GB/529144.pdf",
            'Operating pressure 0.8-14 bar; pressure regulation range 0.3-7 bar; standard nominal flow rate 1500 L/min (DIN 1343); grade of '
            'filtration 5 um. (data/components record festo/ms4-lfr-1-4-d6-crm-as, fetched 2026-11-06)', fetched="2026-11-06"),
@@ -112,20 +112,20 @@ _S = [
            '"Design For T-slot"; "Switching output PNP"; "N/O contact"; "Switch-on time 1.3 ms"; "Switch-off time 7.3 ms"; "Max. output current 100 mA"; "Voltage drop 1.5 V"; "Rated operational '
            'voltage DC 24 V"; "Operational voltage range DC 5 V...30 V"; "Electrical connection 1, connector system M8x1, A-coded, to EN 61076-2-104"; '
            '"number of connections/cores 3"; "Cable length 0.3 m". (On a DSNU it needs the mounting kit SMBR-8-20.)'),
-    Source("smc-tu", "SMC Europe, Polyurethane Tubing Series TU, TIUB (TU_TIUB_EU.pdf)", "https://static.smc.eu/pdf/TU_TIUB_EU.pdf",
+    Source("smc-tu", "SMC Europe, Polyurethane Tubing Series TU, TIUB (TU_TIUB_EU.pdf, no catalogue number printed; PDF dated 2004-04-30)", "https://static.smc.eu/pdf/TU_TIUB_EU.pdf",
            'Specifications: "Max. operating pressure 0.8MPa at 20 C" (lower when hotter: pressure characteristics curve); operating temperature '
            '-20 to +60 C; TU0425: O.D. 4, I.D. 2.5; TU0604: 6 / 4; TU0805: 8 / 5 mm'),
-    Source("smc-kq2", "SMC Europe, One-touch Fittings Series KQ2 (KQ2_EU.pdf)", "https://static.smc.eu/pdf/KQ2_EU.pdf",
+    Source("smc-kq2", "SMC Europe, One-touch Fittings Series KQ2 (KQ2_EU.pdf, no catalogue number printed; PDF dated 2010-06-25)", "https://static.smc.eu/pdf/KQ2_EU.pdf",
            'p.5 Male connector KQ2H: KQ2H06-01S (tube 6 mm, R1/8) effective area 13.1 mm2 nylon, 10.4 mm2 urethane; max operating pressure '
            '1.0 MPa (p.2 Specifications)'),
-    Source("smc-as", "SMC Europe, Speed Controller Series AS (AS_EU.pdf)", "https://static.smc.eu/pdf/AS_EU.pdf",
+    Source("smc-as", "SMC Europe, Speed Controller Series AS (AS_EU.pdf, no catalogue number printed; PDF dated 2021-05-11)", "https://static.smc.eu/pdf/AS_EU.pdf",
            'p.1 (printed 2) Air Flow/Effective Area table (supply 0.5 MPa): AS1201F-M5-04 (M5, tube 4 mm) 1.5 mm2, AS2201F-01-06 (R1/8, '
            'tube 6 mm) 3.5 mm2, AS2201F-02-08 (R1/4, tube 8 mm) 7 mm2, needle fully open; max operating pressure 1 MPa. SMC gives no C: '
            'C = S / 5 (SMC: S [mm2] = 5 x C) = 0.3, 0.7, 1.4 L/(s.bar); b not published (0.30 is an ESTIMATE)', fetched="2026-11-07"),
-    Source("smc-an", "SMC Silencer Series AN (AN.pdf)", "https://content2.smcetech.com/pdf/AN.pdf",
+    Source("smc-an", "SMC Silencer Series AN (AN.pdf, catalogue p.1195; PDF dated 2024-05-23)", "https://content2.smcetech.com/pdf/AN.pdf",
            'Specifications: max operating pressure 1.0 MPa; performance table, sonic conductance C [dm3/(s.bar)]: AN05-M5 1, AN10-01 2 (R1/8); b not '
            'published (0.30 is an ESTIMATE)', fetched="2026-11-07"),
-    Source("smc-best-tech", "SMC Best Pneumatics technical data, Air Cylinders Model Selection (6-2-1-m21-43-tech_en.pdf)",
+    Source("smc-best-tech", "SMC Best Pneumatics technical data, Air Cylinders Model Selection (6-2-1-m21-43-tech_en.pdf, no catalogue number printed; PDF dated 2026-10-15)",
            "https://ca01.smcworld.com/catalog/BEST-technical-data-en/pdf/6-2-1-m21-43-tech_en.pdf",
            'Data 2 (p.1574): worked example "Operating pressure 0.5 MPa -> Piping length 2 m -> Bore 6 mm -> Air consumption = 0.56 L (ANR)" per '
            'cycle (two 2 m lines filled from atmosphere: 2 x 56.5 cm3 x 0.5 / 0.1013 = 0.56 L); "a required air volume 350 L/min (ANR)" for '

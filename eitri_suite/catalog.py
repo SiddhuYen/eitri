@@ -111,7 +111,8 @@ def _v(value, unit, note, doc, rev, page, url) -> Spec:
 
 
 _TP_MG = ("TowerPro MG996R product page", "no revision printed (fetched 2026-11-12)", "", "https://towerpro.com.tw/product/mg996r/")
-_AF_815 = ("Adafruit 16-Channel 12-bit PWM/Servo Driver - I2C interface [PCA9685], product 815", "fetched 2026-11-12", "",
+_AF_815 = ("Adafruit 16-Channel 12-bit PWM/Servo Driver - I2C interface [PCA9685], product 815",
+           "revision notes as of December 20, 2022 (product page); fetched 2026-11-12, re-read 2026-11-18", "",
            "https://www.adafruit.com/product/815")
 _AF_1466 = ("Adafruit 5V 4A (4000mA) switching power supply - UL Listed, product 1466", "revision history as of July 24, 2025; fetched 2026-11-12",
             "", "https://www.adafruit.com/product/1466")

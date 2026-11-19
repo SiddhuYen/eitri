@@ -151,9 +151,10 @@ SIZING_SOURCE = cite("Blue Sea Systems 'DC Circuit Protection' 2005: rating <= w
 # Until 0.8.0 every signal=True net was graded at this MCU-pin figure; since 0.8.1 the limit comes from the device declared at
 # the net's ends (eitri.harness.signals). Kept for the quote in the reference doc.
 SIGNAL_MAX_A = 0.020
-SIGNAL_SOURCE_FULL = ("Arduino UNO R3 full pinout (docs.arduino.cc/resources/pinouts/A000066-full-pinout.pdf): 'MAXIMUM current per "
+SIGNAL_SOURCE_FULL = ("Arduino UNO R3 full pinout (docs.arduino.cc/resources/pinouts/A000066-full-pinout.pdf, last update 12 Nov 2026): 'MAXIMUM current per "
                  "I/O pin is 20mA' (eitri.power.SRC_UNO_IO)")
-SIGNAL_SOURCE = cite("Arduino UNO R3 pinout: 20 mA per I/O pin", SIGNAL_SOURCE_FULL, UNO_PINOUT_URL)
+SIGNAL_SOURCE = cite("Arduino UNO R3 pinout: 20 mA per I/O pin", SIGNAL_SOURCE_FULL,
+                     (UNO_PINOUT_URL, "Arduino UNO R3 full pinout A000066, 'Last update: 12 Nov, 2026', p.1; re-read 2026-11-18"))
 
 
 # --------------------------------------------------------------------------- the resolved device
