@@ -200,7 +200,7 @@ def test_the_package_carries_the_sketch_it_compiled_and_no_torque_wording_withou
     assert set(fw["files"]) == {"climate.ino", "eitri_pins.h"}
     for name, sha in fw["files"].items():
         assert hashlib.sha256((pkg / "firmware" / "climate" / name).read_bytes()).hexdigest() == sha
-    assert "digitalWrite(SDA, LOW);" in (pkg / "firmware" / "climate" / "climate.ino").read_text(encoding="utf-8")
+    assert "digitalWrite(PIN_SDA, LOW);" in (pkg / "firmware" / "climate" / "climate.ino").read_text(encoding="utf-8")
     assert "firmware/climate/climate.ino" in m["files"]
     readme = (pkg / "README.md").read_text(encoding="utf-8")
     assert "- `firmware/climate/climate.ino`" in readme and "**Firmware:** `firmware/climate/` is the sketch exactly as" in readme

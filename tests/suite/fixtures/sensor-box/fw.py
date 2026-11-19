@@ -11,8 +11,8 @@ SKETCH = r'''
 
 void setup() {
   Wire.begin();
-  digitalWrite(SDA, LOW);   // the AVR's internal 5 V pull-ups off: the bus is pulled to 3.3 V by the OLED module
-  digitalWrite(SCL, LOW);
+  digitalWrite(PIN_SDA, LOW);   // the AVR's internal 5 V pull-ups off: the bus is pulled to 3.3 V by the OLED module
+  digitalWrite(PIN_SCL, LOW);
 }
 
 void loop() {

@@ -203,3 +203,11 @@ def test_a_change_package_refuses_a_measured_board_until_a_person_waives_it(tmp_
     assert len(nc) == 3 and all(MEASURED_BY_USER in x["why"] and "Pat Person" in x["why"] for x in nc)
     report = (Path(pkg["folder"]) / "report.md").read_text(encoding="utf-8")
     assert MEASURED_BY_USER in report
+
+
+def test_the_combined_result_counts_the_assumed_checks():
+    r = {"build": 1, "project_id": "box", "all_pass": True, "files": [{"file": "elec.py", "kind": "electronics", "built": True, "blank": False,
+         "checks": [{"name": "mounting: X hole pattern", "ok": True, "severity": "pass", "status": "assumed", "measured": "m", "expected": "",
+                     "cross_domain": True}]}], "seconds": 1, "view": "", "next_steps": ["export"], "cross_domain": {"checks": 1, "failing": 0}}
+    text = W.results_text(r)
+    assert "1/1 checks pass, 1 assumed (board size measured by the user, not from a datasheet)" in text and "ASSUMED [cross-domain]" in text

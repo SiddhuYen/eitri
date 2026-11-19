@@ -1055,7 +1055,9 @@ def results_text(r: dict, detail: str = "failing") -> str:
         na = [c for c in checks if c.get("status") == "not_applicable"]
         lines = [f"{f['file']} ({f['kind']}){' · BLANK' if f['blank'] else ''}{_rev_tag(f)} · "
                  f"{len(checks) - len(bad) - len(na)}/{len(checks) - len(na)} checks pass" + (f", {len(warn)} warnings" if warn else "")
-                 + (f", {len(na)} not applicable" if na else "")]
+                 + (f", {len(na)} not applicable" if na else "")
+                 + (f", {n_as} assumed (board size measured by the user, not from a datasheet)"
+                    if (n_as := sum(1 for c in checks if c.get("status") == "assumed")) else "")]
         asm = [c for c in checks if c.get("status") == "assumed" and c not in warn]
         shown = checks if detail == "all" else bad + warn + na + asm
         for c in shown:
