@@ -2,6 +2,12 @@
 
 <!-- mcp-name: io.github.SiddhuYen/eitri -->
 
+**Use eitri in Claude Code (or Codex, Cursor): one line installs it and registers the plugin.**
+```sh
+curl -fsSL https://eitri.io/install | sh -s -- --plugin
+```
+No account, no API key: it runs on your computer, on your agent's own plan. The default **combined workspace** designs a whole machine and checks its CAD, mechanism, wiring, firmware and circuit against each other on every build. Then run `claude` and ask for a machine. [More about the plugin](#in-your-own-agent-the-eitri-plugin)
+
 **A local AI CAD agent.** Describe a part in plain language; eitri models it as a parametric
 [build123d](https://github.com/gumyr/build123d) (OpenCASCADE) model, builds it, **measures it against your
 request**, looks at it, fixes what fails, and hands you STEP / STL / 3MF / GLB files. Then keep going in a
