@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import os as _os
 
-__version__ = "0.9.2"
+__version__ = "0.9.3"
 
 
 def _load_all() -> None:
