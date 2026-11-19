@@ -1,4 +1,4 @@
-# eitri plugin 0.9.2
+# eitri plugin 0.9.3
 
 Hardware design inside your agent, with checks that run on every build, all on your computer. The plugin adds skills and
 two local MCP servers to Claude Code: the combined workspace, which designs a whole machine (structure, mechanism, wiring,
@@ -26,7 +26,7 @@ With eitri installed, the plugin can also come from its marketplace inside Claud
 
     /plugin install eitri --marketplace SiddhuYen/eitri
 
-If eitri is not installed, `bin/eitri-mcp` runs `eitri-hardware==0.9.2` once through uvx instead; that first download
+If eitri is not installed, `bin/eitri-mcp` runs `eitri-hardware==0.9.3` once through uvx instead; that first download
 (about 390 MB) usually takes longer than the agent's start-up limit, so install eitri first.
 
 ## What it downloads, and when
