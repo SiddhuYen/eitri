@@ -137,6 +137,57 @@ def test_a_passing_project_exports_and_a_failing_one_does_not(ws):
     assert exp["files"] == [] and "1 failing: model.py: plate is wide enough" in exp["problems"][0]
 
 
+def _chk(name, status, ok=True, severity=None):
+    return {"name": name, "ok": ok, "severity": severity or ("warn" if status == "not_run" else "fail" if not ok else "pass"),
+            "status": status, "measured": "not run: base_fixing not declared" if status == "not_run" else "m", "expected": "",
+            "cross_domain": status == "not_run"}
+
+
+def test_the_summary_never_says_every_check_passes_while_a_check_did_not_run():
+    """A not-run check is ok=True, severity "warn" (it blocks nothing in a build), so counting `ok` called it a pass: the header
+    said EVERY CHECK PASSES and "25/25 checks pass" while combined_export refused. Every status is counted on its own now."""
+    checks = [_chk("reach", "pass"), _chk("speed", "warn", severity="warn"), _chk("tipping at full reach", "not_run"),
+              _chk("joints n/a", "not_applicable")]
+    r = {"build": 3, "project_id": "arm", "all_pass": True, "seconds": 1, "view": "", "next_steps": [], "cross_domain": {"checks": 1, "failing": 0},
+         "files": [{"file": "mech.py", "kind": "mechanism", "built": True, "blank": False, "checks": checks}]}   # saved before 0.9.3
+    text = W.results_text(r)
+    assert "EVERY CHECK PASSES" not in text and "NOT DONE YET (1 NOT RUN)" in text
+    assert "checks: 1 pass, 1 warn, 0 FAIL, 1 NOT RUN, 1 n/a" in text and "Checks: 1 pass, 1 warn, 0 FAIL, 1 NOT RUN, 1 n/a" in text
+    assert "NOT RUN [cross-domain] tipping at full reach" in text and "checks pass" not in text
+    assert "0 of 1 ran and pass" in text
+    steps, _ = W.next_steps(r["files"], {}, "")
+    assert any('"tipping at full reach" did NOT RUN' in x and "not a pass" in x for x in steps)
+    assert not any(x.startswith("Every check passes") for x in steps)
+
+
+def test_the_uno_arm_without_its_base_fixing_is_not_done(ws, tmp_path, monkeypatch):
+    """The case found in the posts thread: the desk arm with base_fixing deleted. Its stability checks do not run, the export
+    is refused, and the summary the agent reads says so (it said EVERY CHECK PASSES)."""
+    cli = tmp_path / "arduino-cli"
+    cli.write_text("#!/bin/sh\necho 'Sketch uses 4242 bytes (13%) of program storage space. Maximum is 32256 bytes.'\n"
+                   "echo 'Global variables use 222 bytes (10%) of dynamic memory, leaving 1826 bytes for local variables. Maximum is 2048 bytes.'\n",
+                   encoding="utf-8")
+    cli.chmod(0o755)
+    monkeypatch.setenv("EITRI_ARDUINO_CLI", str(cli))                # a stand-in compile, so nothing else is open
+    pid = ws.new_project("Uno arm", "a desk robot arm with an Arduino Uno, servos, wiring and its circuit")["project_id"]
+    files = {f.name: f.read_text(encoding="utf-8") for f in UNO.glob("*.py")}
+    assert '    base_fixing="bolted",' in files["mech.py"]
+    files["mech.py"] = "\n".join(l for l in files["mech.py"].splitlines() if not l.startswith('    base_fixing="bolted",')) + "\n"
+    ws.put_files(pid, files)
+    r = _build(ws, pid)
+    text = W.results_text(r)
+    not_run = [(f["file"], c["name"]) for f in r["files"] for c in f["checks"] if c["status"] == "not_run"]
+    assert sorted(not_run) == [("mech.py", "stability: the base does not tip over"), ("model.py", "stability: the base does not tip over")]
+    assert not [c for f in r["files"] for c in f["checks"] if c["status"] == "fail"], text
+    assert not r["all_pass"] and r["counts"]["not_run"] == len(not_run)
+    assert "EVERY CHECK PASSES" not in text and f"NOT DONE YET ({len(not_run)} NOT RUN)" in text, text.splitlines()[0]
+    mech_line = next(line for line in text.splitlines() if line.startswith("mech.py (mechanism)"))
+    assert "0 FAIL, 1 NOT RUN" in mech_line and "checks pass" not in mech_line
+    assert any("did NOT RUN" in s and "base_fixing" in s for s in r["next_steps"]), r["next_steps"]
+    exp = ws.export(pid, ["step"])
+    assert exp["files"] == [] and "not run" in exp["problems"][0]
+
+
 def test_the_uno_arm_demo_end_to_end(ws):
     """The reference project: five files, the cross-domain checks between them pass; the sketch's compile check fails
     without arduino-cli, and that alone refuses the package."""

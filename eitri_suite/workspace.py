@@ -159,6 +159,30 @@ def _status(c: dict) -> str:
     return status_of(c)
 
 
+STATUS_ORDER = ("pass", "warn", "fail", "not_run", "not_applicable", "assumed")
+
+
+def check_status(c: dict) -> str:
+    """A summarised check's status (pass | warn | fail | not_run | not_applicable | assumed). A not-run check has ok=True and
+    severity "warn", so neither `ok` nor the severity alone tells a pass from a check that never ran."""
+    st = c.get("status")
+    if st in STATUS_ORDER:
+        return st
+    return "fail" if not c.get("ok") else _status(c)
+
+
+def counts_text(counts: dict) -> str:
+    """"24 pass, 4 warn, 0 FAIL, 2 NOT RUN, 1 n/a, 1 assumed (board size measured by the user, ...)": every status counted
+    on its own; n/a and assumed only when there are some."""
+    from eitri.checks import MEASURED_BY_USER
+    out = f"{counts.get('pass', 0)} pass, {counts.get('warn', 0)} warn, {counts.get('fail', 0)} FAIL, {counts.get('not_run', 0)} NOT RUN"
+    if counts.get("not_applicable"):
+        out += f", {counts['not_applicable']} n/a"
+    if counts.get("assumed"):
+        out += f", {counts['assumed']} assumed ({MEASURED_BY_USER})"
+    return out
+
+
 # what each kind's cross-domain checks read of the other files: when one of those changed since that kind's newest good build,
 # its cross-domain checks are out of date
 CROSS_READS = {"electronics": ("cad", "harness", "firmware", "mechanism"), "firmware": ("harness", "mechanism", "cad"),
@@ -629,18 +653,22 @@ class Workspace:
 
     def results_of(self, b: CombinedBuild) -> dict:
         folder = b.folder
-        files_out, cross_total, cross_fail = [], 0, 0
+        files_out, cross_total, cross_fail, cross_not_run = [], 0, 0, 0
         all_checks_pass = True
+        totals = dict.fromkeys(STATUS_ORDER, 0)
         for entry in b.built:
             if not entry["built"]:
                 all_checks_pass = False
             else:
                 for c in entry["checks"]:
+                    st = check_status(c)
+                    totals[st] = totals.get(st, 0) + 1
                     if c["cross_domain"]:
                         cross_total += 1
-                        cross_fail += 0 if c["ok"] else 1
-                if any(not c["ok"] for c in entry["checks"]):
-                    all_checks_pass = False
+                        cross_fail += st == "fail"
+                        cross_not_run += st == "not_run"
+                if any(check_status(c) in ("fail", "not_run") for c in entry["checks"]):
+                    all_checks_pass = False          # a check that did not run is not a pass (combined_export refuses it too)
             files_out.append(entry)
         texts = {f: (folder / f).read_text(encoding="utf-8") for f in b.files if (folder / f).is_file()}
         design = (folder / "DESIGN.md").read_text(encoding="utf-8", errors="replace")[:20000] if (folder / "DESIGN.md").is_file() else ""
@@ -649,8 +677,8 @@ class Workspace:
         return {"project_id": self.pid(folder), "folder": str(folder), "build": b.number, "complete": True, "digest": b.digest,
                 "checked_by": "this computer", "finished_at": time.strftime("%Y-%m-%d %H:%M:%S"),
                 "seconds": round(time.time() - b.started, 1), "files": files_out,
-                "cross_domain": {"checks": cross_total, "failing": cross_fail},
-                "all_pass": all_pass, "not_built": planned_missing, "next_steps": steps}
+                "cross_domain": {"checks": cross_total, "failing": cross_fail, "not_run": cross_not_run},
+                "counts": totals, "all_pass": all_pass, "not_built": planned_missing, "next_steps": steps}
 
     # ---------------------------------------------------------------- combined_export
     def export(self, project_id, formats) -> dict:
@@ -839,13 +867,30 @@ def next_steps(files: list[dict], texts: dict[str, str], goal: str = "") -> tupl
     shown = 0
     for f in files:
         for c in f.get("checks") or []:
-            if c["ok"]:
+            if check_status(c) != "fail":
                 continue
             if shown >= 12:
                 break
             shown += 1
             h = hint_for(c["name"])
             steps.append(f"{f['file']}: \"{c['name']}\" fails (measured {c['measured'] or '-'}; expected {c['expected'] or '-'})." + (f" {h}" if h else ""))
+    for f in files:
+        for c in f.get("checks") or []:
+            if check_status(c) != "not_run":
+                continue
+            if shown >= 12:
+                break
+            shown += 1
+            h = hint_for(c["name"])
+            steps.append(f"{f['file']}: \"{c['name']}\" did NOT RUN ({re.sub(r'^not run: ', '', c['measured'] or '') or 'an input it needs is not declared'}). Declare what it "
+                         "names in the model (the datasheet figure, or the declaration the check asks for), then combined_build again. "
+                         "A check that did not run is not a pass: do not tell the person every check passes, and combined_export "
+                         "refuses until it runs." + (f" {h}" if h else ""))
+    n_assumed = sum(1 for f in files for c in f.get("checks") or [] if check_status(c) == "assumed")
+    if n_assumed:
+        from eitri.checks import MEASURED_BY_USER
+        steps.append(f"{n_assumed} check(s) are ASSUMED: they pass only on a {MEASURED_BY_USER}. combined_export works, but tell the "
+                     "person which figures are theirs, and that a change package needs a person's waiver for each.")
     # the domains a machine like this needs (read from what the agent said it is making: the goal and DESIGN.md, never the model code,
     # where "Cylinder(" is geometry), and the links between them that are not declared yet
     g = " " + re.sub(r"[^a-z0-9]+", " ", (goal or "").lower()) + " "
@@ -883,7 +928,7 @@ def next_steps(files: list[dict], texts: dict[str, str], goal: str = "") -> tupl
                      "and COUPLING joints mapping each servo to its mechanism joint, so the cycle is checked against the joints.")
     if "mechanism" in by_kind and "target(" not in mech and moving:
         steps.append("The mechanism has no targets: m.target(\"pick\", at=(x, y, z)) and m.target(\"place\", ...) so reach is checked.")
-    if not steps:
+    if not [x for x in steps if " ASSUMED: " not in x]:
         steps.append("Every check passes in every file. Show the person the viewer link, then export it: "
                      "combined_export(project_id, [\"package\", \"step\"]).")
     return steps, missing
@@ -1045,6 +1090,16 @@ def _rev_tag(f: dict) -> str:
     return f" · revision {f['revision']}" if f.get("revision") is not None else ""
 
 
+def _total_counts(r: dict) -> dict:
+    """The status counts of a result saved before 0.9.3 (no "counts" key)."""
+    out = dict.fromkeys(STATUS_ORDER, 0)
+    for f in r.get("files") or []:
+        for c in f.get("checks") or []:
+            st = check_status(c)
+            out[st] = out.get(st, 0) + 1
+    return out
+
+
 def results_text(r: dict, detail: str = "failing") -> str:
     """A build's results as the agent reads them: one block per file, failing checks in full (all checks with detail="all"),
     the cross-domain tally, the next steps."""
@@ -1053,9 +1108,18 @@ def results_text(r: dict, detail: str = "failing") -> str:
             cur=f", now {r['current']}" if r.get("current") else "", **r) + "\n- ".join(r["next_steps"]))
     if r.get("never_built"):
         return "Nothing has been built in this project yet.\nViewer: " + r["view"] + "\n\nNext steps:\n- " + "\n- ".join(r["next_steps"])
+    counts = r.get("counts") or _total_counts(r)
+    open_ = [x for x in (f"{counts.get('fail', 0)} FAIL" if counts.get("fail") else "",
+                         f"{counts.get('not_run', 0)} NOT RUN" if counts.get("not_run") else "",
+                         "a file did not build" if any(not f["built"] for f in r["files"]) else "",
+                         "a blank file" if any(f.get("blank") for f in r["files"]) else "") if x]
+    all_pass = r["all_pass"] and not counts.get("fail") and not counts.get("not_run")
     head = [f"eitri combined build {r['build']} of project {r['project_id']}: "
-            + (("EVERY CHECK PASSES" + (" (not built yet: " + ", ".join(r["not_built"]) + ")" if r.get("not_built") else "")) if r["all_pass"] else "not done yet")
-            + f" · {len(r['files'])} files · {r['seconds']:.0f} s · built on this computer"]
+            + (("EVERY CHECK PASSES" + (f" ({counts['assumed']} of them ASSUMED: measured by the user)" if counts.get("assumed") else "")
+                + (" (not built yet: " + ", ".join(r["not_built"]) + ")" if r.get("not_built") else "")) if all_pass
+               else "NOT DONE YET" + (f" ({', '.join(open_)})" if open_ else ""))
+            + f" · {len(r['files'])} files · {r['seconds']:.0f} s · built on this computer",
+            "Checks: " + counts_text(counts)]
     if r.get("unchanged"):
         head.append("Nothing changed since this build, so it was not run again.")
     if r.get("stale"):
@@ -1068,28 +1132,24 @@ def results_text(r: dict, detail: str = "failing") -> str:
             out.append(f"{f['file']} ({f['kind']}){_rev_tag(f)} · BUILD FAILED\n{f.get('error') or ''}")
             continue
         checks = f.get("checks") or []
-        bad = [c for c in checks if not c["ok"]]
-        warn = [c for c in checks if c["ok"] and c["severity"] == "warn"]
-        na = [c for c in checks if c.get("status") == "not_applicable"]
-        lines = [f"{f['file']} ({f['kind']}){' · BLANK' if f['blank'] else ''}{_rev_tag(f)} · "
-                 f"{len(checks) - len(bad) - len(na)}/{len(checks) - len(na)} checks pass" + (f", {len(warn)} warnings" if warn else "")
-                 + (f", {len(na)} not applicable" if na else "")
-                 + (f", {n_as} assumed (board size measured by the user, not from a datasheet)"
-                    if (n_as := sum(1 for c in checks if c.get("status") == "assumed")) else "")]
-        asm = [c for c in checks if c.get("status") == "assumed" and c not in warn]
-        shown = checks if detail == "all" else bad + warn + na + asm
+        by = {k: [c for c in checks if check_status(c) == k] for k in STATUS_ORDER}
+        lines = [f"{f['file']} ({f['kind']}){' · BLANK' if f['blank'] else ''}{_rev_tag(f)} · checks: "
+                 + counts_text({k: len(v) for k, v in by.items()})]
+        shown = checks if detail == "all" else by["fail"] + by["not_run"] + by["warn"] + by["not_applicable"] + by["assumed"]
         for c in shown:
-            tag = ("FAIL" if not c["ok"] else "NOT RUN" if c.get("status") == "not_run" else "n/a" if c.get("status") == "not_applicable"
-                   else "ASSUMED" if c.get("status") == "assumed" else "warn" if c["severity"] == "warn" else "pass")
+            tag = {"fail": "FAIL", "not_run": "NOT RUN", "not_applicable": "n/a", "assumed": "ASSUMED", "warn": "warn"}.get(check_status(c), "pass")
             lines.append(f"  {tag} {'[cross-domain] ' if c['cross_domain'] else ''}{c['name']}: measured {c['measured'] or '-'}"
                          + (f"; expected {c['expected']}" if c["expected"] else "") + (f"; source: {c['source']}" if c.get("source") else ""))
         if detail != "all" and len(checks) > len(shown):
-            names = [c["name"] for c in checks if c["ok"] and c["severity"] != "warn" and c.get("status") not in ("not_applicable", "assumed")]
+            names = [c["name"] for c in by["pass"]]
             lines.append("  pass: " + "; ".join(names)[:1500])
         for i in f.get("issues") or []:
             lines.append(f"  geometry issue: {i}")
         out.append("\n".join(lines))
     cd = r.get("cross_domain") or {}
-    out.append(f"Cross-domain checks: {cd.get('checks', 0) - cd.get('failing', 0)}/{cd.get('checks', 0)} pass.")
+    cd_nr = cd["not_run"] if "not_run" in cd else sum(1 for f in r["files"] for c in f.get("checks") or []
+                                                       if c.get("cross_domain") and check_status(c) == "not_run")
+    out.append(f"Cross-domain checks: {cd.get('checks', 0) - cd.get('failing', 0) - cd_nr} of {cd.get('checks', 0)} ran and pass"
+               + (f", {cd.get('failing', 0)} FAIL" if cd.get("failing") else "") + (f", {cd_nr} NOT RUN" if cd_nr else "") + ".")
     out.append("Next steps:\n- " + "\n- ".join(r["next_steps"]))
     return "\n\n".join(out)

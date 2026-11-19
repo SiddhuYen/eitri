@@ -266,6 +266,11 @@ def test_local_tools_without_an_agent(tmp_path, monkeypatch):
     text, err = _call(server, "build_model", {"code": failing})
     assert "FAIL arm reach" in text and "STILL TO DO" in text and "never delete or loosen" in text
 
+    # a check that did not run is never "every check passes" (it was counted as a warning)
+    text, err = _call(server, "build_model", {"code": MECH_OK.replace("travel_deg=180", "travel_deg=None")})
+    assert "NOT RUN joint limits" in text and "0 FAIL, 1 NOT RUN" in text, text
+    assert "Every model file is built and every check passes" not in text and "STILL TO DO" in text and "not a pass" in text
+
     # an edit made with the agent's own file tools is reported unbuilt until rebuild
     model = folder / "lever_test.py"
     model.write_text(failing.replace("arm=60.0", "arm=120.0"))
@@ -278,13 +283,13 @@ def test_local_tools_without_an_agent(tmp_path, monkeypatch):
     url = session.viewer_url()
     assert url.startswith("http://127.0.0.1:")
     st = json.loads(urllib.request.urlopen(url + "state.json", timeout=10).read())
-    assert st["plugin"] and st["needs_key"] is False and st["revision"] == 3 and st["has_agent"] is False
+    assert st["plugin"] and st["needs_key"] is False and st["revision"] == 4 and st["has_agent"] is False
 
     text, _ = _call(server, "list_projects")
-    assert "lever-test" in text and "revision 3 built" in text
+    assert "lever-test" in text and "revision 4 built" in text
     session2 = PluginSession(root=tmp_path / "projects", open_browser=False)
     text = session2.open_project("lever-test").text
-    assert "revision 3 built" in text and session2.project.folder == folder
+    assert "revision 4 built" in text and session2.project.folder == folder
     assert "already an eitri project" in session2.new_project("x", folder=str(folder)).text
 
 

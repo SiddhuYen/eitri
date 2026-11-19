@@ -243,21 +243,36 @@ def project_status(project: Project, viewer: str | None = None) -> str:
             todo.append(f"fix the build error in {f} and rebuild")
         else:
             checks, issues = _checks(project, last, history)
-            fail = [c for c in checks if not c.get("ok") or c.get("severity") == "fail"]
-            warn = [c for c in checks if c.get("ok") and c.get("severity") == "warn"]
-            npass = len(checks) - len(fail) - len(warn)
+            from ..checks import MEASURED_BY_USER, status_of
+            st = [(c, "fail" if not c.get("ok", True) or c.get("severity") == "fail" else status_of(c)) for c in checks]
+            fail = [c for c, x in st if x == "fail"]
+            not_run = [c for c, x in st if x == "not_run"]
+            warn = [c for c, x in st if x == "warn"]
+            na = [c for c, x in st if x == "not_applicable"]
+            assumed = [c for c, x in st if x == "assumed"]
+            npass = sum(1 for _c, x in st if x == "pass")
             lines.append(f"- {f}{current} ({what}): revision {last.number} built; checks {npass} pass, {len(warn)} warn, "
-                         f"{len(fail)} FAIL" + (f"; {len(issues)} geometry issue(s)" if issues else ""))
+                         f"{len(fail)} FAIL, {len(not_run)} NOT RUN" + (f", {len(na)} n/a" if na else "")
+                         + (f", {len(assumed)} assumed ({MEASURED_BY_USER})" if assumed else "")
+                         + (f"; {len(issues)} geometry issue(s)" if issues else ""))
             for c in fail[:12]:
                 lines.append("    FAIL " + _check_line(c))
             if len(fail) > 12:
                 lines.append(f"    ... and {len(fail) - 12} more failing")
+            for c in not_run[:12]:
+                lines.append("    NOT RUN " + _check_line(c))
             for c in warn[:6]:
                 lines.append("    warn " + _check_line(c))
+            for c in assumed[:6]:
+                lines.append("    ASSUMED " + _check_line(c))
             for i in issues[:6]:
                 lines.append("    issue " + str(i)[:300])
             if fail:
                 todo.append(f"fix the design in {f} until its {len(fail)} failing check(s) pass (never delete or loosen a check)")
+            if not_run:
+                todo.append(f"declare what each of the {len(not_run)} NOT RUN check(s) in {f} names (the datasheet figure or the "
+                            "declaration it asks for) and rebuild: a check that did not run is not a pass, so do not tell the "
+                            "person every check passes")
             if issues:
                 todo.append(f"fix or justify the geometry issue(s) in {f}")
             if kind == "cad" and not checks:
@@ -269,8 +284,10 @@ def project_status(project: Project, viewer: str | None = None) -> str:
         lines.append("STILL TO DO: " + "; ".join(todo) + ". Then look at the latest review image before you finish.")
     else:
         warned = sum(1 for l in lines if l.startswith("    warn "))
+        n_assumed = sum(1 for l in lines if l.startswith("    ASSUMED "))
         lines.append("Every model file is built and every check passes" +
                      (f" ({warned} warning(s): fix them, or tell the user why each is acceptable)" if warned else "") +
+                     (f" ({n_assumed} ASSUMED: they pass only on figures the user measured; say so)" if n_assumed else "") +
                      ". Look at the latest review image against the request; if it matches, you are done.")
     return "\n".join(lines)
 

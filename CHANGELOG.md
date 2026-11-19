@@ -64,6 +64,25 @@ annotated tags (`git show v0.4.0`).
   `switched_off` and `removed`. Each kind covers only its own case. `package.json`'s `waivers[].kind` and `not_checked[].kind`
   gain `assumed`; a combined `package.json` gains `switched_off_checks` and `renamed_checks`, as the single-file one has since 0.9.2.
 
+### Fixed (what the agent reads after a build)
+
+- **The combined build summary said "EVERY CHECK PASSES" while checks had not run.** A check that did not run is `ok` with
+  severity "warn" (it blocks nothing inside a build), and `combined_build` / `combined_results` counted it as a pass. The desk arm with
+  its `base_fixing` line deleted (2 stability checks not run) showed "EVERY CHECK PASSES" and "25/25 checks pass" in mech.py, while
+  `combined_export` correctly refused it, so the agent could tell the person everything passed. Now every status is counted
+  on its own, in the header ("Checks: 151 pass, 3 warn, 0 FAIL, 2 NOT RUN"), on each file's line and in the cross-domain tally
+  ("61 of 63 ran and pass, 2 NOT RUN"). The header says "EVERY CHECK PASSES" only when nothing failed or did not run, and it
+  names assumed checks when there are some ("1 of them ASSUMED: measured by the user"); otherwise it says "NOT DONE YET (2 NOT RUN)".
+  Each not-run check gets a next step that says what to declare and that a check that did not run is not a pass; assumed checks
+  get one that says to tell the person. `all_pass` in the result (and the project list) is false while a check did not run.
+  Results saved by an older build are counted the same way when read.
+- **The single-domain PROJECT STATUS had the same fault**: a not-run check was listed as a warning, and the line ended "every check
+  passes (N warning(s))". It now counts pass / warn / FAIL / NOT RUN / n/a / assumed separately, lists each NOT RUN check, and puts
+  it under STILL TO DO, so "every check passes" never appears while one did not run.
+- Not changed: `eitri build`'s own `Checks: N pass, N warn, N FAIL` line still counts a not-run check as a warning. It lists
+  each one as `[WARN] <check>: not run: ...` and makes no "every check passes" claim. The smoke-test counts in AGENTS.md and README
+  are that line's.
+
 ### Fixed (sources)
 
 - **Every document a check cites now has a URL and a revision** (30 that had neither or one; each re-read 2026-11-17): JST XH/PH,

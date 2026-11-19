@@ -210,4 +210,5 @@ def test_the_combined_result_counts_the_assumed_checks():
          "checks": [{"name": "mounting: X hole pattern", "ok": True, "severity": "pass", "status": "assumed", "measured": "m", "expected": "",
                      "cross_domain": True}]}], "seconds": 1, "view": "", "next_steps": ["export"], "cross_domain": {"checks": 1, "failing": 0}}
     text = W.results_text(r)
-    assert "1/1 checks pass, 1 assumed (board size measured by the user, not from a datasheet)" in text and "ASSUMED [cross-domain]" in text
+    assert "0 pass, 0 warn, 0 FAIL, 0 NOT RUN, 1 assumed (board size measured by the user, not from a datasheet)" in text
+    assert "EVERY CHECK PASSES (1 of them ASSUMED: measured by the user)" in text and "ASSUMED [cross-domain]" in text
