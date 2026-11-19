@@ -50,6 +50,9 @@ that tag).
   order). Revision letters are the project's, under `"project"` in `tickets/revisions.json`. A file changed, added or removed
   that the plan's `files` did not list is flagged in "Read before signing". `package.json` stays `eitri.package/1`, with
   `design.kind: "combined"`, `design.files`, and `file` / `check` / `cross_domain` on each check row (fields added).
+- **One refusal rule for both packages.** The single-file and the combined package call the same function
+  (`eitri.tickets.package.judge`), so 0.9.2's "not applicable" (blocks nothing; a criterion that maps only to n/a checks is
+  not met) and 0.9.3's `assumed` (refuses until a person waives it) apply to every check of every file of a combined project.
 - **Ticket tools on the combined MCP server** (`eitri mcp --combined`): `combined_ticket_new`, `combined_ticket_show`,
   `combined_ticket_plan`, `combined_package`. As on the single-domain server, no tool approves, waives or closes. On a
   combined project the commands eitri tells the person to run carry `-C <project folder>`.

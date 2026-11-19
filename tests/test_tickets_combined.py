@@ -220,15 +220,118 @@ def test_uno_arm_payload_change_end_to_end(ws, tmp_path, monkeypatch):
     assert {f: r for f, r in t2.target_files.items()} == pkg["revisions"]["to"]["builds"]
 
 
+# ---------------------------------------------------------------------------------------------------- 0.9.2 / 0.9.3 statuses
+SENSOR_BOX = ROOT / "tests" / "suite" / "fixtures" / "sensor-box"
+MEASURED = 'measured=dict(size=(25.4, 18.0, 1.6), hole_spacing=(20.32, 12.7), hole_d=2.5, by="calipers on my board, 2026-11-18")'
+MOUNT = 'carrier=["base"], screw="M2.5", clearance_mm=0.5)'
+SENSOR_EDITS = {
+    "elec.py": [('c.module("BME280", "BME280-2652", address=0x77)', 'c.module("BME280", "BME280", address=0x77)'),
+                ('bme["VIN"]', 'bme["VCC"]'), ('bme["SDI"]', 'bme["SDA"]'), ('bme["SCK"]', 'bme["SCL"]'),
+                (MOUNT, MOUNT[:-1] + ",\n            " + MEASURED + ")"),
+                ("PARAMS = dict()", "PARAMS = dict(max_draw=0.050)"), ("0.020 + 0.0012, 0.050)", "0.020 + 0.0012, p.max_draw)")],
+    "wiring.py": [('pins=["VIN", "GND", "SCK", "SDI"]', 'pins=["VCC", "GND", "SCL", "SDA"]'),
+                  ('bme["VIN"]', 'bme["VCC"]'), ('bme["SDI"]', 'bme["SDA"]'), ('bme["SCK"]', 'bme["SCL"]')],
+}
+
+
+def _sensor_box_files() -> dict[str, str]:
+    files = {}
+    for f in SENSOR_BOX.glob("*.py"):
+        text = f.read_text(encoding="utf-8")
+        for a, b in SENSOR_EDITS.get(f.name, []):
+            assert a in text, (f.name, a)
+            text = text.replace(a, b)
+        files[f.name] = text
+    return files
+
+
+def test_combined_package_refuses_assumed_until_waived_and_na_blocks_nothing(ws, tmp_path, monkeypatch):
+    """The sensor box (CAD case, harness, firmware, electronics; no mechanism) with a BME280 board the person measured: its three
+    mounting checks are ASSUMED (0.9.3), so the combined package is refused until a person waives each, exactly like the
+    single-file package; the electronics file's actuator checks are n/a (0.9.2: no mechanism file, nothing that moves), which
+    blocks nothing and is listed under "not checked"."""
+    from eitri.checks import MEASURED_BY_USER
+    cli = tmp_path / "arduino-cli"
+    cli.write_text(FAKE_CLI, encoding="utf-8")
+    cli.chmod(0o755)
+    monkeypatch.setenv("EITRI_ARDUINO_CLI", str(cli))
+    pid = ws.new_project("Sensor box", "a weather sensor in a printed case")["project_id"]
+    ws.put_files(pid, _sensor_box_files())
+    p = Project(Path(_build(ws, pid)["folder"]))
+    t = T.new_ticket(p, "Tighter rail budget", "Hold the 3V3 rail draw under 45 mA.", acceptance=["the rail holds => 3V3 rail draw*"])
+    T.set_plan(p, t.id, {"summary": "max_draw 0.050 -> 0.045", "files": ["elec.py"],
+                         "parameters": [{"file": "elec.py", "name": "max_draw", "from": 0.05, "to": 0.045}]})
+    T.approve(p, t.id, by="Pat Person", confirm=_person)
+    text = (p.folder / "elec.py").read_text(encoding="utf-8").replace("max_draw=0.050", "max_draw=0.045")
+    ws.put_files(pid, {"elec.py": text})
+    _build(ws, pid)
+    with pytest.raises(T.PackageRefused) as exc:
+        T.make_package(p, t.id)
+    assumed = [r for r in exc.value.reasons if r.startswith("ASSUMED ")]
+    assert {r.split(":", 2)[0] + ":" + r.split(":", 2)[1] for r in assumed} == {"ASSUMED elec.py: mounting"}, exc.value.reasons
+    assert len(assumed) == 3 and all(MEASURED_BY_USER in r and "eitri ticket waive" in r for r in assumed)
+    assert not [r for r in exc.value.reasons if r.startswith(("FAIL", "NOT RUN"))], exc.value.reasons
+    for name in ("mounting: BME280 hole pattern matches the CAD", "mounting: BME280 outline is clear of the CAD bodies",
+                 "mounting: BME280 clearance to the CAD bodies"):                  # bare names: only elec.py has them
+        T.waive(p, t.id, name, "The customer measured their own BME280 board with calipers and accepts the figures",
+                by="Pat Person", confirm=_person)
+    pkg = T.make_package(p, t.id)
+    _validate(Path(pkg["folder"], "package.json"))
+    s = pkg["checks"]["summary"]["to"]
+    assert s["fail"] == 0 and s["not_run"] == 0 and s["assumed"] == 3 and s["not_applicable"] > 0
+    assert len(pkg["assumed"]) == 3 and all(a["check"].startswith("elec.py: mounting: BME280") and "calipers" in a["declared"]
+                                            for a in pkg["assumed"])
+    kinds = [x["kind"] for x in pkg["not_checked"]]
+    assert kinds.count("assumed") == 3 and kinds.count("not_applicable") == s["not_applicable"]
+    assert all(x["what"].startswith(("elec.py: ", "wiring.py: ", "fw.py: ", "model.py: ")) for x in pkg["not_checked"]
+               if x["kind"] in ("assumed", "not_applicable"))
+    assert pkg["acceptance"][0]["status"] in ("pass", "pass_with_warning") and pkg["acceptance"][0]["matched"]
+    report = (Path(pkg["folder"]) / "report.md").read_text(encoding="utf-8")
+    assert MEASURED_BY_USER in report and "not applicable" in report
+
+
+def _row(name, status, file="elec.py", measured="m"):
+    return {"name": f"{file}: {name}", "check": name, "file": file, "status": status, "measured": measured, "expected": "",
+            "inputs_unset": [], "assumed": "calipers" if status == "assumed" else "", "category": "", "cross_domain": False}
+
+
+def test_one_refusal_rule_for_single_file_and_combined():
+    """The combined package calls the single-file package's judge(), so a status added to one rule is in the other: n/a alone
+    blocks nothing, but a criterion that maps only to n/a checks is not met; ASSUMED and NOT RUN need a waiver; FAIL never."""
+    from eitri.tickets import combined as C
+    from eitri.tickets import package as P
+    t = SimpleTicket(acceptance=[{"id": "AC1", "text": "the arm moves", "check": "actuator*"}])
+    rows = [_row("actuator: joints have actuators", "not_applicable", measured="not applicable: no mechanism file"),
+            _row("rail budget", "pass"), _row("mounting: hole pattern", "assumed"), _row("i2c pull-ups", "not_run")]
+    reasons, _waivers, criteria = P.judge(t, rows, C.match, where="no file's build runs", they="they do")
+    assert [r.split(" ", 1)[0] for r in reasons] == ["ASSUMED", "NOT", "AC1"], reasons
+    assert criteria[0]["status"] == "not_applicable" and "does not apply" in reasons[-1]
+    reasons, _w, criteria = P.judge(SimpleTicket(acceptance=[{"id": "AC1", "text": "budget", "check": "rail budget"}]),
+                                    [rows[0], rows[1]], C.match)
+    assert reasons == [] and criteria[0]["status"] == "pass"                            # n/a alone blocks nothing
+    reasons, _w, _c = P.judge(t, [_row("x", "fail")] + rows[:2], C.match)
+    assert reasons[0].startswith("FAIL elec.py: x") and "never waived" in reasons[0]
+    import inspect
+    assert "P.judge(" in inspect.getsource(C._make) and "P.status_not_checked(" in inspect.getsource(C._make)
+
+
+class SimpleTicket:
+    id = "T-0001"
+
+    def __init__(self, acceptance=(), waivers=()):
+        self.data = {"acceptance": list(acceptance), "waivers": list(waivers)}
+
+
 # ---------------------------------------------------------------------------------------------------- the combined MCP server
 def test_combined_server_has_ticket_tools_but_none_that_approve(ws):
-    from eitri.agent.combined_server import CombinedSession, make_server
     from mcp.server.mcpserver.exceptions import ToolError
+
+    from eitri.agent.combined_server import CombinedSession, make_server
     session = CombinedSession(root=ws.root, open_browser=False)
     server = make_server(session)
     names = {t.name for t in asyncio.run(server.list_tools())}
     assert {"combined_ticket_new", "combined_ticket_show", "combined_ticket_plan", "combined_package"} <= names
-    person_only = re.compile(r"approv|waiv|close|cancel|(^|_)sign|confirm|release|set_status|accept", re.I)
+    person_only = re.compile(r"approv|waiv|close|cancel|(^|_)sign|confirm|release|set_status|accept", re.IGNORECASE)
     assert not [n for n in names if person_only.search(n)], names
 
     def call(name, args):

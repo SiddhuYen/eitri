@@ -11,9 +11,10 @@ after the plan. The package rebuilds every file of the base and of the result to
 combined project, in the workspace's build order, so every cross-domain check runs fresh. Check names in the package are the file
 and the check, "wiring.py: overcurrent protection", so the same check name in two files stays two rows.
 
-The refusal rule is the single-file one, over every file: no package when the approval is not valid, a file on disk has no good
-build, a fresh build of any file fails, any check of any file FAILS (never waivable), any check is NOT RUN without a person's
-waiver, or an acceptance criterion names a check no file runs.
+The refusal rule is the single-file one (eitri.tickets.package.judge, the same function), over every file: no package when the
+approval is not valid, a file on disk has no good build, a fresh build of any file fails, any check of any file FAILS (never
+waivable), any check is NOT RUN or ASSUMED without a person's waiver, or an acceptance criterion names a check no file runs or only
+checks that do not apply (n/a). An n/a check blocks nothing by itself.
 
 Revision letters: one letter for the whole project (the machine), in tickets/revisions.json under "project"; each lettered
 revision records the build of every file.
@@ -36,7 +37,7 @@ from pathlib import Path
 from typing import Any
 
 from .checks import counts, normalise
-from .store import Ticket, TicketError, now_iso, tickets_dir, verify_waiver
+from .store import Ticket, TicketError, now_iso
 
 PROJECT_KEY = "project"          # revisions.json: the combined project's lettered revisions
 
@@ -255,6 +256,7 @@ def _make(project, t, sources_a, sources_b, rev_a, rev_b, staging, PackageRefuse
     from eitri.domains import label
     from eitri.update import installed_version
     from eitri_suite.workspace import kind_of, model_files
+
     from . import package as P
     reasons: list[str] = []
     builds_a = _fresh_builds(project, sources_a, staging / "base", result=False) if sources_a else {}
@@ -275,42 +277,8 @@ def _make(project, t, sources_a, sources_b, rev_a, rev_b, staging, PackageRefuse
     rows_b = [r for f in order_b for r in _rows(f, builds_b[f][1])]
     rows_a = [r for f in order_a for r in _rows(f, builds_a[f][1])] if builds_a else None
 
-    waivers, stale = [], []
-    for w in t.data.get("waivers") or []:
-        (waivers if verify_waiver(t, w) else stale).append(w)
-    waived = {w["check"]: w for w in waivers}
-    for r in rows_b:
-        if r["status"] == "fail":
-            reasons.append(f"FAIL {r['name']}: {r['measured']}" + (f" (expected {r['expected']})" if r["expected"] else "")
-                           + ". A failed check is fixed in the design; it is never waived.")
-        elif r["status"] == "not_run" and r["name"] not in waived:
-            reasons.append(f"NOT RUN {r['name']}" + (f" ({', '.join(r['inputs_unset'])} not set)" if r["inputs_unset"] else "")
-                           + f": set the input so it runs, or a person waives it with `eitri ticket waive {t.id} "
-                           f"\"{r['name']}\" --reason \"...\"`")
-    for w in stale:
-        if any(r["name"] == w["check"] and r["status"] == "not_run" for r in rows_b):
-            reasons.append(f"waiver for {w['check']!r} is no longer valid (the ticket changed after it was given, or it does not "
-                           "verify); a person waives it again")
-    criteria = []
-    for a in t.data.get("acceptance") or []:
-        row = {"id": a["id"], "text": a["text"], "check": a.get("check"), "human_verify": bool(a.get("human_verify")),
-               "matched": [], "status": "human_verify" if a.get("human_verify") else None}
-        if a.get("check"):
-            hits = match(a["check"], rows_b)
-            row["matched"] = [h["name"] for h in hits]
-            if not hits:
-                reasons.append(f"{a['id']} ({a['text']}) maps to the check {a['check']!r}, which no file's build runs; names they do "
-                               f"run are in checks.csv (the ticket's criteria change only with a new approval)")
-                row["status"] = "missing"
-            elif any(h["status"] == "fail" for h in hits):
-                row["status"] = "fail"
-            elif all(h["status"] == "not_run" for h in hits):
-                row["status"] = "waived" if all(h["name"] in waived for h in hits) else "not_run"
-            elif any(h["status"] in ("warn", "not_run") for h in hits):
-                row["status"] = "pass_with_warning"
-            else:
-                row["status"] = "pass"
-        criteria.append(row)
+    more, waivers, criteria = P.judge(t, rows_b, match, where="no file's build runs", they="they do")
+    reasons += more
     if reasons:
         _refuse(t, reasons, rows_a, rows_b)
 
@@ -415,9 +383,7 @@ def _make(project, t, sources_a, sources_b, rev_a, rev_b, staging, PackageRefuse
     for a in criteria:
         if a["human_verify"]:
             not_checked.append({"kind": "human_verify", "what": f"{a['id']}: {a['text']}", "why": "not machine-checkable: a person verifies it"})
-    for w in waivers:
-        if any(r["name"] == w["check"] and r["status"] == "not_run" for r in rows_b):
-            not_checked.append({"kind": "waived", "what": w["check"], "why": f"did not run; waived by {w.get('by')}: {w['reason']}"})
+    not_checked += P.status_not_checked(waivers, rows_a, rows_b, fl)
     for c in removed:
         not_checked.append({"kind": "removed_check", "what": c["name"],
                             "why": f"ran on Rev {fl} ({c['from']['status']}) and does not run on Rev {to['letter']} (renamed with the "
@@ -463,6 +429,7 @@ def _make(project, t, sources_a, sources_b, rev_a, rev_b, staging, PackageRefuse
         "checks": {"summary": {"from": counts(rows_a) if rows_a is not None else None, "to": counts(rows_b),
                                "cross_domain": {"to": len(cross)}}, "rows": checks},
         "removed_checks": [c["name"] for c in removed],
+        "assumed": P.assumed_rows(rows_b),
         "unplanned_changes": unplanned,
         "parameters": params,
         "bom": boms,

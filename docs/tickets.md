@@ -156,8 +156,11 @@ file can fail a check of another, so a ticket on a combined project covers **the
   project, in the workspace's build order, so every cross-domain check runs again. Check names are qualified by their file
   (`wiring.py: overcurrent protection`). A criterion may name a check with its file, or with the bare name to match it in
   any file. A waiver names the check with its file (a bare name is accepted when only one file has that check).
-- **The refusal rule is the same, over every file:** any check of any file (cross-domain ones included) that fails, or did
-  not run without a waiver, refuses the package; so do a file on disk with no good build and a fresh build that fails.
+- **The refusal rule is the same, over every file** (one function, `eitri.tickets.package.judge`, decides both): any check of
+  any file (cross-domain ones included) that fails, did not run, or passed only on a board size the person measured
+  (`assumed`) without a waiver refuses the package; so do a file on disk with no good build and a fresh build that fails. A
+  check that does not apply (n/a: its subject provably is not in the project, such as the actuator checks of a box with no
+  mechanism) blocks nothing and is listed under "not checked".
 - **Revision letters** are the project's (the machine's): one letter for every file together, in `revisions.json` under
   `"project"`, each recording every file's build.
 
@@ -192,9 +195,14 @@ eitri package T-0001 -C ~/eitri-projects/uno-arm
 - a fresh build of the base or the result fails;
 - **any check of the result fails.** A failed check is fixed in the design. It is never waived and never loosened;
 - **any check did not run** (an input the check needs is unset) and no person has waived it;
-- an acceptance criterion names a check the build does not run.
+- **any check is `assumed`** (it passed only on a board size the person measured, not on a datasheet) and no person has
+  waived it;
+- an acceptance criterion names a check the build does not run, or only checks that do not apply (n/a).
 
-A person waives one check that did not run with `eitri ticket waive ID "<check>" --reason "..."`. The reason is
+A check that does not apply (n/a) blocks nothing on its own; the package lists it under "not checked", with its status on the
+base when it applied there.
+
+A person waives one check that did not run, or one that is `assumed`, with `eitri ticket waive ID "<check>" --reason "..."`. The reason is
 printed on the package's first page. eitri refuses to waive a failed check, a check that ran, or a check name the last
 build does not have.
 

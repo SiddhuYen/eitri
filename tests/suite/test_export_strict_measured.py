@@ -161,9 +161,9 @@ def person(tmp_path, monkeypatch):
 
 
 def test_a_change_package_refuses_a_measured_board_until_a_person_waives_it(tmp_path, person, monkeypatch):
-    """On release/0.9.2 a package rebuilds its one file alone (a combined project's package, which rebuilds every file together, is
-    the combined-tickets branch); here the staging build gets the project's other files, as that rebuild does, so the cross-domain
-    checks run and the refusal rule itself is what is tested."""
+    """The single-file package: it rebuilds its one file alone, so here the staging build gets the project's other files and the
+    cross-domain checks run; the refusal rule itself is what is tested. A real combined project's package (every file rebuilt
+    together, the same rule) is tests/test_tickets_combined.py::test_combined_package_refuses_assumed_until_waived_and_na_blocks_nothing."""
     from eitri.agent.tools import Tools
     from eitri.project import Project
     from eitri.tickets import package as pkg_mod

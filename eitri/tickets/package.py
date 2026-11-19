@@ -14,10 +14,11 @@ a zip a person reviews and signs off.
       ticket.yaml          the ticket as approved
 
 Refusal rule: no package when the approval is not valid, a fresh build fails, any check of the result FAILS (never waivable),
-any check is NOT RUN without a person's waiver, or an acceptance criterion names a check the build does not run.
+any check is NOT RUN or ASSUMED (passed only on a figure the person measured) without a person's waiver, or an acceptance
+criterion names a check the build does not run or only checks that do not apply (n/a). The rule is `judge()`.
 
 A ticket on a combined project (several model files checked against each other) is packaged by eitri.tickets.combined: every
-file rebuilt together, the same rule over every check of every file.
+file rebuilt together, the same rule (`judge()`, the same function) over every check of every file.
 """
 from __future__ import annotations
 
@@ -342,52 +343,8 @@ def _make(project, t, file, kind, cad, src_a, src_b, rev_a, rev_b, staging, labe
         _refuse(t, reasons)
     rows_b = normalise(data_b)
     rows_a = normalise(data_a) if data_a else None
-    waivers, stale = [], []
-    for w in t.data.get("waivers") or []:
-        (waivers if verify_waiver(t, w) else stale).append(w)
-    waived = {w["check"]: w for w in waivers}
-    for r in rows_b:
-        if r["status"] == "fail":
-            reasons.append(f"FAIL {r['name']}: {r['measured']}" + (f" (expected {r['expected']})" if r["expected"] else "")
-                           + ". A failed check is fixed in the design; it is never waived.")
-        elif r["status"] == "assumed" and r["name"] not in waived:
-            reasons.append(f"ASSUMED {r['name']}: it passes only on a {MEASURED_BY_USER} ({r['assumed'] or r['measured'][:160]}). A "
-                           f"change package needs sourced figures: name a catalog part with a published drawing, or a person waives it "
-                           f"with `eitri ticket waive {t.id} \"{r['name']}\" --reason \"...\"`")
-        elif r["status"] == "not_run" and r["name"] not in waived:
-            reasons.append(f"NOT RUN {r['name']}" + (f" ({', '.join(r['inputs_unset'])} not set)" if r["inputs_unset"] else "")
-                           + f": set the input so it runs, or a person waives it with `eitri ticket waive {t.id} "
-                           f"\"{r['name']}\" --reason \"...\"`")
-    for w in stale:
-        reasons_note = f"waiver for {w['check']!r} is no longer valid (the ticket changed after it was given, or it does not verify)"
-        if any(r["name"] == w["check"] and r["status"] in ("not_run", "assumed") for r in rows_b):
-            reasons.append(reasons_note + "; a person waives it again")
-    criteria = []
-    for a in t.data.get("acceptance") or []:
-        row = {"id": a["id"], "text": a["text"], "check": a.get("check"), "human_verify": bool(a.get("human_verify")),
-               "matched": [], "status": "human_verify" if a.get("human_verify") else None}
-        if a.get("check"):
-            hits = _match(a["check"], rows_b)
-            row["matched"] = [h["name"] for h in hits]
-            if not hits:
-                reasons.append(f"{a['id']} ({a['text']}) maps to the check {a['check']!r}, which this build does not run; "
-                               f"names it does run are in checks.csv (the ticket's criteria change only with a new approval)")
-                row["status"] = "missing"
-            elif any(h["status"] == "fail" for h in hits):
-                row["status"] = "fail"
-            elif all(h["status"] == "not_applicable" for h in hits):
-                reasons.append(f"{a['id']} ({a['text']}) maps to {a['check']!r}, which does not apply to this design ("
-                               + "; ".join(f"{h['name']}: {h['measured']}" for h in hits[:3]) + "): the criterion is not met; "
-                               "the ticket's criteria change only with a new approval")
-                row["status"] = "not_applicable"
-            elif all(h["status"] in ("not_run", "not_applicable", "assumed") for h in hits):
-                row["status"] = ("waived" if all(h["name"] in waived for h in hits if h["status"] in ("not_run", "assumed"))
-                                 else "assumed" if any(h["status"] == "assumed" for h in hits) else "not_run")
-            elif any(h["status"] in ("warn", "not_run", "assumed") for h in hits):
-                row["status"] = "pass_with_warning"
-            else:
-                row["status"] = "pass"
-        criteria.append(row)
+    more, waivers, criteria = judge(t, rows_b)
+    reasons += more
     if reasons:
         _refuse(t, reasons, rows_a, rows_b)
 
@@ -445,19 +402,7 @@ def _make(project, t, file, kind, cad, src_a, src_b, rev_a, rev_b, staging, labe
     for a in criteria:
         if a["human_verify"]:
             not_checked.append({"kind": "human_verify", "what": f"{a['id']}: {a['text']}", "why": "not machine-checkable: a person verifies it"})
-    for w in waivers:
-        if any(r["name"] == w["check"] and r["status"] == "not_run" for r in rows_b):
-            not_checked.append({"kind": "waived", "what": w["check"], "why": f"did not run; waived by {w.get('by')}: {w['reason']}"})
-        hit = next((r for r in rows_b if r["name"] == w["check"] and r["status"] == "assumed"), None)
-        if hit:
-            not_checked.append({"kind": "assumed", "what": w["check"],
-                                "why": f"{MEASURED_BY_USER} ({hit['assumed']}); waived by {w.get('by')}: {w['reason']}"})
-    for r in rows_b:
-        if r["status"] == "not_applicable":
-            was = next((x["status"] for x in rows_a or [] if x["name"] == r["name"]), None)
-            not_checked.append({"kind": "not_applicable", "what": r["name"],
-                                "why": r["measured"] + (f" (it was {was} on Rev {fl}: a person confirms its subject was meant to go)"
-                                                        if was and was != "not_applicable" else "")})
+    not_checked += status_not_checked(waivers, rows_a, rows_b, fl)
     for c in removed:
         not_checked.append({"kind": "removed_check", "what": c["name"],
                             "why": f"ran on Rev {fl} ({c['from']['status']}) and does not run on Rev {to['letter']} (renamed with the "
@@ -488,8 +433,7 @@ def _make(project, t, file, kind, cad, src_a, src_b, rev_a, rev_b, staging, labe
         "acceptance": criteria,
         "checks": {"summary": {"from": counts(rows_a) if rows_a is not None else None, "to": counts(rows_b)}, "rows": checks},
         "removed_checks": [c["name"] for c in removed],
-        "assumed": [{"check": r["name"], "what": MEASURED_BY_USER, "declared": r["assumed"], "measured": r["measured"]}
-                    for r in rows_b if r["status"] == "assumed"],
+        "assumed": assumed_rows(rows_b),
         "unplanned_changes": unplanned,
         "parameters": params,
         "bom": boms,
@@ -508,6 +452,89 @@ def _make(project, t, file, kind, cad, src_a, src_b, rev_a, rev_b, staging, labe
     }
     return _finish(project, t, out, pkg, images, table, file,
                    {"from_build": rev_a.number if rev_a else None, "to_build": rev_b.number}, rows_b)
+
+
+def judge(t: Ticket, rows_b: list[dict], match=None, where: str = "this build does not run",
+          they: str = "it does") -> tuple[list[str], list[dict], list[dict]]:
+    """The refusal rule over the result's check rows, shared by the single-file and the combined package: every FAIL refuses
+    (never waivable); every ASSUMED or NOT RUN check refuses unless a person waived it with a valid waiver; an acceptance
+    criterion refuses when it names a check the build does not run, or only checks that do not apply. Returns (reasons, the
+    valid waivers, the acceptance rows). `match` maps a criterion's check pattern to rows (a combined project also matches bare
+    names in any file)."""
+    match = match or _match
+    reasons: list[str] = []
+    waivers, stale = [], []
+    for w in t.data.get("waivers") or []:
+        (waivers if verify_waiver(t, w) else stale).append(w)
+    waived = {w["check"]: w for w in waivers}
+    for r in rows_b:
+        if r["status"] == "fail":
+            reasons.append(f"FAIL {r['name']}: {r['measured']}" + (f" (expected {r['expected']})" if r["expected"] else "")
+                           + ". A failed check is fixed in the design; it is never waived.")
+        elif r["status"] == "assumed" and r["name"] not in waived:
+            reasons.append(f"ASSUMED {r['name']}: it passes only on a {MEASURED_BY_USER} ({r['assumed'] or r['measured'][:160]}). A "
+                           f"change package needs sourced figures: name a catalog part with a published drawing, or a person waives it "
+                           f"with `eitri ticket waive {t.id} \"{r['name']}\" --reason \"...\"`")
+        elif r["status"] == "not_run" and r["name"] not in waived:
+            reasons.append(f"NOT RUN {r['name']}" + (f" ({', '.join(r['inputs_unset'])} not set)" if r["inputs_unset"] else "")
+                           + f": set the input so it runs, or a person waives it with `eitri ticket waive {t.id} "
+                           f"\"{r['name']}\" --reason \"...\"`")
+    for w in stale:
+        reasons_note = f"waiver for {w['check']!r} is no longer valid (the ticket changed after it was given, or it does not verify)"
+        if any(r["name"] == w["check"] and r["status"] in ("not_run", "assumed") for r in rows_b):
+            reasons.append(reasons_note + "; a person waives it again")
+    criteria = []
+    for a in t.data.get("acceptance") or []:
+        row = {"id": a["id"], "text": a["text"], "check": a.get("check"), "human_verify": bool(a.get("human_verify")),
+               "matched": [], "status": "human_verify" if a.get("human_verify") else None}
+        if a.get("check"):
+            hits = match(a["check"], rows_b)
+            row["matched"] = [h["name"] for h in hits]
+            if not hits:
+                reasons.append(f"{a['id']} ({a['text']}) maps to the check {a['check']!r}, which {where}; "
+                               f"names {they} run are in checks.csv (the ticket's criteria change only with a new approval)")
+                row["status"] = "missing"
+            elif any(h["status"] == "fail" for h in hits):
+                row["status"] = "fail"
+            elif all(h["status"] == "not_applicable" for h in hits):
+                reasons.append(f"{a['id']} ({a['text']}) maps to {a['check']!r}, which does not apply to this design ("
+                               + "; ".join(f"{h['name']}: {h['measured']}" for h in hits[:3]) + "): the criterion is not met; "
+                               "the ticket's criteria change only with a new approval")
+                row["status"] = "not_applicable"
+            elif all(h["status"] in ("not_run", "not_applicable", "assumed") for h in hits):
+                row["status"] = ("waived" if all(h["name"] in waived for h in hits if h["status"] in ("not_run", "assumed"))
+                                 else "assumed" if any(h["status"] == "assumed" for h in hits) else "not_run")
+            elif any(h["status"] in ("warn", "not_run", "assumed") for h in hits):
+                row["status"] = "pass_with_warning"
+            else:
+                row["status"] = "pass"
+        criteria.append(row)
+    return reasons, waivers, criteria
+
+
+def status_not_checked(waivers: list[dict], rows_a: list[dict] | None, rows_b: list[dict], fl: str | None) -> list[dict]:
+    """The "not checked" entries the result's statuses make: each waived NOT RUN or ASSUMED check, and each n/a check (with its
+    status on the base `fl` when it applied there)."""
+    not_checked: list[dict] = []
+    for w in waivers:
+        if any(r["name"] == w["check"] and r["status"] == "not_run" for r in rows_b):
+            not_checked.append({"kind": "waived", "what": w["check"], "why": f"did not run; waived by {w.get('by')}: {w['reason']}"})
+        hit = next((r for r in rows_b if r["name"] == w["check"] and r["status"] == "assumed"), None)
+        if hit:
+            not_checked.append({"kind": "assumed", "what": w["check"],
+                                "why": f"{MEASURED_BY_USER} ({hit['assumed']}); waived by {w.get('by')}: {w['reason']}"})
+    for r in rows_b:
+        if r["status"] == "not_applicable":
+            was = next((x["status"] for x in rows_a or [] if x["name"] == r["name"]), None)
+            not_checked.append({"kind": "not_applicable", "what": r["name"],
+                                "why": r["measured"] + (f" (it was {was} on Rev {fl}: a person confirms its subject was meant to go)"
+                                                        if was and was != "not_applicable" else "")})
+    return not_checked
+
+
+def assumed_rows(rows_b: list[dict]) -> list[dict]:
+    return [{"check": r["name"], "what": MEASURED_BY_USER, "declared": r["assumed"], "measured": r["measured"]}
+            for r in rows_b if r["status"] == "assumed"]
 
 
 def _finish(project, t: Ticket, out: Path, pkg: dict, images: dict, table: list, revkey: str, builds: dict, rows_b: list) -> dict:
